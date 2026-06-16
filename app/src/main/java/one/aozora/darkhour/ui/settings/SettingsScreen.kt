@@ -66,9 +66,6 @@ fun SettingsScreen(
 
         HorizontalDivider()
         SettingsSection("Appearance") {
-            SettingsSwitch("Haptic feedback", settings.hapticFeedback) {
-                onSettingsChange(settings.copy(hapticFeedback = it))
-            }
             SettingsSwitch(
                 label = "ISO date and time",
                 checked = settings.useIsoDateTime,

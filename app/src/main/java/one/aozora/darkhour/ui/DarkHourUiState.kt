@@ -41,6 +41,5 @@ data class ActogramDisplayOptions(
 data class AppSettings(
     val includeNaps: Boolean = true,
     val forecastDays: Int = 2,
-    val hapticFeedback: Boolean = true,
     val useIsoDateTime: Boolean = false,
 )
