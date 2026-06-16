@@ -16,3 +16,8 @@ val CircadianForecast = Color(0xFFFFC533)
 val ChartSelection = Color(0xFFFFD54A)
 val ChartTeal = Color(0xFF20E0B8)
 val ChartSleepSolid = Color(0xFF3FA9F5)
+
+val SurfaceDark = Color(0xFF0F0F12)
+val SurfaceContainerDark = Color(0xFF1B1B21)
+val SurfaceContainerHighDark = Color(0xFF25252D)
+val SurfaceContainerHighestDark = Color(0xFF2F2F38)

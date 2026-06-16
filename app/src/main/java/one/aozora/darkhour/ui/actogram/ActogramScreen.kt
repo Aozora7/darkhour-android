@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -54,6 +55,7 @@ import one.aozora.darkhour.ui.ActogramColorMode
 import one.aozora.darkhour.ui.ActogramDisplayOptions
 import one.aozora.darkhour.ui.ActogramOrder
 import one.aozora.darkhour.ui.ActogramTimeScale
+import one.aozora.darkhour.ui.theme.ChartSelection
 import one.aozora.darkhour.ui.theme.CircadianForecast
 import one.aozora.darkhour.ui.theme.CircadianObserved
 import one.aozora.darkhour.ui.theme.SleepDeep
@@ -143,43 +145,76 @@ private fun ActogramDetailsPanel(
     androidx.compose.material3.Surface(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 10.dp)
-            .border(2.dp, accent.copy(alpha = 0.45f), RoundedCornerShape(16.dp))
             .testTag("actogram_details"),
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        border = androidx.compose.foundation.BorderStroke(
+            width = 1.dp,
+            color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)
+        )
     ) {
         Column(
-            modifier = Modifier.padding(start = 18.dp, end = 18.dp, top = 8.dp, bottom = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
+            modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Icon(
-                    imageVector = when (selection) {
-                        is ActogramSelection.Sleep -> Icons.Outlined.Hotel
-                        is ActogramSelection.Circadian -> Icons.Outlined.Nightlight
-                    },
-                    contentDescription = null,
-                    tint = accent,
-                    modifier = Modifier.padding(end = 12.dp),
-                )
-                Text(
-                    text = when (selection) {
-                        is ActogramSelection.Sleep -> "Sleep Record Details"
-                        is ActogramSelection.Circadian ->
-                            "Circadian Night Window"
-                    },
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.weight(1f),
-                )
-                IconButton(onClick = onDismiss, modifier = Modifier.testTag("dismiss_actogram_details")) {
-                    Icon(Icons.Outlined.Close, contentDescription = "Close details")
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .background(accent.copy(alpha = 0.15f), RoundedCornerShape(12.dp)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = when (selection) {
+                            is ActogramSelection.Sleep -> Icons.Outlined.Hotel
+                            is ActogramSelection.Circadian -> Icons.Outlined.Nightlight
+                        },
+                        contentDescription = null,
+                        tint = accent,
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(horizontal = 14.dp)
+                ) {
+                    Text(
+                        text = when (selection) {
+                            is ActogramSelection.Sleep -> "Sleep Record"
+                            is ActogramSelection.Circadian -> "Circadian Window"
+                        },
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Text(
+                        text = when (selection) {
+                            is ActogramSelection.Sleep -> "Health Connect"
+                            is ActogramSelection.Circadian -> if (selection.isForecast) "Forecast" else "Observed"
+                        },
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
+                    )
+                }
+                IconButton(
+                    onClick = onDismiss,
+                    modifier = Modifier
+                        .testTag("dismiss_actogram_details")
+                        .size(32.dp)
+                ) {
+                    Icon(
+                        Icons.Outlined.Close,
+                        contentDescription = "Close details",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(20.dp)
+                    )
                 }
             }
+
+            HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.1f))
 
             when (selection) {
                 is ActogramSelection.Sleep ->
@@ -199,10 +234,10 @@ private fun SleepDetails(
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(20.dp),
+        horizontalArrangement = Arrangement.spacedBy(24.dp),
     ) {
-        Column(Modifier.weight(1.25f)) {
-            DetailLabel("Asleep / Awake Time")
+        Column(Modifier.weight(1f)) {
+            DetailLabel("Time")
             Text(
                 formatActogramDateTime(
                     selection.startTime,
@@ -211,7 +246,7 @@ private fun SleepDetails(
                     useIsoDateTime,
                 ),
                 style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.Medium,
+                fontWeight = FontWeight.Bold,
             )
             Text(
                 formatActogramDateTime(
@@ -221,58 +256,54 @@ private fun SleepDetails(
                     useIsoDateTime,
                 ),
                 style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.Medium,
+                fontWeight = FontWeight.Bold,
             )
         }
-        Column(Modifier.weight(0.9f)) {
+        Column(Modifier.weight(1f)) {
             DetailLabel("Duration / Score")
             Text(
                 formatDuration(selection.startTime, selection.endTime),
                 style = MaterialTheme.typography.bodyLarge,
-                fontWeight = FontWeight.SemiBold,
+                fontWeight = FontWeight.Bold,
             )
             Text(
                 selection.sleepScore?.let { "Score: ${(it * 100).toInt()}/100" } ?: "Score unavailable",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.tertiary,
-                fontWeight = FontWeight.SemiBold,
+                fontWeight = FontWeight.Bold,
             )
         }
     }
 
-    DetailLabel("Sleep Stages")
-    val stages = selection.stages
-    if (stages == null) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .border(
-                    1.dp,
-                    MaterialTheme.colorScheme.outline.copy(alpha = 0.45f),
-                    RoundedCornerShape(8.dp),
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        DetailLabel("Sleep Stages")
+        val stages = selection.stages
+        if (stages == null) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(
+                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+                        RoundedCornerShape(12.dp),
+                    )
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+            ) {
+                Text(
+                    "No stage data available",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                .background(
-                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.18f),
-                    RoundedCornerShape(8.dp),
-                )
-                .padding(horizontal = 12.dp, vertical = 14.dp),
-        ) {
-            Text(
-                "No stage data",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                fontWeight = FontWeight.Medium,
-            )
-        }
-    } else {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            StageTile("Deep", stages.deep, ActogramDeepColor, Modifier.weight(1f))
-            StageTile("Light", stages.light, ActogramLightColor, Modifier.weight(1f))
-            StageTile("REM", stages.rem, ActogramRemColor, Modifier.weight(1f))
-            StageTile("Wake", stages.wake, ActogramWakeColor, Modifier.weight(1f))
+            }
+        } else {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                StageTile("Deep", stages.deep, ActogramDeepColor, Modifier.weight(1f))
+                StageTile("Light", stages.light, ActogramLightColor, Modifier.weight(1f))
+                StageTile("REM", stages.rem, ActogramRemColor, Modifier.weight(1f))
+                StageTile("Wake", stages.wake, ActogramWakeColor, Modifier.weight(1f))
+            }
         }
     }
 }
@@ -286,14 +317,23 @@ private fun StageTile(
 ) {
     Column(
         modifier = modifier
-            .border(1.dp, color.copy(alpha = 0.55f), RoundedCornerShape(8.dp))
-            .background(color.copy(alpha = 0.12f), RoundedCornerShape(8.dp))
-            .padding(horizontal = 4.dp, vertical = 10.dp),
+            .background(color.copy(alpha = 0.1f), RoundedCornerShape(12.dp))
+            .border(1.dp, color.copy(alpha = 0.25f), RoundedCornerShape(12.dp))
+            .padding(vertical = 12.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(5.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
-        Text(label, style = MaterialTheme.typography.labelMedium, color = color)
-        Text("${minutes}m", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = color,
+            fontWeight = FontWeight.Bold
+        )
+        Text(
+            text = "${minutes}m",
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.ExtraBold
+        )
     }
 }
 
@@ -316,11 +356,10 @@ private fun CircadianDetails(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(24.dp),
     ) {
-        Column(Modifier.weight(1.2f)) {
+        Column(Modifier.weight(1f)) {
             DetailLabel("Date")
             Text(
-                "${formatActogramDate(selection.date, useIsoDateTime)} " +
-                    "[${if (selection.isForecast) "forecast" else "observed"}]",
+                "${formatActogramDate(selection.date, useIsoDateTime)} ",
                 style = MaterialTheme.typography.bodyLarge,
                 fontWeight = FontWeight.Medium,
             )

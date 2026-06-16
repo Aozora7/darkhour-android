@@ -8,7 +8,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Surface
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.SegmentedButton
@@ -46,10 +46,14 @@ fun SettingsScreen(
             .fillMaxSize()
             .testTag("settings_screen")
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 20.dp, vertical = 18.dp),
+            .padding(horizontal = 16.dp, vertical = 18.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        Text("Settings", style = MaterialTheme.typography.headlineSmall)
+        Text(
+            "Settings", 
+            style = MaterialTheme.typography.headlineSmall,
+            modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp)
+        )
 
         SettingsSection("Analysis") {
             SettingsSwitch("Include naps", settings.includeNaps) {
@@ -64,7 +68,6 @@ fun SettingsScreen(
             )
         }
 
-        HorizontalDivider()
         SettingsSection("Appearance") {
             SettingsSwitch(
                 label = "ISO date and time",
@@ -84,7 +87,6 @@ fun SettingsScreen(
             )
         }
 
-        HorizontalDivider()
         SettingsSection("Data") {
             Text("Health Connect", style = MaterialTheme.typography.titleMedium)
             SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
@@ -130,6 +132,7 @@ fun SettingsScreen(
                 OutlinedButton(
                     onClick = onRequestHistoryPermission,
                     modifier = Modifier.testTag("request_history_permission"),
+                    shape = MaterialTheme.shapes.medium
                 ) {
                     Text("Allow history access")
                 }
@@ -143,9 +146,18 @@ private fun SettingsSection(
     title: String,
     content: @Composable () -> Unit,
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text(title, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
-        content()
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceContainer,
+        shape = MaterialTheme.shapes.medium,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Text(title, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
+            content()
+        }
     }
 }
 

@@ -2,10 +2,14 @@ package one.aozora.darkhour.ui
 
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -165,7 +169,7 @@ fun DarkHourApp(
         } else {
             Scaffold(
                 modifier = Modifier.fillMaxSize(),
-                containerColor = MaterialTheme.colorScheme.surfaceContainer,
+                containerColor = MaterialTheme.colorScheme.surface,
                 bottomBar = {
                     AppNavigationBar(
                         selectedIndex = pagerState.currentPage,
@@ -337,6 +341,8 @@ private fun AppNavigationBar(
             .selectableGroup()
             .testTag("bottom_navigation"),
     ) {
+        val itemWidth = maxWidth / DestinationItems.size
+
         Row(Modifier.fillMaxSize()) {
             DestinationItems.forEachIndexed { index, item ->
                 val selected = selectedIndex == index
@@ -353,25 +359,27 @@ private fun AppNavigationBar(
                     contentAlignment = Alignment.Center,
                 ) {
                     Row(
-                        modifier = Modifier.alpha(if (selected) 1f else 0.58f),
                         verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center,
+                        modifier = Modifier.alpha(if (selected) 1f else 0.7f)
                     ) {
                         Icon(
                             imageVector = item.icon,
                             contentDescription = null,
-                            modifier = Modifier.size(18.dp),
+                            modifier = Modifier.size(20.dp),
                             tint = if (selected) {
                                 MaterialTheme.colorScheme.primary
                             } else {
                                 MaterialTheme.colorScheme.onSurfaceVariant
                             },
                         )
-                        Spacer(Modifier.width(6.dp))
+                        Spacer(Modifier.width(8.dp))
                         Text(
                             text = item.destination.label,
-                            style = MaterialTheme.typography.labelMedium,
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
                             color = if (selected) {
-                                MaterialTheme.colorScheme.primary
+                                MaterialTheme.colorScheme.onSurface
                             } else {
                                 MaterialTheme.colorScheme.onSurfaceVariant
                             },
@@ -380,18 +388,16 @@ private fun AppNavigationBar(
                 }
             }
         }
-        val itemWidth = maxWidth / DestinationItems.size
-        Spacer(
+
+        // Sliding underline indicator
+        Box(
             modifier = Modifier
                 .align(Alignment.BottomStart)
                 .offset(
-                    x = itemWidth * pagerPosition.coerceIn(
-                        minimumValue = 0f,
-                        maximumValue = DestinationItems.lastIndex.toFloat(),
-                    ),
+                    x = itemWidth * pagerPosition.coerceIn(0f, DestinationItems.lastIndex.toFloat()),
                 )
                 .width(itemWidth)
-                .height(4.dp)
+                .height(3.dp)
                 .background(MaterialTheme.colorScheme.primary),
         )
     }
