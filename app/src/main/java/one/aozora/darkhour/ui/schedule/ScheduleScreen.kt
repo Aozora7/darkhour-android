@@ -43,6 +43,7 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -50,6 +51,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLocale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -60,16 +62,16 @@ import java.time.LocalDate
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 import java.time.format.TextStyle
-import java.util.Locale
 
 @Composable
 fun ScheduleScreen(
+    modifier: Modifier = Modifier,
     entries: List<ScheduleEntry>,
     onEntriesChange: (List<ScheduleEntry>) -> Unit,
     editEntryId: Long? = null,
     onEditEntryConsumed: () -> Unit = {},
-    modifier: Modifier = Modifier,
 ) {
+    val locale = LocalLocale.current.platformLocale
     var editingEntry by remember { mutableStateOf<ScheduleEntry?>(null) }
     var addingEntry by remember { mutableStateOf(false) }
 
@@ -108,6 +110,7 @@ fun ScheduleScreen(
                     .forEach { entry ->
                         ScheduleRow(
                             entry = entry,
+                            locale = locale,
                             onToggle = { enabled ->
                                 onEntriesChange(entries.map { if (it.id == entry.id) it.copy(enabled = enabled) else it })
                             },
@@ -178,6 +181,7 @@ private fun EmptySchedule() {
 @Composable
 private fun ScheduleRow(
     entry: ScheduleEntry,
+    locale: java.util.Locale,
     onToggle: (Boolean) -> Unit,
     onEdit: () -> Unit,
 ) {
@@ -212,7 +216,7 @@ private fun ScheduleRow(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Text(
-                    entry.recurrenceLabel(),
+                    entry.recurrenceLabel(locale),
                     style = MaterialTheme.typography.labelLarge,
                     color = MaterialTheme.colorScheme.primary,
                 )
@@ -234,13 +238,15 @@ private fun ScheduleEntrySheet(
     onSave: (ScheduleEntry) -> Unit,
 ) {
     val context = LocalContext.current
+    val locale = LocalLocale.current.platformLocale
+    val dateFormatter = remember(locale) { dateFormatter(locale) }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var label by remember(entry) { mutableStateOf(entry?.label ?: "") }
     var startTime by remember(entry) { mutableStateOf(entry?.startTime ?: LocalTime.of(9, 0)) }
     var endTime by remember(entry) { mutableStateOf(entry?.endTime ?: LocalTime.of(17, 0)) }
     var days by remember(entry) { mutableStateOf(entry?.daysOfWeek ?: emptySet()) }
     var date by remember(entry) { mutableStateOf(entry?.date) }
-    var color by remember(entry) { mutableStateOf(entry?.color ?: DEFAULT_SCHEDULE_COLOR) }
+    var color by remember(entry) { mutableLongStateOf(entry?.color ?: DEFAULT_SCHEDULE_COLOR) }
     val canSave = days.isNotEmpty() || date != null
 
     ModalBottomSheet(
@@ -286,7 +292,7 @@ private fun ScheduleEntrySheet(
                             date = null
                             days = if (selected) days - day else days + day
                         },
-                        label = { Text(day.getDisplayName(TextStyle.NARROW, Locale.getDefault())) },
+                        label = { Text(day.getDisplayName(TextStyle.NARROW, locale)) },
                     )
                 }
             }
@@ -305,7 +311,7 @@ private fun ScheduleEntrySheet(
                             initial.dayOfMonth,
                         ).show()
                     },
-                    label = { Text(date?.format(DateFormatter) ?: "Specific date") },
+                    label = { Text(date?.format(dateFormatter) ?: "Specific date") },
                 )
                 if (date != null) {
                     TextButton(onClick = { date = null }) {
@@ -428,17 +434,18 @@ private fun showTimePicker(
     ).show()
 }
 
-private fun ScheduleEntry.recurrenceLabel(): String {
-    date?.let { return it.format(DateFormatter) }
+private fun ScheduleEntry.recurrenceLabel(locale: java.util.Locale): String {
+    date?.let { return it.format(dateFormatter(locale)) }
     val ordered = DayOfWeek.entries.filter { it in daysOfWeek }
     if (ordered.size == 7) return "Every day"
-    return ordered.joinToString(", ") { it.getDisplayName(TextStyle.SHORT, Locale.getDefault()) }
+    return ordered.joinToString(", ") { it.getDisplayName(TextStyle.SHORT, locale) }
 }
 
 private fun formatTime(time: LocalTime): String =
     time.format(DateTimeFormatter.ofPattern("HH:mm"))
 
-private val DateFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("MMM d, yyyy")
+private fun dateFormatter(locale: java.util.Locale): DateTimeFormatter =
+    DateTimeFormatter.ofPattern("MMM d, yyyy", locale)
 
 private val ScheduleColors = listOf(
     DEFAULT_SCHEDULE_COLOR,

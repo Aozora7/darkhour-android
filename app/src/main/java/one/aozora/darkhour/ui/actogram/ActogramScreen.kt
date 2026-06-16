@@ -58,7 +58,6 @@ import one.aozora.darkhour.ui.ActogramColorMode
 import one.aozora.darkhour.ui.ActogramDisplayOptions
 import one.aozora.darkhour.ui.ActogramOrder
 import one.aozora.darkhour.ui.ActogramTimeScale
-import one.aozora.darkhour.ui.theme.ChartSelection
 import one.aozora.darkhour.ui.theme.CircadianForecast
 import one.aozora.darkhour.ui.theme.CircadianObserved
 import one.aozora.darkhour.ui.theme.SleepDeep

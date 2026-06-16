@@ -1,6 +1,7 @@
 package one.aozora.darkhour.data
 
 import android.content.Context
+import androidx.core.content.edit
 import androidx.health.connect.client.HealthConnectClient
 import androidx.health.connect.client.PermissionController
 import androidx.health.connect.client.permission.HealthPermission
@@ -65,7 +66,7 @@ class HealthConnectDataController(
 
     fun setDataRange(range: HealthDataRange) {
         if (range == state.value.dataRange) return
-        preferences.edit().putString(DATA_RANGE_KEY, range.name).apply()
+        preferences.edit { putString(DATA_RANGE_KEY, range.name) }
         mutableState.value = state.value.copy(dataRange = range, errorMessage = null)
         refresh()
     }

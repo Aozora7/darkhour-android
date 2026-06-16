@@ -31,6 +31,7 @@ import kotlin.math.roundToInt
 fun SettingsScreen(
     settings: AppSettings,
     onSettingsChange: (AppSettings) -> Unit,
+    modifier: Modifier = Modifier,
     healthConnectAccess: HealthConnectAccess = HealthConnectAccess.CONNECTED,
     healthDataRange: HealthDataRange = HealthDataRange.DEFAULT_PERIOD,
     hasHistoryPermission: Boolean = true,
@@ -39,7 +40,6 @@ fun SettingsScreen(
     recordCount: Int = 0,
     onRequestHistoryPermission: () -> Unit = {},
     onHealthDataRangeChange: (HealthDataRange) -> Unit = {},
-    modifier: Modifier = Modifier,
 ) {
     Column(
         modifier = modifier

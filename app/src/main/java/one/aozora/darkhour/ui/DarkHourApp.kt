@@ -5,10 +5,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -49,10 +47,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
 import one.aozora.darkhour.data.HealthConnectAccess
 import one.aozora.darkhour.data.HealthDataRange
 import one.aozora.darkhour.core.circadian.CircadianAnalyzer
@@ -199,7 +200,7 @@ fun DarkHourApp(
                 bottomBar = {
                     AppNavigationBar(
                         selectedIndex = pagerState.currentPage,
-                        pagerPosition = pagerState.currentPage + pagerState.currentPageOffsetFraction,
+                        pagerState = pagerState,
                         onSelected = ::selectDestination,
                     )
                 },
@@ -372,7 +373,7 @@ private fun HealthConnectGate(
 @Composable
 private fun AppNavigationBar(
     selectedIndex: Int,
-    pagerPosition: Float,
+    pagerState: androidx.compose.foundation.pager.PagerState,
     onSelected: (Int) -> Unit,
 ) {
     BoxWithConstraints(
@@ -385,6 +386,7 @@ private fun AppNavigationBar(
             .testTag("bottom_navigation"),
     ) {
         val itemWidth = maxWidth / DestinationItems.size
+        val itemWidthPx = with(LocalDensity.current) { itemWidth.toPx() }
 
         Row(Modifier.fillMaxSize()) {
             DestinationItems.forEachIndexed { index, item ->
@@ -436,9 +438,17 @@ private fun AppNavigationBar(
         Box(
             modifier = Modifier
                 .align(Alignment.BottomStart)
-                .offset(
-                    x = itemWidth * pagerPosition.coerceIn(0f, DestinationItems.lastIndex.toFloat()),
-                )
+                .offset {
+                    val pagerPosition =
+                        pagerState.currentPage + pagerState.currentPageOffsetFraction
+                    IntOffset(
+                        x = (itemWidthPx * pagerPosition.coerceIn(
+                            0f,
+                            DestinationItems.lastIndex.toFloat(),
+                        )).roundToInt(),
+                        y = 0,
+                    )
+                }
                 .width(itemWidth)
                 .height(3.dp)
                 .background(MaterialTheme.colorScheme.primary),

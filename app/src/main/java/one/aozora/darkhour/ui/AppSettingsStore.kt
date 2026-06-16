@@ -5,6 +5,7 @@ import android.content.SharedPreferences
 import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.LocalTime
+import androidx.core.content.edit
 
 class AppSettingsStore(context: Context) {
     private val preferences = context.applicationContext.getSharedPreferences(
@@ -19,31 +20,31 @@ class AppSettingsStore(context: Context) {
     fun readScheduleEntries(): List<ScheduleEntry> = preferences.readScheduleEntries()
 
     fun write(settings: AppSettings) {
-        preferences.edit()
-            .putBoolean(INCLUDE_NAPS_KEY, settings.includeNaps)
-            .putInt(FORECAST_DAYS_KEY, settings.forecastDays.coerceIn(0, 30))
-            .putBoolean(USE_ISO_DATE_TIME_KEY, settings.useIsoDateTime)
-            .apply()
+        preferences.edit {
+            putBoolean(INCLUDE_NAPS_KEY, settings.includeNaps)
+                .putInt(FORECAST_DAYS_KEY, settings.forecastDays.coerceIn(0, 30))
+                .putBoolean(USE_ISO_DATE_TIME_KEY, settings.useIsoDateTime)
+        }
     }
 
     fun writeDisplayOptions(options: ActogramDisplayOptions) {
-        preferences.edit()
-            .putFloat(ROW_HEIGHT_DP_KEY, options.rowHeightDp.coerceIn(12f, 60f))
-            .putBoolean(DOUBLE_PLOT_KEY, options.doublePlot)
-            .putBoolean(SHOW_DATE_LABELS_KEY, options.showDateLabels)
-            .putBoolean(SHOW_CIRCADIAN_OVERLAY_KEY, options.showCircadianOverlay)
-            .putBoolean(SHOW_SCHEDULE_KEY, options.showSchedule)
-            .putString(COLOR_MODE_KEY, options.colorMode.name)
-            .putString(TIME_SCALE_KEY, options.timeScale.name)
-            .putFloat(CUSTOM_HOURS_KEY, options.customHours.coerceIn(22f, 28f))
-            .putString(ORDER_KEY, options.order.name)
-            .apply()
+        preferences.edit {
+            putFloat(ROW_HEIGHT_DP_KEY, options.rowHeightDp.coerceIn(12f, 60f))
+                .putBoolean(DOUBLE_PLOT_KEY, options.doublePlot)
+                .putBoolean(SHOW_DATE_LABELS_KEY, options.showDateLabels)
+                .putBoolean(SHOW_CIRCADIAN_OVERLAY_KEY, options.showCircadianOverlay)
+                .putBoolean(SHOW_SCHEDULE_KEY, options.showSchedule)
+                .putString(COLOR_MODE_KEY, options.colorMode.name)
+                .putString(TIME_SCALE_KEY, options.timeScale.name)
+                .putFloat(CUSTOM_HOURS_KEY, options.customHours.coerceIn(22f, 28f))
+                .putString(ORDER_KEY, options.order.name)
+        }
     }
 
     fun writeScheduleEntries(entries: List<ScheduleEntry>) {
-        preferences.edit()
-            .putString(SCHEDULE_ENTRIES_KEY, entries.joinToString("\n") { it.serialize() })
-            .apply()
+        preferences.edit {
+            putString(SCHEDULE_ENTRIES_KEY, entries.joinToString("\n") { it.serialize() })
+        }
     }
 
     private companion object {
