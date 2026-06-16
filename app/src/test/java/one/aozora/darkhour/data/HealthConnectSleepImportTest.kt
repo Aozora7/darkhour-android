@@ -5,6 +5,7 @@ import androidx.health.connect.client.records.metadata.Metadata
 import one.aozora.darkhour.core.model.SleepStageLevel
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.time.Instant
@@ -61,6 +62,8 @@ class HealthConnectSleepImportTest {
         val sleep = record.toImportedSleepRecord(ZoneId.of("Europe/Riga")).record
 
         assertEquals(LocalDate.parse("2026-06-10"), sleep.dateOfSleep)
+        assertNull(sleep.stages)
+        assertTrue(sleep.stageData.isEmpty())
     }
 
     @Test

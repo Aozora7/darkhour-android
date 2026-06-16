@@ -28,7 +28,7 @@ enum class ActogramOrder {
 @Immutable
 data class ActogramDisplayOptions(
     val rowHeightDp: Float = 22f,
-    val doublePlot: Boolean = true,
+    val doublePlot: Boolean = false,
     val showDateLabels: Boolean = true,
     val showCircadianOverlay: Boolean = true,
     val colorMode: ActogramColorMode = ActogramColorMode.STAGES,
@@ -40,7 +40,7 @@ data class ActogramDisplayOptions(
 @Immutable
 data class AppSettings(
     val includeNaps: Boolean = true,
-    val forecastDays: Int = 7,
+    val forecastDays: Int = 2,
     val hapticFeedback: Boolean = true,
     val useIsoDateTime: Boolean = false,
 )

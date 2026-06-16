@@ -13,6 +13,7 @@ import java.time.LocalDate
 import java.time.ZoneOffset
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -103,8 +104,20 @@ class ActogramLayoutTest {
 
         assertEquals(2, block.stages.size)
         assertEquals(SleepStageLevel.DEEP, block.stages.last().level)
-        assertEquals(60, block.selection.stages.light)
-        assertEquals(60, block.selection.stages.deep)
+        assertEquals(60, block.selection.stages?.light)
+        assertEquals(60, block.selection.stages?.deep)
+    }
+
+    @Test
+    fun sleepWithoutStageIntervalsHasNoStageSummaryForDetails() {
+        val date = LocalDate.parse("2026-06-15")
+        val block = ActogramLayoutEngine.build(
+            listOf(record(date, 1.0, 4.0)),
+            minimumRows = 1,
+        ).rows.single().sleeps.single()
+
+        assertTrue(block.stages.isEmpty())
+        assertNull(block.selection.stages)
     }
 
     @Test

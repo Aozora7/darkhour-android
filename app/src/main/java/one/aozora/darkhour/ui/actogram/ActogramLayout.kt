@@ -46,7 +46,7 @@ sealed interface ActogramSelection {
         val startZoneOffset: ZoneOffset,
         val endZoneOffset: ZoneOffset,
         val sleepScore: Double?,
-        val stages: SleepStages,
+        val stages: SleepStages?,
         val isMainSleep: Boolean,
     ) : ActogramSelection
 
@@ -380,14 +380,16 @@ object ActogramLayoutEngine {
                 startZoneOffset = startZoneOffset ?: ZoneOffset.UTC,
                 endZoneOffset = endZoneOffset ?: startZoneOffset ?: ZoneOffset.UTC,
                 sleepScore = sleepScore,
-                stages = stageSummary(),
+                stages = stageSummaryOrNull(),
                 isMainSleep = isMainSleep,
             ),
         )
     }
 
-    private fun SleepRecord.stageSummary(): SleepStages {
+    private fun SleepRecord.stageSummaryOrNull(): SleepStages? {
         stages?.let { return it }
+        if (stageData.isEmpty()) return null
+
         val minutesByStage = stageData
             .groupBy { it.level }
             .mapValues { (_, intervals) -> intervals.sumOf { it.seconds } / 60 }

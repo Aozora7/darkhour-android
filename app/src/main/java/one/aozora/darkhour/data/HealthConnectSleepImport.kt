@@ -43,11 +43,6 @@ internal fun SleepSessionRecord.toImportedSleepRecord(
     } else {
         (totalMinutes - wakeMinutes).coerceAtLeast(0)
     }
-    val lightMinutes = if (mappedStages.isEmpty()) {
-        asleepMinutes
-    } else {
-        stageMinutes[SleepStageLevel.LIGHT] ?: 0
-    }
     val startOffset = startZoneOffset ?: fallbackZoneId.rules.getOffset(startTime)
     val endOffset = endZoneOffset ?: fallbackZoneId.rules.getOffset(endTime)
     val raw = SleepRecord(
@@ -61,12 +56,16 @@ internal fun SleepSessionRecord.toImportedSleepRecord(
         minutesAsleep = asleepMinutes,
         minutesAwake = wakeMinutes,
         isMainSleep = duration >= Duration.ofHours(MAIN_SLEEP_MINIMUM_HOURS),
-        stages = SleepStages(
-            deep = stageMinutes[SleepStageLevel.DEEP] ?: 0,
-            light = lightMinutes,
-            rem = stageMinutes[SleepStageLevel.REM] ?: 0,
-            wake = wakeMinutes,
-        ),
+        stages = if (mappedStages.isEmpty()) {
+            null
+        } else {
+            SleepStages(
+                deep = stageMinutes[SleepStageLevel.DEEP] ?: 0,
+                light = stageMinutes[SleepStageLevel.LIGHT] ?: 0,
+                rem = stageMinutes[SleepStageLevel.REM] ?: 0,
+                wake = wakeMinutes,
+            )
+        },
         stageData = mappedStages,
         startZoneOffset = startOffset,
         endZoneOffset = endOffset,

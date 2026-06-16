@@ -256,14 +256,39 @@ private fun SleepDetails(
     }
 
     DetailLabel("Sleep Stages")
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        StageTile("Deep", selection.stages.deep, ActogramDeepColor, Modifier.weight(1f))
-        StageTile("Light", selection.stages.light, ActogramLightColor, Modifier.weight(1f))
-        StageTile("REM", selection.stages.rem, ActogramRemColor, Modifier.weight(1f))
-        StageTile("Wake", selection.stages.wake, ActogramWakeColor, Modifier.weight(1f))
+    val stages = selection.stages
+    if (stages == null) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .border(
+                    1.dp,
+                    MaterialTheme.colorScheme.outline.copy(alpha = 0.45f),
+                    RoundedCornerShape(8.dp),
+                )
+                .background(
+                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.18f),
+                    RoundedCornerShape(8.dp),
+                )
+                .padding(horizontal = 12.dp, vertical = 14.dp),
+        ) {
+            Text(
+                "No stage data",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontWeight = FontWeight.Medium,
+            )
+        }
+    } else {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            StageTile("Deep", stages.deep, ActogramDeepColor, Modifier.weight(1f))
+            StageTile("Light", stages.light, ActogramLightColor, Modifier.weight(1f))
+            StageTile("REM", stages.rem, ActogramRemColor, Modifier.weight(1f))
+            StageTile("Wake", stages.wake, ActogramWakeColor, Modifier.weight(1f))
+        }
     }
 }
 
