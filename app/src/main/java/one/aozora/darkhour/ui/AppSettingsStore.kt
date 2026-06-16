@@ -2,6 +2,9 @@ package one.aozora.darkhour.ui
 
 import android.content.Context
 import android.content.SharedPreferences
+import java.time.DayOfWeek
+import java.time.LocalDate
+import java.time.LocalTime
 
 class AppSettingsStore(context: Context) {
     private val preferences = context.applicationContext.getSharedPreferences(
@@ -12,6 +15,8 @@ class AppSettingsStore(context: Context) {
     fun read(): AppSettings = preferences.readAppSettings()
 
     fun readDisplayOptions(): ActogramDisplayOptions = preferences.readActogramDisplayOptions()
+
+    fun readScheduleEntries(): List<ScheduleEntry> = preferences.readScheduleEntries()
 
     fun write(settings: AppSettings) {
         preferences.edit()
@@ -27,10 +32,17 @@ class AppSettingsStore(context: Context) {
             .putBoolean(DOUBLE_PLOT_KEY, options.doublePlot)
             .putBoolean(SHOW_DATE_LABELS_KEY, options.showDateLabels)
             .putBoolean(SHOW_CIRCADIAN_OVERLAY_KEY, options.showCircadianOverlay)
+            .putBoolean(SHOW_SCHEDULE_KEY, options.showSchedule)
             .putString(COLOR_MODE_KEY, options.colorMode.name)
             .putString(TIME_SCALE_KEY, options.timeScale.name)
             .putFloat(CUSTOM_HOURS_KEY, options.customHours.coerceIn(22f, 28f))
             .putString(ORDER_KEY, options.order.name)
+            .apply()
+    }
+
+    fun writeScheduleEntries(entries: List<ScheduleEntry>) {
+        preferences.edit()
+            .putString(SCHEDULE_ENTRIES_KEY, entries.joinToString("\n") { it.serialize() })
             .apply()
     }
 
@@ -46,10 +58,12 @@ private const val ROW_HEIGHT_DP_KEY = "actogram_row_height_dp"
 private const val DOUBLE_PLOT_KEY = "actogram_double_plot"
 private const val SHOW_DATE_LABELS_KEY = "actogram_show_date_labels"
 private const val SHOW_CIRCADIAN_OVERLAY_KEY = "actogram_show_circadian_overlay"
+private const val SHOW_SCHEDULE_KEY = "actogram_show_schedule"
 private const val COLOR_MODE_KEY = "actogram_color_mode"
 private const val TIME_SCALE_KEY = "actogram_time_scale"
 private const val CUSTOM_HOURS_KEY = "actogram_custom_hours"
 private const val ORDER_KEY = "actogram_order"
+private const val SCHEDULE_ENTRIES_KEY = "schedule_entries"
 
 private fun SharedPreferences.readAppSettings(): AppSettings {
     val defaults = AppSettings()
@@ -70,12 +84,58 @@ private fun SharedPreferences.readActogramDisplayOptions(): ActogramDisplayOptio
             SHOW_CIRCADIAN_OVERLAY_KEY,
             defaults.showCircadianOverlay,
         ),
+        showSchedule = getBoolean(SHOW_SCHEDULE_KEY, defaults.showSchedule),
         colorMode = getEnum(COLOR_MODE_KEY, defaults.colorMode),
         timeScale = getEnum(TIME_SCALE_KEY, defaults.timeScale),
         customHours = getFloat(CUSTOM_HOURS_KEY, defaults.customHours).coerceIn(22f, 28f),
         order = getEnum(ORDER_KEY, defaults.order),
     )
 }
+
+private fun SharedPreferences.readScheduleEntries(): List<ScheduleEntry> =
+    getString(SCHEDULE_ENTRIES_KEY, null)
+        ?.lineSequence()
+        ?.mapNotNull { it.deserializeScheduleEntry() }
+        ?.toList()
+        ?: emptyList()
+
+private fun ScheduleEntry.serialize(): String = listOf(
+    id.toString(),
+    label.encodeScheduleField(),
+    startTime.toString(),
+    endTime.toString(),
+    daysOfWeek.map { it.value }.sorted().joinToString(","),
+    date?.toString().orEmpty(),
+    color.toString(16),
+    enabled.toString(),
+).joinToString("|")
+
+private fun String.deserializeScheduleEntry(): ScheduleEntry? {
+    val parts = split("|")
+    if (parts.size != 8) return null
+    return runCatching {
+        ScheduleEntry(
+            id = parts[0].toLong(),
+            label = parts[1].decodeScheduleField(),
+            startTime = LocalTime.parse(parts[2]),
+            endTime = LocalTime.parse(parts[3]),
+            daysOfWeek = parts[4]
+                .split(",")
+                .filter { it.isNotBlank() }
+                .map { DayOfWeek.of(it.toInt()) }
+                .toSet(),
+            date = parts[5].takeIf { it.isNotBlank() }?.let(LocalDate::parse),
+            color = parts[6].toLong(16),
+            enabled = parts[7].toBooleanStrictOrNull() ?: true,
+        )
+    }.getOrNull()?.takeIf { it.daysOfWeek.isNotEmpty() xor (it.date != null) }
+}
+
+private fun String.encodeScheduleField(): String =
+    replace("%", "%25").replace("|", "%7C").replace("\n", "%0A")
+
+private fun String.decodeScheduleField(): String =
+    replace("%0A", "\n").replace("%7C", "|").replace("%25", "%")
 
 private inline fun <reified T : Enum<T>> SharedPreferences.getEnum(
     key: String,

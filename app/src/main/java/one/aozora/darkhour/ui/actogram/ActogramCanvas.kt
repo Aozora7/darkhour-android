@@ -253,6 +253,17 @@ private fun DrawScope.drawActogram(
                 )
             }
 
+            if (options.showSchedule) {
+                row.schedules.forEach { schedule ->
+                    drawSchedule(schedule, 0.0, labelWidth, hourWidth, top, rowHeight, selection)
+                }
+                if (options.doublePlot) {
+                    displayedRows.getOrNull(nextChronologicalRowIndex(index, options.order))?.schedules?.forEach { schedule ->
+                        drawSchedule(schedule, layout.rowHours, labelWidth, hourWidth, top, rowHeight, selection)
+                    }
+                }
+            }
+
             if (options.showCircadianOverlay) {
                 row.overlays.forEach { overlay ->
                     drawOverlay(overlay, 0.0, labelWidth, hourWidth, top, rowHeight, selection)
@@ -331,6 +342,35 @@ private fun DrawScope.drawHourAxis(
             left + hour * hourWidth,
             axisHeight - 9.dp.toPx(),
             paint,
+        )
+    }
+}
+
+private fun DrawScope.drawSchedule(
+    schedule: ActogramScheduleBlock,
+    shift: Double,
+    left: Float,
+    hourWidth: Float,
+    rowTop: Float,
+    rowHeight: Float,
+    selection: ActogramSelection?,
+) {
+    val startX = left + ((schedule.startHour + shift) * hourWidth).toFloat()
+    val endX = left + ((schedule.endHour + shift) * hourWidth).toFloat()
+    if (endX <= left || startX >= size.width) return
+    val selected = schedule.selection == selection
+    val color = Color(schedule.color)
+    drawRect(
+        color = color.copy(alpha = if (selected) 0.36f else 0.22f),
+        topLeft = Offset(startX, rowTop),
+        size = Size((endX - startX).coerceAtLeast(1f), rowHeight),
+    )
+    if (selected) {
+        drawRect(
+            color = ChartSelection,
+            topLeft = Offset(startX, rowTop + 1.dp.toPx()),
+            size = Size((endX - startX).coerceAtLeast(1f), (rowHeight - 2.dp.toPx()).coerceAtLeast(1f)),
+            style = Stroke(width = 2.dp.toPx()),
         )
     }
 }
@@ -484,9 +524,15 @@ internal fun hitTestActogram(
             ?.lastOrNull { sourceHour in it.startHour..it.endHour }
             ?.let { return it.selection }
     }
-    return sourceRow?.overlays
+    sourceRow?.overlays
         ?.lastOrNull { sourceHour in it.startHour..it.endHour }
-        ?.selection
+        ?.let { return it.selection }
+    if (options.showSchedule) {
+        sourceRow?.schedules
+            ?.lastOrNull { sourceHour in it.startHour..it.endHour }
+            ?.let { return it.selection }
+    }
+    return null
 }
 
 private fun nextChronologicalRowIndex(index: Int, order: ActogramOrder): Int =

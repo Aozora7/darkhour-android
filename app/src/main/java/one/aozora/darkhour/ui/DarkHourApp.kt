@@ -28,6 +28,7 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.EventNote
 import androidx.compose.material.icons.outlined.Bedtime
 import androidx.compose.material.icons.outlined.QueryStats
 import androidx.compose.material.icons.outlined.Settings
@@ -60,6 +61,7 @@ import one.aozora.darkhour.core.periodogram.buildPeriodogramAnchors
 import one.aozora.darkhour.core.periodogram.computePeriodogram
 import one.aozora.darkhour.ui.actogram.ActogramLayoutEngine
 import one.aozora.darkhour.ui.actogram.ActogramScreen
+import one.aozora.darkhour.ui.schedule.ScheduleScreen
 import one.aozora.darkhour.ui.settings.SettingsScreen
 import one.aozora.darkhour.ui.stats.StatsScreen
 
@@ -71,6 +73,7 @@ private data class DestinationItem(
 private val DestinationItems = listOf(
     DestinationItem(DarkHourDestination.ACTOGRAM, Icons.Outlined.Bedtime),
     DestinationItem(DarkHourDestination.STATS, Icons.Outlined.QueryStats),
+    DestinationItem(DarkHourDestination.SCHEDULE, Icons.AutoMirrored.Outlined.EventNote),
     DestinationItem(DarkHourDestination.SETTINGS, Icons.Outlined.Settings),
 )
 
@@ -83,6 +86,8 @@ fun DarkHourApp(
     onAppSettingsChange: (AppSettings) -> Unit = {},
     initialDisplayOptions: ActogramDisplayOptions = ActogramDisplayOptions(),
     onDisplayOptionsChange: (ActogramDisplayOptions) -> Unit = {},
+    initialScheduleEntries: List<ScheduleEntry> = emptyList(),
+    onScheduleEntriesChange: (List<ScheduleEntry>) -> Unit = {},
     healthConnectAccess: HealthConnectAccess = HealthConnectAccess.CONNECTED,
     healthDataRange: HealthDataRange = HealthDataRange.DEFAULT_PERIOD,
     hasHistoryPermission: Boolean = true,
@@ -95,6 +100,8 @@ fun DarkHourApp(
     var actogramTransforming by remember { mutableStateOf(false) }
     var options by remember { mutableStateOf(initialDisplayOptions) }
     var settings by remember { mutableStateOf(initialSettings) }
+    var scheduleEntries by remember { mutableStateOf(initialScheduleEntries) }
+    var pendingScheduleEditId by remember { mutableStateOf<Long?>(null) }
     val filteredRecords = remember(records, settings.includeNaps) {
         if (settings.includeNaps) records else records.filter { it.isMainSleep }
     }
@@ -109,10 +116,11 @@ fun DarkHourApp(
         ActogramTimeScale.CIRCADIAN_TAU -> analysis.globalTau
         ActogramTimeScale.CUSTOM -> options.customHours.toDouble()
     }
-    val layout = remember(filteredRecords, analysis.days, rowHours) {
+    val layout = remember(filteredRecords, analysis.days, scheduleEntries, rowHours) {
         ActogramLayoutEngine.build(
             records = filteredRecords,
             circadianDays = analysis.days,
+            scheduleEntries = scheduleEntries,
             rowHours = rowHours,
         )
     }
@@ -134,6 +142,19 @@ fun DarkHourApp(
         onDisplayOptionsChange(updated)
     }
 
+    fun updateScheduleEntries(updated: List<ScheduleEntry>) {
+        scheduleEntries = updated
+        onScheduleEntriesChange(updated)
+    }
+
+    fun editScheduleEntry(entryId: Long) {
+        pendingScheduleEditId = entryId
+        val scheduleIndex = DestinationItems.indexOfFirst {
+            it.destination == DarkHourDestination.SCHEDULE
+        }
+        if (scheduleIndex >= 0) selectDestination(scheduleIndex)
+    }
+
     BoxWithConstraints(modifier = modifier.fillMaxSize()) {
         val wide = maxWidth >= 600.dp
 
@@ -151,9 +172,14 @@ fun DarkHourApp(
                     layout = layout,
                     options = options,
                     settings = settings,
+                    scheduleEntries = scheduleEntries,
                     onOptionsChange = ::updateDisplayOptions,
                     onTransformingChange = { actogramTransforming = it },
                     onSettingsChange = ::updateSettings,
+                    onScheduleEntriesChange = ::updateScheduleEntries,
+                    pendingScheduleEditId = pendingScheduleEditId,
+                    onScheduleEditConsumed = { pendingScheduleEditId = null },
+                    onEditScheduleEntry = ::editScheduleEntry,
                     healthConnectAccess = healthConnectAccess,
                     healthDataRange = healthDataRange,
                     hasHistoryPermission = hasHistoryPermission,
@@ -186,9 +212,14 @@ fun DarkHourApp(
                     layout = layout,
                     options = options,
                     settings = settings,
+                    scheduleEntries = scheduleEntries,
                     onOptionsChange = ::updateDisplayOptions,
                     onTransformingChange = { actogramTransforming = it },
                     onSettingsChange = ::updateSettings,
+                    onScheduleEntriesChange = ::updateScheduleEntries,
+                    pendingScheduleEditId = pendingScheduleEditId,
+                    onScheduleEditConsumed = { pendingScheduleEditId = null },
+                    onEditScheduleEntry = ::editScheduleEntry,
                     healthConnectAccess = healthConnectAccess,
                     healthDataRange = healthDataRange,
                     hasHistoryPermission = hasHistoryPermission,
@@ -215,9 +246,14 @@ private fun AppPager(
     layout: one.aozora.darkhour.ui.actogram.ActogramLayout,
     options: ActogramDisplayOptions,
     settings: AppSettings,
+    scheduleEntries: List<ScheduleEntry>,
     onOptionsChange: (ActogramDisplayOptions) -> Unit,
     onTransformingChange: (Boolean) -> Unit,
     onSettingsChange: (AppSettings) -> Unit,
+    onScheduleEntriesChange: (List<ScheduleEntry>) -> Unit,
+    pendingScheduleEditId: Long?,
+    onScheduleEditConsumed: () -> Unit,
+    onEditScheduleEntry: (Long) -> Unit,
     healthConnectAccess: HealthConnectAccess,
     healthDataRange: HealthDataRange,
     hasHistoryPermission: Boolean,
@@ -244,6 +280,7 @@ private fun AppPager(
                         useIsoDateTime = settings.useIsoDateTime,
                         onOptionsChange = onOptionsChange,
                         onTransformingChange = onTransformingChange,
+                        onEditScheduleEntry = onEditScheduleEntry,
                     )
                 } else {
                     HealthConnectGate(
@@ -254,6 +291,12 @@ private fun AppPager(
                 }
             }
             DarkHourDestination.STATS -> StatsScreen(records, analysis, periodogram)
+            DarkHourDestination.SCHEDULE -> ScheduleScreen(
+                entries = scheduleEntries,
+                onEntriesChange = onScheduleEntriesChange,
+                editEntryId = pendingScheduleEditId,
+                onEditEntryConsumed = onScheduleEditConsumed,
+            )
             DarkHourDestination.SETTINGS -> SettingsScreen(
                 settings = settings,
                 onSettingsChange = onSettingsChange,

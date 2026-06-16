@@ -32,6 +32,7 @@ class MainActivity : ComponentActivity() {
             val healthState by healthConnect.state.collectAsState()
             val initialSettings = remember { appSettings.read() }
             val initialDisplayOptions = remember { appSettings.readDisplayOptions() }
+            val initialScheduleEntries = remember { appSettings.readScheduleEntries() }
             DarkHourTheme {
                 DarkHourApp(
                     records = healthState.records,
@@ -39,6 +40,8 @@ class MainActivity : ComponentActivity() {
                     onAppSettingsChange = appSettings::write,
                     initialDisplayOptions = initialDisplayOptions,
                     onDisplayOptionsChange = appSettings::writeDisplayOptions,
+                    initialScheduleEntries = initialScheduleEntries,
+                    onScheduleEntriesChange = appSettings::writeScheduleEntries,
                     healthConnectAccess = healthState.access,
                     healthDataRange = healthState.dataRange,
                     hasHistoryPermission = healthState.hasHistoryPermission,

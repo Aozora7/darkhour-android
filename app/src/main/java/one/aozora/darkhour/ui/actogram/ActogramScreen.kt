@@ -21,10 +21,13 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.EventNote
 import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Hotel
 import androidx.compose.material.icons.outlined.Nightlight
 import androidx.compose.material.icons.outlined.Tune
+import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
@@ -62,8 +65,10 @@ import one.aozora.darkhour.ui.theme.SleepDeep
 import one.aozora.darkhour.ui.theme.SleepLight
 import one.aozora.darkhour.ui.theme.SleepRem
 import one.aozora.darkhour.ui.theme.SleepWake
+import java.time.DayOfWeek
 import java.time.Instant
 import java.time.Duration
+import java.time.format.TextStyle
 import java.util.Locale
 
 @Composable
@@ -73,6 +78,7 @@ fun ActogramScreen(
     useIsoDateTime: Boolean,
     onOptionsChange: (ActogramDisplayOptions) -> Unit,
     onTransformingChange: (Boolean) -> Unit,
+    onEditScheduleEntry: (Long) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var showOptions by remember { mutableStateOf(false) }
@@ -113,6 +119,10 @@ fun ActogramScreen(
                 ActogramDetailsPanel(
                     selection = it,
                     useIsoDateTime = useIsoDateTime,
+                    onEditScheduleEntry = { entryId ->
+                        selection = null
+                        onEditScheduleEntry(entryId)
+                    },
                     onDismiss = { selection = null },
                 )
             }
@@ -132,6 +142,7 @@ fun ActogramScreen(
 private fun ActogramDetailsPanel(
     selection: ActogramSelection,
     useIsoDateTime: Boolean,
+    onEditScheduleEntry: (Long) -> Unit,
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -141,6 +152,7 @@ private fun ActogramDetailsPanel(
         is ActogramSelection.Sleep -> ActogramLightColor
         is ActogramSelection.Circadian ->
             if (selection.isForecast) ActogramForecastColor else ActogramNightColor
+        is ActogramSelection.Schedule -> Color(selection.entry.color)
     }
     androidx.compose.material3.Surface(
         modifier = modifier
@@ -171,6 +183,7 @@ private fun ActogramDetailsPanel(
                         imageVector = when (selection) {
                             is ActogramSelection.Sleep -> Icons.Outlined.Hotel
                             is ActogramSelection.Circadian -> Icons.Outlined.Nightlight
+                            is ActogramSelection.Schedule -> Icons.AutoMirrored.Outlined.EventNote
                         },
                         contentDescription = null,
                         tint = accent,
@@ -186,6 +199,7 @@ private fun ActogramDetailsPanel(
                         text = when (selection) {
                             is ActogramSelection.Sleep -> "Sleep Record"
                             is ActogramSelection.Circadian -> "Circadian Window"
+                            is ActogramSelection.Schedule -> selection.entry.label.ifBlank { "Schedule Entry" }
                         },
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
@@ -194,6 +208,7 @@ private fun ActogramDetailsPanel(
                         text = when (selection) {
                             is ActogramSelection.Sleep -> "Health Connect"
                             is ActogramSelection.Circadian -> if (selection.isForecast) "Forecast" else "Observed"
+                            is ActogramSelection.Schedule -> if (selection.entry.isWeekly) "Weekly" else "Dated"
                         },
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
@@ -221,6 +236,8 @@ private fun ActogramDetailsPanel(
                     SleepDetails(selection, use24HourTime, useIsoDateTime)
                 is ActogramSelection.Circadian ->
                     CircadianDetails(selection, use24HourTime, useIsoDateTime)
+                is ActogramSelection.Schedule ->
+                    ScheduleDetails(selection, use24HourTime, useIsoDateTime, onEditScheduleEntry)
             }
         }
     }
@@ -382,9 +399,63 @@ private fun CircadianDetails(
     }
 }
 
+@Composable
+private fun ScheduleDetails(
+    selection: ActogramSelection.Schedule,
+    use24HourTime: Boolean,
+    useIsoDateTime: Boolean,
+    onEditScheduleEntry: (Long) -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(24.dp),
+        ) {
+            Column(Modifier.weight(1f)) {
+                DetailLabel("Time")
+                Text(
+                    "${formatActogramClock(selection.occurrenceStart, selection.zoneOffset, use24HourTime)} - " +
+                        formatActogramClock(selection.occurrenceEnd, selection.zoneOffset, use24HourTime),
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = Color(selection.entry.color),
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
+            Column(Modifier.weight(1f)) {
+                DetailLabel("Schedule")
+                Text(
+                    selection.entry.recurrenceSummary(useIsoDateTime),
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Medium,
+                )
+                Text(
+                    if (selection.entry.enabled) "Enabled" else "Disabled",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+        Button(
+            onClick = { onEditScheduleEntry(selection.entry.id) },
+            modifier = Modifier.align(Alignment.End),
+        ) {
+            Icon(Icons.Outlined.Edit, contentDescription = null)
+            androidx.compose.foundation.layout.Spacer(Modifier.size(8.dp))
+            Text("Edit")
+        }
+    }
+}
+
 private fun formatDuration(start: Instant, end: Instant): String {
     val hours = Duration.between(start, end).toMinutes() / 60.0
     return "${"%.1f".format(Locale.getDefault(), hours)} hrs"
+}
+
+private fun one.aozora.darkhour.ui.ScheduleEntry.recurrenceSummary(useIsoDateTime: Boolean): String {
+    date?.let { return formatActogramDate(it, useIsoDateTime) }
+    val ordered = DayOfWeek.entries.filter { it in daysOfWeek }
+    if (ordered.size == 7) return "Every day"
+    return ordered.joinToString(", ") { it.getDisplayName(TextStyle.SHORT, Locale.getDefault()) }
 }
 
 private val ActogramDeepColor = SleepDeep
@@ -425,6 +496,9 @@ private fun ActogramOptionsSheet(
             }
             OptionSwitch("Circadian overlay", options.showCircadianOverlay) {
                 onOptionsChange(options.copy(showCircadianOverlay = it))
+            }
+            OptionSwitch("Schedule", options.showSchedule) {
+                onOptionsChange(options.copy(showSchedule = it))
             }
 
             HorizontalDivider()

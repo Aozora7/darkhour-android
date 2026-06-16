@@ -4,9 +4,11 @@ import one.aozora.darkhour.core.circadian.CircadianDay
 import one.aozora.darkhour.core.model.SleepRecord
 import one.aozora.darkhour.core.model.SleepStageLevel
 import one.aozora.darkhour.core.model.SleepStages
+import one.aozora.darkhour.ui.ScheduleEntry
 import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
+import java.time.LocalDateTime
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import one.aozora.darkhour.ui.ActogramOrder
@@ -38,6 +40,14 @@ data class ActogramOverlayBlock(
     val selection: ActogramSelection.Circadian,
 )
 
+data class ActogramScheduleBlock(
+    val entryId: Long,
+    val startHour: Double,
+    val endHour: Double,
+    val color: Long,
+    val selection: ActogramSelection.Schedule,
+)
+
 sealed interface ActogramSelection {
     data class Sleep(
         val logId: Long,
@@ -58,6 +68,13 @@ sealed interface ActogramSelection {
         val confidence: Double,
         val isForecast: Boolean,
     ) : ActogramSelection
+
+    data class Schedule(
+        val entry: ScheduleEntry,
+        val occurrenceStart: Instant,
+        val occurrenceEnd: Instant,
+        val zoneOffset: ZoneOffset,
+    ) : ActogramSelection
 }
 
 data class ActogramRow(
@@ -66,6 +83,7 @@ data class ActogramRow(
     val startTime: Instant,
     val sleeps: List<ActogramSleepBlock>,
     val overlays: List<ActogramOverlayBlock>,
+    val schedules: List<ActogramScheduleBlock>,
 )
 
 data class ActogramLayout(
@@ -118,6 +136,7 @@ private fun ActogramLayout.emptyRow(startTime: Instant): ActogramRow {
         startTime = startTime,
         sleeps = emptyList(),
         overlays = emptyList(),
+        schedules = emptyList(),
     )
 }
 
@@ -128,6 +147,7 @@ object ActogramLayoutEngine {
     fun build(
         records: List<SleepRecord>,
         circadianDays: List<CircadianDay> = emptyList(),
+        scheduleEntries: List<ScheduleEntry> = emptyList(),
         rowHours: Double = 24.0,
         minimumRows: Int = 7,
         referenceDate: LocalDate = LocalDate.now(),
@@ -136,15 +156,16 @@ object ActogramLayoutEngine {
         require(minimumRows > 0)
 
         return if (kotlin.math.abs(rowHours - 24.0) < 0.0001) {
-            buildCalendarRows(records, circadianDays, minimumRows, referenceDate)
+            buildCalendarRows(records, circadianDays, scheduleEntries, minimumRows, referenceDate)
         } else {
-            buildFixedDurationRows(records, circadianDays, rowHours, minimumRows, referenceDate)
+            buildFixedDurationRows(records, circadianDays, scheduleEntries, rowHours, minimumRows, referenceDate)
         }
     }
 
     private fun buildCalendarRows(
         records: List<SleepRecord>,
         circadianDays: List<CircadianDay>,
+        scheduleEntries: List<ScheduleEntry>,
         minimumRows: Int,
         referenceDate: LocalDate,
     ): ActogramLayout {
@@ -168,7 +189,8 @@ object ActogramLayoutEngine {
                 day.coveredCalendarDates()
             }
         }
-        val allDates = recordDates + circadianDates
+        val scheduleDates = scheduleEntries.mapNotNull { it.date }
+        val allDates = recordDates + circadianDates + scheduleDates
         val lastDate = allDates.maxOrNull() ?: referenceDate
         val naturalFirstDate = allDates.minOrNull() ?: lastDate
         val paddedFirstDate = lastDate.minusDays((minimumRows - 1).toLong())
@@ -197,6 +219,7 @@ object ActogramLayoutEngine {
                 startTime = rowStart,
                 sleeps = sleeps,
                 overlays = overlays,
+                schedules = scheduleEntries.toScheduleBlocks(rowStart, rowEnd, offset),
             )
         }.toList()
 
@@ -211,6 +234,7 @@ object ActogramLayoutEngine {
     private fun buildFixedDurationRows(
         records: List<SleepRecord>,
         circadianDays: List<CircadianDay>,
+        scheduleEntries: List<ScheduleEntry>,
         rowHours: Double,
         minimumRows: Int,
         referenceDate: LocalDate,
@@ -219,6 +243,7 @@ object ActogramLayoutEngine {
         val firstInstant = records.minOfOrNull { it.startTime }
         val firstDate = firstInstant?.atOffset(fallbackOffset)?.toLocalDate()
             ?: circadianDays.minOfOrNull { it.date }
+            ?: scheduleEntries.mapNotNull { it.date }.minOrNull()
             ?: referenceDate
         val origin = firstDate.atStartOfDay().toInstant(fallbackOffset)
         val rowDurationMs = (rowHours * 3_600_000.0).roundToLong()
@@ -226,7 +251,10 @@ object ActogramLayoutEngine {
         val lastCircadianInstant = circadianDays.maxOfOrNull { day ->
             day.date.plusDays(1).atStartOfDay().toInstant(fallbackOffset)
         }
-        val naturalEnd = listOfNotNull(lastRecordInstant, lastCircadianInstant).maxOrNull()
+        val lastScheduleInstant = scheduleEntries.mapNotNull { entry ->
+            entry.date?.let { date -> entry.occurrenceEnd(date, fallbackOffset) }
+        }.maxOrNull()
+        val naturalEnd = listOfNotNull(lastRecordInstant, lastCircadianInstant, lastScheduleInstant).maxOrNull()
             ?: origin.plusMillis(rowDurationMs)
         val naturalCount = ceil(
             Duration.between(origin, naturalEnd).toMillis().coerceAtLeast(1L).toDouble() / rowDurationMs,
@@ -255,6 +283,7 @@ object ActogramLayoutEngine {
                 sleeps = records.mapNotNull { it.toBlock(rowStart, rowEnd) },
                 overlays = circadian?.toFixedDurationOverlays(rowStart, rowEnd, circadianMidnight, fallbackOffset)
                     ?: emptyList(),
+                schedules = scheduleEntries.toScheduleBlocks(rowStart, rowEnd, fallbackOffset),
             )
         }
 
@@ -403,5 +432,63 @@ object ActogramLayoutEngine {
 
     private fun hoursBetween(start: Instant, end: Instant): Double =
         Duration.between(start, end).toMillis() / 3_600_000.0
+
+    private fun List<ScheduleEntry>.toScheduleBlocks(
+        rowStart: Instant,
+        rowEnd: Instant,
+        zoneOffset: ZoneOffset,
+    ): List<ActogramScheduleBlock> {
+        if (isEmpty()) return emptyList()
+        val firstDate = rowStart.atOffset(zoneOffset).toLocalDate().minusDays(1)
+        val lastDate = rowEnd.atOffset(zoneOffset).toLocalDate().plusDays(1)
+        val dates = generateSequence(firstDate) { current ->
+            if (current < lastDate) current.plusDays(1) else null
+        }.toList()
+
+        return flatMap { entry ->
+            if (!entry.enabled) {
+                emptyList()
+            } else {
+                dates.mapNotNull { date -> entry.toScheduleBlock(date, rowStart, rowEnd, zoneOffset) }
+            }
+        }
+    }
+
+    private fun ScheduleEntry.toScheduleBlock(
+        date: LocalDate,
+        rowStart: Instant,
+        rowEnd: Instant,
+        zoneOffset: ZoneOffset,
+    ): ActogramScheduleBlock? {
+        if (daysOfWeek.isEmpty() && this.date != date) return null
+        if (daysOfWeek.isNotEmpty() && date.dayOfWeek !in daysOfWeek) return null
+
+        val start = occurrenceStart(date, zoneOffset)
+        val end = occurrenceEnd(date, zoneOffset)
+        val clippedStart = maxOf(start, rowStart)
+        val clippedEnd = minOf(end, rowEnd)
+        if (clippedEnd <= clippedStart) return null
+
+        return ActogramScheduleBlock(
+            entryId = id,
+            startHour = hoursBetween(rowStart, clippedStart),
+            endHour = hoursBetween(rowStart, clippedEnd),
+            color = color,
+            selection = ActogramSelection.Schedule(
+                entry = this,
+                occurrenceStart = start,
+                occurrenceEnd = end,
+                zoneOffset = zoneOffset,
+            ),
+        )
+    }
+
+    private fun ScheduleEntry.occurrenceStart(date: LocalDate, zoneOffset: ZoneOffset): Instant =
+        LocalDateTime.of(date, startTime).toInstant(zoneOffset)
+
+    private fun ScheduleEntry.occurrenceEnd(date: LocalDate, zoneOffset: ZoneOffset): Instant {
+        val endDate = if (endTime <= startTime) date.plusDays(1) else date
+        return LocalDateTime.of(endDate, endTime).toInstant(zoneOffset)
+    }
 
 }

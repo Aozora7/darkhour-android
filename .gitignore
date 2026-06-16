@@ -10,3 +10,5 @@ local.properties
 /core/build/*
 /app/build/*
 /build/*
+/app/release/*
+/keys/*

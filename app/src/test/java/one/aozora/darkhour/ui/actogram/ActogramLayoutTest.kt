@@ -8,8 +8,12 @@ import one.aozora.darkhour.core.model.SleepStageInterval
 import one.aozora.darkhour.core.model.SleepStageLevel
 import one.aozora.darkhour.ui.ActogramOrder
 import one.aozora.darkhour.ui.ActogramDisplayOptions
+import one.aozora.darkhour.ui.DEFAULT_SCHEDULE_COLOR
+import one.aozora.darkhour.ui.ScheduleEntry
+import java.time.DayOfWeek
 import java.time.Duration
 import java.time.LocalDate
+import java.time.LocalTime
 import java.time.ZoneOffset
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -297,6 +301,134 @@ class ActogramLayoutTest {
         assertTrue(overlayHit is ActogramSelection.Circadian)
     }
 
+    @Test
+    fun weeklyScheduleIsClippedIntoCalendarRows() {
+        val date = LocalDate.parse("2026-06-15")
+        val layout = ActogramLayoutEngine.build(
+            records = listOf(record(date, 23.0, 7.0)),
+            scheduleEntries = listOf(
+                schedule(
+                    start = LocalTime.of(22, 0),
+                    end = LocalTime.of(2, 0),
+                    days = setOf(DayOfWeek.MONDAY),
+                ),
+            ),
+            minimumRows = 2,
+        )
+
+        val first = layout.rows.first { it.date == date }.schedules.single()
+        val second = layout.rows.first { it.date == date.plusDays(1) }.schedules.single()
+
+        assertEquals(22.0, first.startHour, 0.001)
+        assertEquals(24.0, first.endHour, 0.001)
+        assertEquals(0.0, second.startHour, 0.001)
+        assertEquals(2.0, second.endHour, 0.001)
+    }
+
+    @Test
+    fun scheduleRespectsCustomRowWidth() {
+        val date = LocalDate.parse("2026-06-15")
+        val layout = ActogramLayoutEngine.build(
+            records = listOf(record(date, 23.0, 7.0)),
+            scheduleEntries = listOf(
+                schedule(
+                    start = LocalTime.of(23, 30),
+                    end = LocalTime.of(1, 30),
+                    days = setOf(DayOfWeek.MONDAY),
+                ),
+            ),
+            rowHours = 24.5,
+            minimumRows = 2,
+        )
+
+        val first = layout.rows[0].schedules.single()
+        val second = layout.rows[1].schedules.single()
+
+        assertEquals(23.5, first.startHour, 0.001)
+        assertEquals(24.5, first.endHour, 0.001)
+        assertEquals(0.0, second.startHour, 0.001)
+        assertEquals(1.0, second.endHour, 0.001)
+    }
+
+    @Test
+    fun scheduleRowsRemainChronologicalForDoublePlotLookupInEitherOrder() {
+        val firstDate = LocalDate.parse("2026-06-15")
+        val layout = ActogramLayoutEngine.build(
+            records = listOf(
+                record(firstDate, 1.0, 4.0),
+                record(firstDate.plusDays(1), 1.0, 4.0),
+            ),
+            scheduleEntries = listOf(
+                schedule(start = LocalTime.of(6, 0), end = LocalTime.of(7, 0), days = setOf(DayOfWeek.MONDAY)),
+                schedule(start = LocalTime.of(8, 0), end = LocalTime.of(9, 0), days = setOf(DayOfWeek.TUESDAY)),
+            ),
+            minimumRows = 2,
+        )
+
+        val newestRows = layout.rowsForDisplay(ActogramOrder.NEWEST_FIRST, minimumRows = 2)
+        val oldestRows = layout.rowsForDisplay(ActogramOrder.OLDEST_FIRST, minimumRows = 2)
+
+        assertEquals(6.0, newestRows[1].schedules.single().startHour, 0.001)
+        assertEquals(8.0, newestRows[0].schedules.single().startHour, 0.001)
+        assertEquals(6.0, oldestRows[0].schedules.single().startHour, 0.001)
+        assertEquals(8.0, oldestRows[1].schedules.single().startHour, 0.001)
+    }
+
+    @Test
+    fun scheduleCanBeSelectedFromFullRowHeight() {
+        val date = LocalDate.parse("2026-06-15")
+        val layout = ActogramLayoutEngine.build(
+            records = listOf(record(date, 1.0, 4.0)),
+            scheduleEntries = listOf(
+                schedule(start = LocalTime.of(10, 0), end = LocalTime.of(12, 0), days = setOf(DayOfWeek.MONDAY)),
+            ),
+            minimumRows = 1,
+        )
+        val rows = layout.rowsForDisplay(ActogramOrder.OLDEST_FIRST, minimumRows = 1)
+        val options = ActogramDisplayOptions(order = ActogramOrder.OLDEST_FIRST)
+
+        val hit = hitTestActogram(
+            rows = rows,
+            options = options,
+            rowHours = 24.0,
+            canvasWidth = 1_000f,
+            position = Offset(508f, 34f),
+            density = 1f,
+            labelWidthPx = 100f,
+        )
+
+        assertTrue(hit is ActogramSelection.Schedule)
+        assertEquals("Work", (hit as ActogramSelection.Schedule).entry.label)
+    }
+
+    @Test
+    fun circadianHitTakesPriorityOverScheduleBackground() {
+        val date = LocalDate.parse("2026-06-15")
+        val sleep = record(date, 1.0, 4.0)
+        val layout = ActogramLayoutEngine.build(
+            records = listOf(sleep),
+            circadianDays = listOf(circadian(date, sleep, 10.0, 12.0)),
+            scheduleEntries = listOf(
+                schedule(start = LocalTime.of(9, 0), end = LocalTime.of(13, 0), days = setOf(DayOfWeek.MONDAY)),
+            ),
+            minimumRows = 1,
+        )
+        val rows = layout.rowsForDisplay(ActogramOrder.OLDEST_FIRST, minimumRows = 1)
+        val options = ActogramDisplayOptions(order = ActogramOrder.OLDEST_FIRST)
+
+        val hit = hitTestActogram(
+            rows = rows,
+            options = options,
+            rowHours = 24.0,
+            canvasWidth = 1_000f,
+            position = Offset(508f, 34f),
+            density = 1f,
+            labelWidthPx = 100f,
+        )
+
+        assertTrue(hit is ActogramSelection.Circadian)
+    }
+
     private fun record(date: LocalDate, startHour: Double, durationHours: Double): SleepRecord {
         val dayStart = date.atStartOfDay().toInstant(offset)
         val start = dayStart.plusMillis((startHour * 3_600_000).toLong())
@@ -334,5 +466,18 @@ class ActogramLayoutTest {
         anchorSleep = sleep,
         isForecast = false,
         isGap = false,
+    )
+
+    private fun schedule(
+        start: LocalTime,
+        end: LocalTime,
+        days: Set<DayOfWeek>,
+    ): ScheduleEntry = ScheduleEntry(
+        id = start.toSecondOfDay().toLong(),
+        label = "Work",
+        startTime = start,
+        endTime = end,
+        daysOfWeek = days,
+        color = DEFAULT_SCHEDULE_COLOR,
     )
 }
