@@ -1,9 +1,7 @@
 package one.aozora.darkhour.ui
 
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Spacer
@@ -37,11 +35,9 @@ import androidx.compose.material3.NavigationRailItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
@@ -92,7 +88,6 @@ fun DarkHourApp(
     onRequestHistoryPermission: () -> Unit = {},
     onHealthDataRangeChange: (HealthDataRange) -> Unit = {},
 ) {
-    var immersive by rememberSaveable { mutableStateOf(false) }
     var actogramTransforming by remember { mutableStateOf(false) }
     var options by remember { mutableStateOf(initialDisplayOptions) }
     var settings by remember { mutableStateOf(initialSettings) }
@@ -121,12 +116,6 @@ fun DarkHourApp(
     val pagerState = rememberPagerState(initialPage = 0, pageCount = { DestinationItems.size })
     val scope = rememberCoroutineScope()
 
-    LaunchedEffect(pagerState.currentPage) {
-        if (pagerState.currentPage != DarkHourDestination.ACTOGRAM.ordinal) {
-            immersive = false
-        }
-    }
-
     fun selectDestination(index: Int) {
         scope.launch { pagerState.animateScrollToPage(index) }
     }
@@ -143,20 +132,13 @@ fun DarkHourApp(
 
     BoxWithConstraints(modifier = modifier.fillMaxSize()) {
         val wide = maxWidth >= 600.dp
-        val hideNavigation = immersive && pagerState.currentPage == DarkHourDestination.ACTOGRAM.ordinal
-
-        BackHandler(enabled = hideNavigation) {
-            immersive = false
-        }
 
         if (wide) {
             Row(Modifier.fillMaxSize()) {
-                if (!hideNavigation) {
-                    AppNavigationRail(
-                        selectedIndex = pagerState.currentPage,
-                        onSelected = ::selectDestination,
-                    )
-                }
+                AppNavigationRail(
+                    selectedIndex = pagerState.currentPage,
+                    onSelected = ::selectDestination,
+                )
                 AppPager(
                     pagerState = pagerState,
                     records = filteredRecords,
@@ -164,10 +146,8 @@ fun DarkHourApp(
                     periodogram = periodogram,
                     layout = layout,
                     options = options,
-                    immersive = immersive,
                     settings = settings,
                     onOptionsChange = ::updateDisplayOptions,
-                    onImmersiveChange = { immersive = it },
                     onTransformingChange = { actogramTransforming = it },
                     onSettingsChange = ::updateSettings,
                     healthConnectAccess = healthConnectAccess,
@@ -185,14 +165,13 @@ fun DarkHourApp(
         } else {
             Scaffold(
                 modifier = Modifier.fillMaxSize(),
+                containerColor = MaterialTheme.colorScheme.surfaceContainer,
                 bottomBar = {
-                    if (!hideNavigation) {
-                        AppNavigationBar(
-                            selectedIndex = pagerState.currentPage,
-                            pagerPosition = pagerState.currentPage + pagerState.currentPageOffsetFraction,
-                            onSelected = ::selectDestination,
-                        )
-                    }
+                    AppNavigationBar(
+                        selectedIndex = pagerState.currentPage,
+                        pagerPosition = pagerState.currentPage + pagerState.currentPageOffsetFraction,
+                        onSelected = ::selectDestination,
+                    )
                 },
             ) { padding ->
                 AppPager(
@@ -202,10 +181,8 @@ fun DarkHourApp(
                     periodogram = periodogram,
                     layout = layout,
                     options = options,
-                    immersive = immersive,
                     settings = settings,
                     onOptionsChange = ::updateDisplayOptions,
-                    onImmersiveChange = { immersive = it },
                     onTransformingChange = { actogramTransforming = it },
                     onSettingsChange = ::updateSettings,
                     healthConnectAccess = healthConnectAccess,
@@ -233,10 +210,8 @@ private fun AppPager(
     periodogram: one.aozora.darkhour.core.periodogram.PeriodogramResult,
     layout: one.aozora.darkhour.ui.actogram.ActogramLayout,
     options: ActogramDisplayOptions,
-    immersive: Boolean,
     settings: AppSettings,
     onOptionsChange: (ActogramDisplayOptions) -> Unit,
-    onImmersiveChange: (Boolean) -> Unit,
     onTransformingChange: (Boolean) -> Unit,
     onSettingsChange: (AppSettings) -> Unit,
     healthConnectAccess: HealthConnectAccess,
@@ -263,9 +238,7 @@ private fun AppPager(
                         layout = layout,
                         options = options,
                         useIsoDateTime = settings.useIsoDateTime,
-                        immersive = immersive,
                         onOptionsChange = onOptionsChange,
-                        onImmersiveChange = onImmersiveChange,
                         onTransformingChange = onTransformingChange,
                     )
                 } else {
@@ -358,12 +331,8 @@ private fun AppNavigationBar(
     BoxWithConstraints(
         modifier = Modifier
             .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.surfaceContainer)
-            .border(
-                width = 1.dp,
-                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
-            )
             .windowInsetsPadding(WindowInsets.navigationBars.only(WindowInsetsSides.Bottom))
+            .background(MaterialTheme.colorScheme.surfaceContainer)
             .height(48.dp)
             .selectableGroup()
             .testTag("bottom_navigation"),
@@ -414,14 +383,15 @@ private fun AppNavigationBar(
         val itemWidth = maxWidth / DestinationItems.size
         Spacer(
             modifier = Modifier
+                .align(Alignment.BottomStart)
                 .offset(
                     x = itemWidth * pagerPosition.coerceIn(
                         minimumValue = 0f,
                         maximumValue = DestinationItems.lastIndex.toFloat(),
-                    ) + (itemWidth - 40.dp) / 2,
+                    ),
                 )
-                .width(40.dp)
-                .height(2.dp)
+                .width(itemWidth)
+                .height(4.dp)
                 .background(MaterialTheme.colorScheme.primary),
         )
     }

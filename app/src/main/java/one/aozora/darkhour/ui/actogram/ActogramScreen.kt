@@ -1,5 +1,12 @@
 package one.aozora.darkhour.ui.actogram
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -14,11 +21,11 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Close
-import androidx.compose.material.icons.outlined.Fullscreen
 import androidx.compose.material.icons.outlined.Hotel
 import androidx.compose.material.icons.outlined.Nightlight
 import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -62,52 +69,14 @@ fun ActogramScreen(
     layout: ActogramLayout,
     options: ActogramDisplayOptions,
     useIsoDateTime: Boolean,
-    immersive: Boolean,
     onOptionsChange: (ActogramDisplayOptions) -> Unit,
-    onImmersiveChange: (Boolean) -> Unit,
     onTransformingChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var showOptions by remember { mutableStateOf(false) }
     var selection by remember(layout) { mutableStateOf<ActogramSelection?>(null) }
 
-    Column(modifier = modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-        if (!immersive) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(start = 16.dp, end = 6.dp, top = 2.dp, bottom = 2.dp)
-                    .testTag("actogram_top_bar"),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
-            ) {
-                Column(Modifier.weight(1f)) {
-                    Text("Actogram", style = MaterialTheme.typography.titleMedium)
-                    Text(
-                        "${layout.rows.count { it.sleeps.isNotEmpty() }} days with sleep",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-                    IconButton(
-                        onClick = { showOptions = true },
-                        modifier = Modifier.testTag("actogram_options"),
-                    ) {
-                        Icon(Icons.Outlined.Tune, contentDescription = "Visualization options")
-                    }
-                    IconButton(
-                        onClick = { onImmersiveChange(true) },
-                        modifier = Modifier.testTag("immersive_toggle"),
-                    ) {
-                        Icon(
-                            imageVector = Icons.Outlined.Fullscreen,
-                            contentDescription = "Fullscreen",
-                        )
-                    }
-                }
-            }
-        }
+    Column(modifier = modifier.fillMaxSize().background(MaterialTheme.colorScheme.surfaceContainer)) {
         Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
             ActogramCanvas(
                 layout = layout,
@@ -119,12 +88,30 @@ fun ActogramScreen(
                 onTransformingChange = onTransformingChange,
                 modifier = Modifier.fillMaxSize().testTag("actogram_canvas"),
             )
+            FloatingActionButton(
+                onClick = { showOptions = true },
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(16.dp)
+                    .testTag("actogram_options"),
+            ) {
+                Icon(Icons.Outlined.Tune, contentDescription = "Visualization options")
+            }
+        }
+        AnimatedVisibility(
+            visible = selection != null,
+            enter = slideInVertically(initialOffsetY = { it }) +
+                expandVertically(expandFrom = Alignment.Bottom) +
+                fadeIn(),
+            exit = slideOutVertically(targetOffsetY = { it }) +
+                shrinkVertically(shrinkTowards = Alignment.Bottom) +
+                fadeOut(),
+        ) {
             selection?.let {
                 ActogramDetailsPanel(
                     selection = it,
                     useIsoDateTime = useIsoDateTime,
                     onDismiss = { selection = null },
-                    modifier = Modifier.align(Alignment.BottomCenter),
                 )
             }
         }
@@ -156,16 +143,14 @@ private fun ActogramDetailsPanel(
     androidx.compose.material3.Surface(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 10.dp)
-            .border(1.dp, accent.copy(alpha = 0.45f), RoundedCornerShape(8.dp))
+            .padding(horizontal = 16.dp, vertical = 10.dp)
+            .border(2.dp, accent.copy(alpha = 0.45f), RoundedCornerShape(16.dp))
             .testTag("actogram_details"),
-        shape = RoundedCornerShape(8.dp),
+        shape = RoundedCornerShape(16.dp),
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
-        tonalElevation = 6.dp,
-        shadowElevation = 8.dp,
     ) {
         Column(
-            modifier = Modifier.padding(start = 18.dp, end = 8.dp, top = 12.dp, bottom = 16.dp),
+            modifier = Modifier.padding(start = 18.dp, end = 18.dp, top = 8.dp, bottom = 16.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             Row(
@@ -282,7 +267,7 @@ private fun SleepDetails(
     } else {
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             StageTile("Deep", stages.deep, ActogramDeepColor, Modifier.weight(1f))
             StageTile("Light", stages.light, ActogramLightColor, Modifier.weight(1f))

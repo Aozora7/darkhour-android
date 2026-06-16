@@ -450,11 +450,11 @@ internal fun hitTestActogram(
     if (position.y < axisHeight || rowHeight <= 0f) return null
 
     val tauMode = kotlin.math.abs(rowHours - 24.0) >= 0.0001
-    val labelWidth = labelWidthPx ?: actogramMaxLabelWidthDp(
+    val labelWidth = labelWidthPx ?: (actogramMaxLabelWidthDp(
         showDateLabels = options.showDateLabels,
         tauMode = tauMode,
         useIsoDateTime = false,
-    ) * density
+    ) * density)
     val rightPadding = 10f * density
     val plotWidth = (canvasWidth - labelWidth - rightPadding).coerceAtLeast(1f)
     if (position.x < labelWidth || position.x > labelWidth + plotWidth) return null

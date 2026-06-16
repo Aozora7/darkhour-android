@@ -1,6 +1,5 @@
 package one.aozora.darkhour
 
-import androidx.test.espresso.Espresso.pressBack
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -73,19 +72,12 @@ class DarkHourAppTest {
     }
 
     @Test
-    fun immersiveModeHidesChromeAndBackRestoresIt() {
+    fun actogramUsesFloatingOptionsWithoutTopBar() {
         setContent()
 
-        composeRule.onNodeWithTag("actogram_top_bar").assertIsDisplayed()
-        composeRule.onNodeWithTag("immersive_toggle").performClick()
-        composeRule.onAllNodesWithTag("bottom_navigation").assertCountEquals(0)
         composeRule.onAllNodesWithTag("actogram_top_bar").assertCountEquals(0)
-
-        pressBack()
-        composeRule.waitForIdle()
-
         composeRule.onNodeWithTag("bottom_navigation").assertIsDisplayed()
-        composeRule.onNodeWithTag("actogram_top_bar").assertIsDisplayed()
+        composeRule.onNodeWithTag("actogram_options").assertIsDisplayed()
     }
 
     @Test
