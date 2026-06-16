@@ -79,6 +79,10 @@ private val DestinationItems = listOf(
 fun DarkHourApp(
     records: List<SleepRecord>,
     modifier: Modifier = Modifier,
+    initialSettings: AppSettings = AppSettings(),
+    onAppSettingsChange: (AppSettings) -> Unit = {},
+    initialDisplayOptions: ActogramDisplayOptions = ActogramDisplayOptions(),
+    onDisplayOptionsChange: (ActogramDisplayOptions) -> Unit = {},
     healthConnectAccess: HealthConnectAccess = HealthConnectAccess.CONNECTED,
     healthDataRange: HealthDataRange = HealthDataRange.DEFAULT_PERIOD,
     hasHistoryPermission: Boolean = true,
@@ -90,8 +94,8 @@ fun DarkHourApp(
 ) {
     var immersive by rememberSaveable { mutableStateOf(false) }
     var actogramTransforming by remember { mutableStateOf(false) }
-    var options by remember { mutableStateOf(ActogramDisplayOptions()) }
-    var settings by remember { mutableStateOf(AppSettings()) }
+    var options by remember { mutableStateOf(initialDisplayOptions) }
+    var settings by remember { mutableStateOf(initialSettings) }
     val filteredRecords = remember(records, settings.includeNaps) {
         if (settings.includeNaps) records else records.filter { it.isMainSleep }
     }
@@ -127,6 +131,16 @@ fun DarkHourApp(
         scope.launch { pagerState.animateScrollToPage(index) }
     }
 
+    fun updateSettings(updated: AppSettings) {
+        settings = updated
+        onAppSettingsChange(updated)
+    }
+
+    fun updateDisplayOptions(updated: ActogramDisplayOptions) {
+        options = updated
+        onDisplayOptionsChange(updated)
+    }
+
     BoxWithConstraints(modifier = modifier.fillMaxSize()) {
         val wide = maxWidth >= 600.dp
         val hideNavigation = immersive && pagerState.currentPage == DarkHourDestination.ACTOGRAM.ordinal
@@ -152,10 +166,10 @@ fun DarkHourApp(
                     options = options,
                     immersive = immersive,
                     settings = settings,
-                    onOptionsChange = { options = it },
+                    onOptionsChange = ::updateDisplayOptions,
                     onImmersiveChange = { immersive = it },
                     onTransformingChange = { actogramTransforming = it },
-                    onSettingsChange = { settings = it },
+                    onSettingsChange = ::updateSettings,
                     healthConnectAccess = healthConnectAccess,
                     healthDataRange = healthDataRange,
                     hasHistoryPermission = hasHistoryPermission,
@@ -190,10 +204,10 @@ fun DarkHourApp(
                     options = options,
                     immersive = immersive,
                     settings = settings,
-                    onOptionsChange = { options = it },
+                    onOptionsChange = ::updateDisplayOptions,
                     onImmersiveChange = { immersive = it },
                     onTransformingChange = { actogramTransforming = it },
-                    onSettingsChange = { settings = it },
+                    onSettingsChange = ::updateSettings,
                     healthConnectAccess = healthConnectAccess,
                     healthDataRange = healthDataRange,
                     hasHistoryPermission = hasHistoryPermission,

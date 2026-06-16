@@ -6,14 +6,17 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.lifecycle.lifecycleScope
 import one.aozora.darkhour.data.HealthConnectDataController
 import one.aozora.darkhour.data.HealthDataRange
+import one.aozora.darkhour.ui.AppSettingsStore
 import one.aozora.darkhour.ui.DarkHourApp
 import one.aozora.darkhour.ui.theme.DarkHourTheme
 
 class MainActivity : ComponentActivity() {
     private lateinit var healthConnect: HealthConnectDataController
+    private lateinit var appSettings: AppSettingsStore
     private val requestHealthPermissions = registerForActivityResult(
         HealthConnectDataController.permissionContract,
     ) {
@@ -23,12 +26,19 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         healthConnect = HealthConnectDataController(this, lifecycleScope)
+        appSettings = AppSettingsStore(this)
         enableEdgeToEdge()
         setContent {
             val healthState by healthConnect.state.collectAsState()
+            val initialSettings = remember { appSettings.read() }
+            val initialDisplayOptions = remember { appSettings.readDisplayOptions() }
             DarkHourTheme {
                 DarkHourApp(
                     records = healthState.records,
+                    initialSettings = initialSettings,
+                    onAppSettingsChange = appSettings::write,
+                    initialDisplayOptions = initialDisplayOptions,
+                    onDisplayOptionsChange = appSettings::writeDisplayOptions,
                     healthConnectAccess = healthState.access,
                     healthDataRange = healthState.dataRange,
                     hasHistoryPermission = healthState.hasHistoryPermission,
