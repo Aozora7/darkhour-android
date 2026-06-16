@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">Dark Hour</string>
+    <string name="app_name_debug">Dark Hour Debug</string>
 </resources>

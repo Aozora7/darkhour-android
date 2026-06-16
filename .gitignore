@@ -12,3 +12,4 @@ local.properties
 /build/*
 /app/release/*
 /keys/*
+keystore.properties
