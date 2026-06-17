@@ -156,82 +156,88 @@ fun DarkHourApp(
         if (scheduleIndex >= 0) selectDestination(scheduleIndex)
     }
 
-    BoxWithConstraints(modifier = modifier.fillMaxSize()) {
-        val wide = maxWidth >= 600.dp
+    androidx.compose.material3.Surface(
+        modifier = modifier.fillMaxSize(),
+        color = MaterialTheme.colorScheme.surface,
+        contentColor = MaterialTheme.colorScheme.onSurface
+    ) {
+        BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+            val wide = maxWidth >= 600.dp
 
-        if (wide) {
-            Row(Modifier.fillMaxSize()) {
-                AppNavigationRail(
-                    selectedIndex = pagerState.currentPage,
-                    onSelected = ::selectDestination,
-                )
-                AppPager(
-                    pagerState = pagerState,
-                    records = filteredRecords,
-                    analysis = analysis,
-                    periodogram = periodogram,
-                    layout = layout,
-                    options = options,
-                    settings = settings,
-                    scheduleEntries = scheduleEntries,
-                    onOptionsChange = ::updateDisplayOptions,
-                    onTransformingChange = { actogramTransforming = it },
-                    onSettingsChange = ::updateSettings,
-                    onScheduleEntriesChange = ::updateScheduleEntries,
-                    pendingScheduleEditId = pendingScheduleEditId,
-                    onScheduleEditConsumed = { pendingScheduleEditId = null },
-                    onEditScheduleEntry = ::editScheduleEntry,
-                    healthConnectAccess = healthConnectAccess,
-                    healthDataRange = healthDataRange,
-                    hasHistoryPermission = hasHistoryPermission,
-                    isRefreshing = isRefreshing,
-                    importError = importError,
-                    onRequestHealthPermissions = onRequestHealthPermissions,
-                    onRequestHistoryPermission = onRequestHistoryPermission,
-                    onHealthDataRangeChange = onHealthDataRangeChange,
-                    userScrollEnabled = !actogramTransforming,
-                    modifier = Modifier.weight(1f),
-                )
-            }
-        } else {
-            Scaffold(
-                modifier = Modifier.fillMaxSize(),
-                containerColor = MaterialTheme.colorScheme.surface,
-                bottomBar = {
-                    AppNavigationBar(
+            if (wide) {
+                Row(Modifier.fillMaxSize()) {
+                    AppNavigationRail(
                         selectedIndex = pagerState.currentPage,
-                        pagerState = pagerState,
                         onSelected = ::selectDestination,
                     )
-                },
-            ) { padding ->
-                AppPager(
-                    pagerState = pagerState,
-                    records = filteredRecords,
-                    analysis = analysis,
-                    periodogram = periodogram,
-                    layout = layout,
-                    options = options,
-                    settings = settings,
-                    scheduleEntries = scheduleEntries,
-                    onOptionsChange = ::updateDisplayOptions,
-                    onTransformingChange = { actogramTransforming = it },
-                    onSettingsChange = ::updateSettings,
-                    onScheduleEntriesChange = ::updateScheduleEntries,
-                    pendingScheduleEditId = pendingScheduleEditId,
-                    onScheduleEditConsumed = { pendingScheduleEditId = null },
-                    onEditScheduleEntry = ::editScheduleEntry,
-                    healthConnectAccess = healthConnectAccess,
-                    healthDataRange = healthDataRange,
-                    hasHistoryPermission = hasHistoryPermission,
-                    isRefreshing = isRefreshing,
-                    importError = importError,
-                    onRequestHealthPermissions = onRequestHealthPermissions,
-                    onRequestHistoryPermission = onRequestHistoryPermission,
-                    onHealthDataRangeChange = onHealthDataRangeChange,
-                    userScrollEnabled = !actogramTransforming,
-                    modifier = Modifier.padding(padding),
-                )
+                    AppPager(
+                        pagerState = pagerState,
+                        records = filteredRecords,
+                        analysis = analysis,
+                        periodogram = periodogram,
+                        layout = layout,
+                        options = options,
+                        settings = settings,
+                        scheduleEntries = scheduleEntries,
+                        onOptionsChange = ::updateDisplayOptions,
+                        onTransformingChange = { actogramTransforming = it },
+                        onSettingsChange = ::updateSettings,
+                        onScheduleEntriesChange = ::updateScheduleEntries,
+                        pendingScheduleEditId = pendingScheduleEditId,
+                        onScheduleEditConsumed = { pendingScheduleEditId = null },
+                        onEditScheduleEntry = ::editScheduleEntry,
+                        healthConnectAccess = healthConnectAccess,
+                        healthDataRange = healthDataRange,
+                        hasHistoryPermission = hasHistoryPermission,
+                        isRefreshing = isRefreshing,
+                        importError = importError,
+                        onRequestHealthPermissions = onRequestHealthPermissions,
+                        onRequestHistoryPermission = onRequestHistoryPermission,
+                        onHealthDataRangeChange = onHealthDataRangeChange,
+                        userScrollEnabled = !actogramTransforming,
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+            } else {
+                Scaffold(
+                    modifier = Modifier.fillMaxSize(),
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    bottomBar = {
+                        AppNavigationBar(
+                            selectedIndex = pagerState.currentPage,
+                            pagerState = pagerState,
+                            onSelected = ::selectDestination,
+                        )
+                    },
+                ) { padding ->
+                    AppPager(
+                        pagerState = pagerState,
+                        records = filteredRecords,
+                        analysis = analysis,
+                        periodogram = periodogram,
+                        layout = layout,
+                        options = options,
+                        settings = settings,
+                        scheduleEntries = scheduleEntries,
+                        onOptionsChange = ::updateDisplayOptions,
+                        onTransformingChange = { actogramTransforming = it },
+                        onSettingsChange = ::updateSettings,
+                        onScheduleEntriesChange = ::updateScheduleEntries,
+                        pendingScheduleEditId = pendingScheduleEditId,
+                        onScheduleEditConsumed = { pendingScheduleEditId = null },
+                        onEditScheduleEntry = ::editScheduleEntry,
+                        healthConnectAccess = healthConnectAccess,
+                        healthDataRange = healthDataRange,
+                        hasHistoryPermission = hasHistoryPermission,
+                        isRefreshing = isRefreshing,
+                        importError = importError,
+                        onRequestHealthPermissions = onRequestHealthPermissions,
+                        onRequestHistoryPermission = onRequestHistoryPermission,
+                        onHealthDataRangeChange = onHealthDataRangeChange,
+                        userScrollEnabled = !actogramTransforming,
+                        modifier = Modifier.padding(padding),
+                    )
+                }
             }
         }
     }

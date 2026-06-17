@@ -2,11 +2,15 @@ package one.aozora.darkhour.ui.stats
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
@@ -35,54 +39,128 @@ fun StatsScreen(
     val mainSleeps = records.filter { it.isMainSleep }
     val metrics = calculateStatsMetrics(records, analysis.globalDailyDrift)
 
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .testTag("stats_screen")
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 16.dp, vertical = 14.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp),
-    ) {
-        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Text("Circadian stats", style = MaterialTheme.typography.headlineSmall)
-            Text(
-                "Health Connect · ${mainSleeps.size} main sleeps",
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                style = MaterialTheme.typography.bodySmall,
-            )
+    BoxWithConstraints(modifier = modifier.fillMaxSize()) {
+        val isWide = maxWidth >= 600.dp
+
+        if (isWide) {
+            Row(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 20.dp, vertical = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(20.dp)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .weight(1.2f)
+                        .fillMaxHeight()
+                ) {
+                    HeaderText(mainSleeps.size)
+                    Spacer(Modifier.height(16.dp))
+                    PeriodogramChart(
+                        result = periodogram,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f)
+                    )
+                }
+
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    MetricCard(
+                        Metric("Tau", "%.2f h".format(analysis.globalTau), signedMinutes(analysis.globalDailyDrift * 60.0)),
+                        Modifier.fillMaxWidth()
+                    )
+                    MetricCard(
+                        Metric("Peak period", "%.2f h".format(periodogram.peakPeriod), "Power %.2f".format(periodogram.peakPower)),
+                        Modifier.fillMaxWidth()
+                    )
+                    MetricCard(
+                        Metric(
+                            "Sleep per day",
+                            metrics.sleepHoursPerDay?.let { "%.1f h".format(it) } ?: "—",
+                            metrics.daySpan.takeIf { it > 0 }?.let { "Across $it days" } ?: "No data",
+                        ),
+                        Modifier.fillMaxWidth()
+                    )
+                    MetricCard(
+                        Metric(
+                            "Time in bed per day",
+                            metrics.timeInBedHoursPerDay?.let { "%.1f h".format(it) } ?: "—",
+                            metrics.efficiencyPercent?.let { "$it% efficiency" } ?: "No efficiency",
+                        ),
+                        Modifier.fillMaxWidth()
+                    )
+                    MetricCard(
+                        metric = Metric(
+                            "Cumulative shift",
+                            metrics.cumulativeShiftDays?.let(::signedDays) ?: "—",
+                            metrics.daySpan.takeIf { it > 0 }?.let { "Over $it days" } ?: "No data",
+                        ),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            }
+        } else {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .testTag("stats_screen")
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
+            ) {
+                HeaderText(mainSleeps.size)
+
+                PeriodogramChart(
+                    result = periodogram,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 180.dp, max = 260.dp)
+                        .aspectRatio(1.75f),
+                )
+
+                MetricRow(
+                    left = Metric("Tau", "%.2f h".format(analysis.globalTau), signedMinutes(analysis.globalDailyDrift * 60.0)),
+                    right = Metric("Peak period", "%.2f h".format(periodogram.peakPeriod), "Power %.2f".format(periodogram.peakPower)),
+                )
+                MetricRow(
+                    left = Metric(
+                        "Sleep per day",
+                        metrics.sleepHoursPerDay?.let { "%.1f h".format(it) } ?: "—",
+                        metrics.daySpan.takeIf { it > 0 }?.let { "Across $it days" } ?: "No data",
+                    ),
+                    right = Metric(
+                        "Time in bed per day",
+                        metrics.timeInBedHoursPerDay?.let { "%.1f h".format(it) } ?: "—",
+                        metrics.efficiencyPercent?.let { "$it% efficiency" } ?: "No efficiency",
+                    ),
+                )
+                MetricCard(
+                    metric = Metric(
+                        "Cumulative shift",
+                        metrics.cumulativeShiftDays?.let(::signedDays) ?: "—",
+                        metrics.daySpan.takeIf { it > 0 }?.let { "Over $it days" } ?: "No data",
+                    ),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
         }
+    }
+}
 
-        PeriodogramChart(
-            result = periodogram,
-            modifier = Modifier
-                .fillMaxWidth()
-                .heightIn(min = 180.dp, max = 260.dp)
-                .aspectRatio(1.75f),
-        )
-
-        MetricRow(
-            left = Metric("Tau", "%.2f h".format(analysis.globalTau), signedMinutes(analysis.globalDailyDrift * 60.0)),
-            right = Metric("Peak period", "%.2f h".format(periodogram.peakPeriod), "Power %.2f".format(periodogram.peakPower)),
-        )
-        MetricRow(
-            left = Metric(
-                "Sleep per day",
-                metrics.sleepHoursPerDay?.let { "%.1f h".format(it) } ?: "—",
-                metrics.daySpan.takeIf { it > 0 }?.let { "Across $it days" } ?: "No data",
-            ),
-            right = Metric(
-                "Time in bed per day",
-                metrics.timeInBedHoursPerDay?.let { "%.1f h".format(it) } ?: "—",
-                metrics.efficiencyPercent?.let { "$it% efficiency" } ?: "No efficiency",
-            ),
-        )
-        MetricCard(
-            metric = Metric(
-                "Cumulative shift",
-                metrics.cumulativeShiftDays?.let(::signedDays) ?: "—",
-                metrics.daySpan.takeIf { it > 0 }?.let { "Over $it days" } ?: "No data",
-            ),
-            modifier = Modifier.fillMaxWidth(),
+@Composable
+private fun HeaderText(mainSleepsCount: Int) {
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Text("Circadian stats", style = MaterialTheme.typography.headlineSmall)
+        Text(
+            "Health Connect · $mainSleepsCount main sleeps",
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.bodySmall,
         )
     }
 }
