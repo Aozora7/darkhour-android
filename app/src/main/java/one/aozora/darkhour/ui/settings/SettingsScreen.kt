@@ -20,6 +20,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import one.aozora.darkhour.ui.AppSettings
@@ -41,6 +42,8 @@ fun SettingsScreen(
     onRequestHistoryPermission: () -> Unit = {},
     onHealthDataRangeChange: (HealthDataRange) -> Unit = {},
 ) {
+    val uriHandler = LocalUriHandler.current
+
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -138,8 +141,29 @@ fun SettingsScreen(
                 }
             }
         }
+
+        SettingsSection("Privacy") {
+            OutlinedButton(
+                onClick = { uriHandler.openUri(PRIVACY_POLICY_URL) },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("privacy_policy_button"),
+                shape = MaterialTheme.shapes.medium,
+            ) {
+                Text("Open privacy policy")
+            }
+            Text(
+                "Updated June 18, 2026",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+
     }
 }
+
+private const val PRIVACY_POLICY_URL =
+    "https://github.com/Aozora7/darkhour-android/blob/master/PRIVACY.md"
 
 @Composable
 private fun SettingsSection(
