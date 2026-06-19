@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">Dark Hour Google Play icon</title>
+  <desc id="desc">A full-square Google Play icon with a dark brand background and the Dark Hour eclipse dial mark centered on the keyline grid.</desc>
+  <defs>
+    <linearGradient id="background" x1="0" y1="0" x2="512" y2="512" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#15192d"/>
+      <stop offset=".58" stop-color="#0f1324"/>
+      <stop offset="1" stop-color="#080a13"/>
+    </linearGradient>
+    <radialGradient id="background-vignette" cx="50%" cy="43%" r="68%">
+      <stop offset="0" stop-color="#242842" stop-opacity=".62"/>
+      <stop offset=".72" stop-color="#111426" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="moon" x1="104" y1="100" x2="326" y2="410" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#c8f34f"/>
+      <stop offset=".55" stop-color="#57ce55"/>
+      <stop offset="1" stop-color="#20a96b"/>
+    </linearGradient>
+    <clipPath id="badge">
+      <circle cx="256" cy="256" r="224"/>
+    </clipPath>
+  </defs>
+
+  <!-- Google Play applies rounded corners and outer shadow, so this stays square and shadowless. -->
+  <rect width="512" height="512" fill="url(#background)"/>
+  <rect width="512" height="512" fill="url(#background-vignette)"/>
+
+  <!-- The launcher mark is scaled to a 384 px keyline area for Play listing use. -->
+  <g transform="translate(36.571429 36.571429) scale(.857143)">
+    <g clip-path="url(#badge)">
+      <circle cx="256" cy="256" r="224" fill="#111426"/>
+
+      <circle cx="234" cy="264" r="172" fill="url(#moon)"/>
+      <circle cx="318" cy="218" r="172" fill="#111426"/>
+
+      <path d="M372 139 A184 184 0 0 1 420 314"
+            fill="none"
+            stroke="#a855f7"
+            stroke-width="28"
+            stroke-linecap="butt"/>
+
+      <path d="M256 256 L174 317"
+            fill="none"
+            stroke="#b794ff"
+            stroke-width="24"
+            stroke-linecap="round"/>
+      <path d="M256 256 L256 91"
+            fill="none"
+            stroke="#ffd54a"
+            stroke-width="18"
+            stroke-linecap="round"/>
+
+      <circle cx="256" cy="256" r="16" fill="#fff3a0"/>
+    </g>
+
+    <circle cx="256" cy="256" r="216" fill="none" stroke="#242842" stroke-width="16"/>
+  </g>
+</svg>

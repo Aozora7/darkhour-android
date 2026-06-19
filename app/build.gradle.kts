@@ -42,9 +42,17 @@ android {
     buildTypes {
         debug {
             applicationIdSuffix = ".debug"
+            buildConfigField("Boolean", "USE_DEMO_DATA", "false")
+        }
+        create("demo") {
+            initWith(getByName("debug"))
+            applicationIdSuffix = ".demo"
+            matchingFallbacks += listOf("debug")
+            buildConfigField("Boolean", "USE_DEMO_DATA", "true")
         }
         release {
             signingConfig = signingConfigs.getByName("release")
+            buildConfigField("Boolean", "USE_DEMO_DATA", "false")
             optimization {
                 enable = false
             }
@@ -55,6 +63,7 @@ android {
         targetCompatibility = JavaVersion.VERSION_11
     }
     buildFeatures {
+        buildConfig = true
         compose = true
     }
 }
