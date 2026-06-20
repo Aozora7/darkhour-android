@@ -6,6 +6,7 @@ import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.LocalTime
 import androidx.core.content.edit
+import one.aozora.darkhour.data.HealthDataRange
 
 class AppSettingsStore(context: Context) {
     private val preferences = context.applicationContext.getSharedPreferences(
@@ -18,6 +19,8 @@ class AppSettingsStore(context: Context) {
     fun readDisplayOptions(): ActogramDisplayOptions = preferences.readActogramDisplayOptions()
 
     fun readScheduleEntries(): List<ScheduleEntry> = preferences.readScheduleEntries()
+
+    fun readHealthDataRange(): HealthDataRange = preferences.readHealthDataRange()
 
     fun write(settings: AppSettings) {
         preferences.edit {
@@ -47,6 +50,28 @@ class AppSettingsStore(context: Context) {
         }
     }
 
+    fun writeHealthDataRange(range: HealthDataRange) {
+        preferences.edit {
+            when (range) {
+                HealthDataRange.DefaultPeriod -> putString(
+                    HEALTH_DATA_RANGE_OPTION_KEY,
+                    HEALTH_DATA_RANGE_DEFAULT,
+                )
+                HealthDataRange.EntireHistory -> putString(
+                    HEALTH_DATA_RANGE_OPTION_KEY,
+                    HEALTH_DATA_RANGE_HISTORY,
+                )
+                is HealthDataRange.Custom -> {
+                    putString(HEALTH_DATA_RANGE_OPTION_KEY, HEALTH_DATA_RANGE_CUSTOM)
+                    putInt(
+                        HEALTH_DATA_RANGE_DAYS_KEY,
+                        range.days.coerceAtLeast(HealthDataRange.MINIMUM_CUSTOM_DAYS),
+                    )
+                }
+            }
+        }
+    }
+
     private companion object {
         const val PREFERENCES_NAME = "app_settings"
     }
@@ -65,6 +90,11 @@ private const val TIME_SCALE_KEY = "actogram_time_scale"
 private const val CUSTOM_HOURS_KEY = "actogram_custom_hours"
 private const val ORDER_KEY = "actogram_order"
 private const val SCHEDULE_ENTRIES_KEY = "schedule_entries"
+private const val HEALTH_DATA_RANGE_OPTION_KEY = "health_data_range_option"
+private const val HEALTH_DATA_RANGE_DAYS_KEY = "health_data_range_days"
+private const val HEALTH_DATA_RANGE_DEFAULT = "default"
+private const val HEALTH_DATA_RANGE_CUSTOM = "custom"
+private const val HEALTH_DATA_RANGE_HISTORY = "history"
 
 private fun SharedPreferences.readAppSettings(): AppSettings {
     val defaults = AppSettings()
@@ -99,6 +129,15 @@ private fun SharedPreferences.readScheduleEntries(): List<ScheduleEntry> =
         ?.mapNotNull { it.deserializeScheduleEntry() }
         ?.toList()
         ?: emptyList()
+
+private fun SharedPreferences.readHealthDataRange(): HealthDataRange =
+    when (getString(HEALTH_DATA_RANGE_OPTION_KEY, HEALTH_DATA_RANGE_DEFAULT)) {
+        HEALTH_DATA_RANGE_CUSTOM -> HealthDataRange.custom(
+            getInt(HEALTH_DATA_RANGE_DAYS_KEY, HealthDataRange.DEFAULT_CUSTOM_DAYS),
+        )
+        HEALTH_DATA_RANGE_HISTORY -> HealthDataRange.ENTIRE_HISTORY
+        else -> HealthDataRange.DEFAULT_PERIOD
+    }
 
 private fun ScheduleEntry.serialize(): String = listOf(
     id.toString(),

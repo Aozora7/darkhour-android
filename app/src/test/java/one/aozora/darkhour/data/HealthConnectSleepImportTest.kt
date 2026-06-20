@@ -15,6 +15,31 @@ import java.time.ZoneOffset
 
 class HealthConnectSleepImportTest {
     @Test
+    fun customRangeFiltersRawSessionsBeforeConversion() {
+        val now = Instant.parse("2026-06-20T00:00:00Z")
+        val oldStart = now.minusSeconds(90L * 24 * 60 * 60)
+        val includedStart = now.minusSeconds(45L * 24 * 60 * 60)
+        val oldRecord = sleepRecord(oldStart)
+        val includedRecord = sleepRecord(includedStart)
+
+        val imported = importSleepRecords(
+            rawRecords = listOf(oldRecord, includedRecord),
+            range = HealthDataRange.custom(60),
+            now = now,
+            zoneId = ZoneId.of("UTC"),
+        )
+
+        assertEquals(1, imported.records.size)
+        assertEquals(includedStart, imported.records.single().record.startTime)
+        assertEquals(91, imported.totalHistoryDays)
+    }
+
+    @Test
+    fun customRangeClampsToMinimumDayCount() {
+        assertEquals(HealthDataRange.Custom(30), HealthDataRange.custom(10))
+    }
+
+    @Test
     fun mapsStagesTotalsOffsetsAndSourceIdentity() {
         val start = Instant.parse("2026-06-10T21:00:00Z")
         val record = SleepSessionRecord(
@@ -96,5 +121,14 @@ class HealthConnectSleepImportTest {
         startTime = start,
         endTime = start.plusSeconds(minutes * 60),
         stage = type,
+    )
+
+    private fun sleepRecord(start: Instant) = SleepSessionRecord(
+        startTime = start,
+        startZoneOffset = ZoneOffset.UTC,
+        endTime = start.plusSeconds(8 * 60 * 60),
+        endZoneOffset = ZoneOffset.UTC,
+        metadata = Metadata.manualEntry(),
+        stages = emptyList(),
     )
 }

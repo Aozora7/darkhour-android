@@ -26,8 +26,12 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        healthConnect = HealthConnectDataController(this, lifecycleScope)
         appSettings = AppSettingsStore(this)
+        healthConnect = HealthConnectDataController(
+            context = this,
+            scope = lifecycleScope,
+            initialDataRange = appSettings.readHealthDataRange(),
+        )
         enableEdgeToEdge()
         setContent {
             val healthState by healthConnect.state.collectAsState()
@@ -54,6 +58,7 @@ class MainActivity : ComponentActivity() {
                     hasHistoryPermission = BuildConfig.USE_DEMO_DATA || healthState.hasHistoryPermission,
                     isRefreshing = !BuildConfig.USE_DEMO_DATA && healthState.isRefreshing,
                     importError = if (BuildConfig.USE_DEMO_DATA) null else healthState.errorMessage,
+                    totalHistoryDays = healthState.totalHistoryDays,
                     onRequestHealthPermissions = {
                         if (!BuildConfig.USE_DEMO_DATA) {
                             requestHealthPermissions.launch(healthConnect.requiredPermissions())
@@ -67,10 +72,11 @@ class MainActivity : ComponentActivity() {
                         }
                     },
                     onHealthDataRangeChange = { range ->
+                        appSettings.writeHealthDataRange(range)
                         if (!BuildConfig.USE_DEMO_DATA) {
                             healthConnect.setDataRange(range)
                             if (
-                                range == HealthDataRange.ENTIRE_HISTORY &&
+                                range.requiresHistoryPermission &&
                                 range != healthState.dataRange
                             ) {
                                 requestHealthPermissions.launch(healthConnect.requiredPermissions(range))

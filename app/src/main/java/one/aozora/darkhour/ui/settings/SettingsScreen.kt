@@ -18,6 +18,10 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalUriHandler
@@ -39,10 +43,20 @@ fun SettingsScreen(
     isRefreshing: Boolean = false,
     importError: String? = null,
     recordCount: Int = 0,
+    totalHistoryDays: Int? = null,
     onRequestHistoryPermission: () -> Unit = {},
     onHealthDataRangeChange: (HealthDataRange) -> Unit = {},
 ) {
     val uriHandler = LocalUriHandler.current
+    val customDays = (healthDataRange as? HealthDataRange.Custom)?.days
+        ?: HealthDataRange.DEFAULT_CUSTOM_DAYS
+    val maxCustomDays = maxOf(
+        HealthDataRange.MINIMUM_CUSTOM_DAYS,
+        totalHistoryDays ?: customDays,
+    )
+    var pendingCustomDays by remember(healthDataRange, maxCustomDays) {
+        mutableFloatStateOf(customDays.coerceIn(HealthDataRange.MINIMUM_CUSTOM_DAYS, maxCustomDays).toFloat())
+    }
 
     Column(
         modifier = modifier
@@ -93,23 +107,37 @@ fun SettingsScreen(
         SettingsSection("Data") {
             Text("Health Connect", style = MaterialTheme.typography.titleMedium)
             SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-                HealthDataRange.entries.forEachIndexed { index, range ->
+                HealthDataRangeOptions.forEachIndexed { index, option ->
+                    val selected = option.isSelected(healthDataRange)
                     SegmentedButton(
-                        selected = healthDataRange == range,
-                        onClick = { onHealthDataRangeChange(range) },
-                        shape = SegmentedButtonDefaults.itemShape(index, HealthDataRange.entries.size),
-                        modifier = Modifier.testTag(
-                            if (range == HealthDataRange.DEFAULT_PERIOD) {
-                                "health_range_default"
-                            } else {
-                                "health_range_history"
-                            },
-                        ),
+                        selected = selected,
+                        onClick = {
+                            onHealthDataRangeChange(
+                                option.toRange(pendingCustomDays.roundToInt()),
+                            )
+                        },
+                        shape = SegmentedButtonDefaults.itemShape(index, HealthDataRangeOptions.size),
+                        modifier = Modifier.testTag(option.testTag),
                     ) {
-                        Text(
-                            if (range == HealthDataRange.DEFAULT_PERIOD) "Last 30 days" else "All history",
-                        )
+                        Text(option.label)
                     }
+                }
+            }
+            if (healthDataRange is HealthDataRange.Custom) {
+                Text("Last ${pendingCustomDays.roundToInt()} days", style = MaterialTheme.typography.bodyLarge)
+                if (maxCustomDays > HealthDataRange.MINIMUM_CUSTOM_DAYS) {
+                    Slider(
+                        value = pendingCustomDays,
+                        onValueChange = { pendingCustomDays = it },
+                        onValueChangeFinished = {
+                            onHealthDataRangeChange(
+                                HealthDataRange.custom(pendingCustomDays.roundToInt()),
+                            )
+                        },
+                        valueRange = HealthDataRange.MINIMUM_CUSTOM_DAYS.toFloat()..maxCustomDays.toFloat(),
+                        steps = (maxCustomDays - HealthDataRange.MINIMUM_CUSTOM_DAYS - 1).coerceAtLeast(0),
+                        modifier = Modifier.testTag("health_range_custom_days"),
+                    )
                 }
             }
             Text(
@@ -164,6 +192,29 @@ fun SettingsScreen(
 
 private const val PRIVACY_POLICY_URL =
     "https://github.com/Aozora7/darkhour-android/blob/master/PRIVACY.md"
+
+private enum class HealthDataRangeOption(
+    val label: String,
+    val testTag: String,
+) {
+    DEFAULT("Last 30 days", "health_range_default"),
+    CUSTOM("Custom", "health_range_custom"),
+    HISTORY("All history", "health_range_history");
+
+    fun isSelected(range: HealthDataRange): Boolean = when (this) {
+        DEFAULT -> range == HealthDataRange.DEFAULT_PERIOD
+        CUSTOM -> range is HealthDataRange.Custom
+        HISTORY -> range == HealthDataRange.ENTIRE_HISTORY
+    }
+
+    fun toRange(customDays: Int): HealthDataRange = when (this) {
+        DEFAULT -> HealthDataRange.DEFAULT_PERIOD
+        CUSTOM -> HealthDataRange.custom(customDays)
+        HISTORY -> HealthDataRange.ENTIRE_HISTORY
+    }
+}
+
+private val HealthDataRangeOptions = HealthDataRangeOption.entries
 
 @Composable
 private fun SettingsSection(

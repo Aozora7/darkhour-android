@@ -94,6 +94,7 @@ fun DarkHourApp(
     hasHistoryPermission: Boolean = true,
     isRefreshing: Boolean = false,
     importError: String? = null,
+    totalHistoryDays: Int? = null,
     onRequestHealthPermissions: () -> Unit = {},
     onRequestHistoryPermission: () -> Unit = {},
     onHealthDataRangeChange: (HealthDataRange) -> Unit = {},
@@ -191,6 +192,7 @@ fun DarkHourApp(
                         hasHistoryPermission = hasHistoryPermission,
                         isRefreshing = isRefreshing,
                         importError = importError,
+                        totalHistoryDays = totalHistoryDays,
                         onRequestHealthPermissions = onRequestHealthPermissions,
                         onRequestHistoryPermission = onRequestHistoryPermission,
                         onHealthDataRangeChange = onHealthDataRangeChange,
@@ -231,6 +233,7 @@ fun DarkHourApp(
                         hasHistoryPermission = hasHistoryPermission,
                         isRefreshing = isRefreshing,
                         importError = importError,
+                        totalHistoryDays = totalHistoryDays,
                         onRequestHealthPermissions = onRequestHealthPermissions,
                         onRequestHistoryPermission = onRequestHistoryPermission,
                         onHealthDataRangeChange = onHealthDataRangeChange,
@@ -266,6 +269,7 @@ private fun AppPager(
     hasHistoryPermission: Boolean,
     isRefreshing: Boolean,
     importError: String?,
+    totalHistoryDays: Int?,
     onRequestHealthPermissions: () -> Unit,
     onRequestHistoryPermission: () -> Unit,
     onHealthDataRangeChange: (HealthDataRange) -> Unit,
@@ -313,6 +317,7 @@ private fun AppPager(
                 isRefreshing = isRefreshing,
                 importError = importError,
                 recordCount = records.size,
+                totalHistoryDays = totalHistoryDays,
                 onRequestHistoryPermission = onRequestHistoryPermission,
                 onHealthDataRangeChange = onHealthDataRangeChange,
             )
@@ -349,7 +354,7 @@ private fun HealthConnectGate(
             Text(
                 text = when (access) {
                     HealthConnectAccess.PERMISSION_REQUIRED -> if (
-                        dataRange == HealthDataRange.ENTIRE_HISTORY
+                        dataRange.requiresHistoryPermission
                     ) {
                         "Allow sleep and history access to show your complete actogram."
                     } else {
