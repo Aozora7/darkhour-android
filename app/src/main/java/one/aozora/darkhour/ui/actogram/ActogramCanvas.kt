@@ -4,6 +4,7 @@ import android.graphics.Paint
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.calculateCentroid
+import androidx.compose.foundation.gestures.calculatePan
 import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
@@ -30,7 +31,6 @@ import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalViewConfiguration
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.semantics
@@ -64,9 +64,7 @@ fun ActogramCanvas(
     modifier: Modifier = Modifier,
 ) {
     val density = LocalDensity.current
-    val viewConfiguration = LocalViewConfiguration.current
-    val use24HourTime =
-        useIsoDateTime || android.text.format.DateFormat.is24HourFormat(LocalContext.current)
+    val use24HourTime = useIsoDateTime || android.text.format.DateFormat.is24HourFormat(LocalContext.current)
     val currentRowHeight by rememberUpdatedState(options.rowHeightDp)
     val currentRowHeightChange by rememberUpdatedState(onRowHeightChange)
     val currentTransformingChange by rememberUpdatedState(onTransformingChange)
@@ -142,7 +140,9 @@ fun ActogramCanvas(
         LaunchedEffect(options.rowHeightDp, canvasHeight, isTransforming) {
             // Only snap if we aren't actively zooming/fighting the gesture
             if (pendingAnchoredScroll != null && !isTransforming) {
-                scrollState.scrollTo(pendingAnchoredScroll!!.roundToInt().coerceIn(0, scrollState.maxValue))
+                scrollState.scrollTo(
+                    pendingAnchoredScroll!!.roundToInt().coerceIn(0, scrollState.maxValue)
+                )
                 pendingAnchoredScroll = null
             }
         }
@@ -156,48 +156,65 @@ fun ActogramCanvas(
                         var gestureZoom = 1f
                         var anchoredRow: Float? = null
                         var readyForZoom = false
-                        var initialFocalY: Float? = null
+                        var currentFocalY: Float? = null
+
                         try {
                             do {
                                 val event = awaitPointerEvent()
                                 val pressed = event.changes.count { it.pressed }
+
                                 if (pressed >= 2) {
                                     if (!gestureTransforming) {
                                         gestureTransforming = true
                                         isTransforming = true
                                         currentTransformingChange(true)
                                     }
+
                                     val zoom = event.calculateZoom()
-                                    val centroid = event.calculateCentroid()
-                                    val focal = initialFocalY ?: centroid.y.also { initialFocalY = it }
-                                    val startRowHeight = gestureStartRowHeight ?: currentRowHeight.also {
-                                        gestureStartRowHeight = it
-                                    }
-                                    val anchor = anchoredRow ?: calculateZoomAnchorRow(
-                                        currentScroll = scrollState.value.toFloat(),
-                                        focalY = centroid.y,
-                                        axisHeight = axisHeightPx,
-                                        rowHeight = startRowHeight * density.density,
-                                    ).also {
-                                        anchoredRow = it
-                                    }
+                                    val pan = event.calculatePan()
+
                                     if (!readyForZoom) {
                                         readyForZoom = true
+
+                                        // 1. Initialize the focal point safely on the first multitouch frame
+                                        currentFocalY = event.calculateCentroid().y
+
+                                        // 2. Lock in starting anchors
+                                        gestureStartRowHeight = currentRowHeight
+                                        anchoredRow = calculateZoomAnchorRow(
+                                            currentScroll = scrollState.value.toFloat(),
+                                            focalY = currentFocalY,
+                                            axisHeight = axisHeightPx,
+                                            rowHeight = gestureStartRowHeight * density.density,
+                                        )
+
                                         event.changes.forEach { it.consume() }
                                         continue
                                     }
-                                    if (zoom != 1f) {
+
+                                    // 3. Accumulate smoothed pan to track fingers without centroid jumps
+                                    currentFocalY = currentFocalY!! + pan.y
+
+                                    // 4. Trigger updates if either pan or zoom occurred
+                                    if (zoom != 1f || pan.y != 0f) {
                                         gestureZoom *= zoom
-                                        val newRowHeight = (startRowHeight * gestureZoom).coerceIn(12f, 60f)
-                                        if (newRowHeight != currentRowHeight) {
-                                            val targetScroll = calculateZoomAnchoredScroll(
-                                                anchoredRow = anchor,
-                                                focalY = focal,
-                                                axisHeight = axisHeightPx,
-                                                newRowHeight = newRowHeight * density.density,
+                                        val newRowHeight =
+                                            (gestureStartRowHeight!! * gestureZoom).coerceIn(
+                                                12f,
+                                                60f
                                             )
-                                            pendingAnchoredScroll = targetScroll
-                                            scrollState.dispatchRawDelta(targetScroll - scrollState.value)
+
+                                        val targetScroll = calculateZoomAnchoredScroll(
+                                            anchoredRow = anchoredRow!!,
+                                            focalY = currentFocalY,
+                                            axisHeight = axisHeightPx,
+                                            newRowHeight = newRowHeight * density.density,
+                                        )
+
+                                        pendingAnchoredScroll = targetScroll
+                                        scrollState.dispatchRawDelta(targetScroll - scrollState.value)
+
+                                        if (newRowHeight != currentRowHeight) {
                                             currentRowHeightChange(newRowHeight)
                                         }
                                     }
@@ -334,8 +351,21 @@ private fun DrawScope.drawActogram(
                     drawSchedule(schedule, 0.0, labelWidth, hourWidth, top, rowHeight, selection)
                 }
                 if (options.doublePlot) {
-                    displayedRows.getOrNull(nextChronologicalRowIndex(index, options.order))?.schedules?.forEach { schedule ->
-                        drawSchedule(schedule, layout.rowHours, labelWidth, hourWidth, top, rowHeight, selection)
+                    displayedRows.getOrNull(
+                        nextChronologicalRowIndex(
+                            index,
+                            options.order
+                        )
+                    )?.schedules?.forEach { schedule ->
+                        drawSchedule(
+                            schedule,
+                            layout.rowHours,
+                            labelWidth,
+                            hourWidth,
+                            top,
+                            rowHeight,
+                            selection
+                        )
                     }
                 }
             }
@@ -345,7 +375,12 @@ private fun DrawScope.drawActogram(
                     drawOverlay(overlay, 0.0, labelWidth, hourWidth, top, rowHeight, selection)
                 }
                 if (options.doublePlot) {
-                    displayedRows.getOrNull(nextChronologicalRowIndex(index, options.order))?.overlays?.forEach { overlay ->
+                    displayedRows.getOrNull(
+                        nextChronologicalRowIndex(
+                            index,
+                            options.order
+                        )
+                    )?.overlays?.forEach { overlay ->
                         drawOverlay(
                             overlay,
                             layout.rowHours,
@@ -372,7 +407,12 @@ private fun DrawScope.drawActogram(
                 )
             }
             if (options.doublePlot) {
-                displayedRows.getOrNull(nextChronologicalRowIndex(index, options.order))?.sleeps?.forEach { sleep ->
+                displayedRows.getOrNull(
+                    nextChronologicalRowIndex(
+                        index,
+                        options.order
+                    )
+                )?.sleeps?.forEach { sleep ->
                     drawSleep(
                         sleep = sleep,
                         shift = layout.rowHours,
@@ -445,7 +485,10 @@ private fun DrawScope.drawSchedule(
         drawRect(
             color = ChartSelection,
             topLeft = Offset(startX, rowTop + 1.dp.toPx()),
-            size = Size((endX - startX).coerceAtLeast(1f), (rowHeight - 2.dp.toPx()).coerceAtLeast(1f)),
+            size = Size(
+                (endX - startX).coerceAtLeast(1f),
+                (rowHeight - 2.dp.toPx()).coerceAtLeast(1f)
+            ),
             style = Stroke(width = 2.dp.toPx()),
         )
     }
@@ -480,7 +523,10 @@ private fun DrawScope.drawOverlay(
         drawRect(
             color = ChartSelection,
             topLeft = Offset(startX, top + 1.dp.toPx()),
-            size = Size((endX - startX).coerceAtLeast(1f), (height - 2.dp.toPx()).coerceAtLeast(1f)),
+            size = Size(
+                (endX - startX).coerceAtLeast(1f),
+                (height - 2.dp.toPx()).coerceAtLeast(1f)
+            ),
             style = Stroke(width = 2.dp.toPx()),
         )
     }
