@@ -43,12 +43,15 @@ import one.aozora.darkhour.ui.ActogramDisplayOptions
 import one.aozora.darkhour.ui.ActogramOrder
 import one.aozora.darkhour.ui.theme.ChartSelection
 import one.aozora.darkhour.ui.theme.ChartSleepSolid
+import one.aozora.darkhour.ui.theme.ChartTeal
 import one.aozora.darkhour.ui.theme.CircadianForecast
 import one.aozora.darkhour.ui.theme.CircadianObserved
 import one.aozora.darkhour.ui.theme.SleepDeep
 import one.aozora.darkhour.ui.theme.SleepLight
 import one.aozora.darkhour.ui.theme.SleepRem
 import one.aozora.darkhour.ui.theme.SleepWake
+import java.time.DayOfWeek
+import java.time.LocalDate
 import kotlin.math.ceil
 import kotlin.math.floor
 import kotlin.math.max
@@ -313,6 +316,7 @@ private fun DrawScope.drawActogram(
     val plotWidth = (size.width - labelWidth - rightPadding).coerceAtLeast(1f)
     val displayedHours = layout.rowHours * if (options.doublePlot) 2.0 else 1.0
     val hourWidth = plotWidth / displayedHours.toFloat()
+    val currentDate = LocalDate.now(layout.zoneOffset)
     drawRect(Color(0xFF101316))
     drawHourAxis(labelWidth, axisHeight, plotWidth, displayedHours, layout.rowHours, use24HourTime)
 
@@ -327,6 +331,13 @@ private fun DrawScope.drawActogram(
                 topLeft = Offset(0f, top),
                 size = Size(size.width, rowHeight),
             )
+            dateColumnBackgroundColor(row.date, currentDate)?.let { color ->
+                drawRect(
+                    color = color,
+                    topLeft = Offset(0f, top),
+                    size = Size(labelWidth, rowHeight),
+                )
+            }
             drawLine(
                 color = Color(0xFF2B3338),
                 start = Offset(labelWidth, top + rowHeight),
@@ -694,6 +705,14 @@ private fun calculateActogramLabelWidthPx(
     val paddedWidth = measuredWidth + 12f * density
     return ceil(paddedWidth.coerceIn(minimumWidth, maximumWidth) / density) * density
 }
+
+private fun dateColumnBackgroundColor(date: LocalDate, currentDate: LocalDate): Color? =
+    when {
+        date == currentDate -> ChartSelection.copy(alpha = 0.24f)
+        date.dayOfWeek == DayOfWeek.SATURDAY || date.dayOfWeek == DayOfWeek.SUNDAY ->
+            ChartTeal.copy(alpha = 0.12f)
+        else -> null
+    }
 
 private fun stageColor(level: SleepStageLevel): Color = when (level) {
     SleepStageLevel.WAKE -> SleepWake
