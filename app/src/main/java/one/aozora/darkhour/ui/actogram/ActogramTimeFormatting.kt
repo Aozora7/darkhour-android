@@ -4,6 +4,7 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
+import java.time.format.TextStyle
 import java.util.Locale
 
 internal fun formatActogramDateTime(
@@ -36,6 +37,11 @@ internal fun formatActogramDate(
             if (character.isLowerCase()) character.titlecase(locale) else character.toString()
         }
 }
+
+internal fun formatActogramDayOfWeek(
+    date: LocalDate,
+    locale: Locale = Locale.getDefault(),
+): String = date.dayOfWeek.getDisplayName(TextStyle.FULL, locale)
 
 internal fun formatActogramClock(
     instant: Instant,

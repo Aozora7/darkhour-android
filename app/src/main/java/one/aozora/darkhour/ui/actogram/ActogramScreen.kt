@@ -255,38 +255,37 @@ private fun SleepDetails(
         horizontalArrangement = Arrangement.spacedBy(24.dp),
     ) {
         Column(Modifier.weight(1f)) {
-            DetailLabel("Time")
+            val startDate = selection.startTime.atOffset(selection.startZoneOffset).toLocalDate()
+            DetailLabel("Date")
             Text(
-                formatActogramDateTime(
-                    selection.startTime,
-                    selection.startZoneOffset,
-                    use24HourTime,
-                    useIsoDateTime,
-                ),
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.Bold,
+                formatActogramDate(startDate, useIsoDateTime),
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.Medium,
             )
             Text(
-                formatActogramDateTime(
-                    selection.endTime,
-                    selection.endZoneOffset,
-                    use24HourTime,
-                    useIsoDateTime,
-                ),
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.Bold,
+                formatActogramDayOfWeek(startDate),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
         Column(Modifier.weight(1f)) {
-            DetailLabel("Duration / Score")
+            DetailLabel("Time")
+            Text(
+                "${formatActogramClock(selection.startTime, selection.startZoneOffset, use24HourTime)} - " +
+                    formatActogramClock(selection.endTime, selection.endZoneOffset, use24HourTime),
+                style = MaterialTheme.typography.bodyLarge,
+                color = ActogramLightColor,
+                fontWeight = FontWeight.SemiBold,
+            )
             Text(
                 formatDuration(selection.startTime, selection.endTime),
-                style = MaterialTheme.typography.bodyLarge,
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontWeight = FontWeight.Bold,
             )
             Text(
                 selection.sleepScore?.let { "Score: ${(it * 100).toInt()}/100" } ?: "Score unavailable",
-                style = MaterialTheme.typography.bodyMedium,
+                style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.tertiary,
                 fontWeight = FontWeight.Bold,
             )
@@ -377,9 +376,14 @@ private fun CircadianDetails(
         Column(Modifier.weight(1f)) {
             DetailLabel("Date")
             Text(
-                "${formatActogramDate(selection.date, useIsoDateTime)} ",
+                formatActogramDate(selection.date, useIsoDateTime),
                 style = MaterialTheme.typography.bodyLarge,
                 fontWeight = FontWeight.Medium,
+            )
+            Text(
+                formatActogramDayOfWeek(selection.date),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
         Column(Modifier.weight(1f)) {
