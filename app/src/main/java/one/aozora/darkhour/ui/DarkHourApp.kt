@@ -5,6 +5,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.Row
 import androidx.compose.ui.text.font.FontWeight
@@ -50,6 +51,8 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
@@ -338,7 +341,7 @@ private fun HealthConnectGate(
             .testTag("health_connect_gate"),
         contentAlignment = Alignment.Center,
     ) {
-        androidx.compose.foundation.layout.Column(
+        Column(
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Text(
@@ -392,14 +395,27 @@ private fun AppNavigationBar(
             .fillMaxWidth()
             .windowInsetsPadding(WindowInsets.navigationBars.only(WindowInsetsSides.Bottom))
             .background(MaterialTheme.colorScheme.surfaceContainer)
-            .height(48.dp)
             .selectableGroup()
             .testTag("bottom_navigation"),
     ) {
         val itemWidth = maxWidth / DestinationItems.size
         val itemWidthPx = with(LocalDensity.current) { itemWidth.toPx() }
+        val textMeasurer = rememberTextMeasurer()
+        val horizontalContentWidth = with(LocalDensity.current) { (20.dp + 8.dp).toPx() }
+        val useStackedItems = DestinationItems.any { item ->
+            val labelWidth = textMeasurer.measure(
+                text = item.destination.label,
+                style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
+                maxLines = 1,
+            ).size.width
+            labelWidth + horizontalContentWidth > itemWidthPx
+        }
 
-        Row(Modifier.fillMaxSize()) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .height(if (useStackedItems) 64.dp else 48.dp)
+        ) {
             DestinationItems.forEachIndexed { index, item ->
                 val selected = selectedIndex == index
                 Box(
@@ -414,32 +430,29 @@ private fun AppNavigationBar(
                         .testTag("destination_${item.destination.name.lowercase()}"),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.Center,
-                        modifier = Modifier.alpha(if (selected) 1f else 0.7f)
-                    ) {
-                        Icon(
-                            imageVector = item.icon,
-                            contentDescription = null,
-                            modifier = Modifier.size(20.dp),
-                            tint = if (selected) {
-                                MaterialTheme.colorScheme.primary
-                            } else {
-                                MaterialTheme.colorScheme.onSurfaceVariant
-                            },
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        Text(
-                            text = item.destination.label,
-                            style = MaterialTheme.typography.labelLarge,
-                            fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
-                            color = if (selected) {
-                                MaterialTheme.colorScheme.onSurface
-                            } else {
-                                MaterialTheme.colorScheme.onSurfaceVariant
-                            },
-                        )
+                    if (useStackedItems) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 4.dp)
+                                .alpha(if (selected) 1f else 0.7f),
+                        ) {
+                            AppNavigationIcon(item = item, selected = selected)
+                            Spacer(Modifier.height(2.dp))
+                            AppNavigationLabel(item = item, selected = selected)
+                        }
+                    } else {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center,
+                            modifier = Modifier.alpha(if (selected) 1f else 0.7f)
+                        ) {
+                            AppNavigationIcon(item = item, selected = selected)
+                            Spacer(Modifier.width(8.dp))
+                            AppNavigationLabel(item = item, selected = selected)
+                        }
                     }
                 }
             }
@@ -465,6 +478,43 @@ private fun AppNavigationBar(
                 .background(MaterialTheme.colorScheme.primary),
         )
     }
+}
+
+@Composable
+private fun AppNavigationIcon(
+    item: DestinationItem,
+    selected: Boolean,
+) {
+    Icon(
+        imageVector = item.icon,
+        contentDescription = null,
+        modifier = Modifier.size(20.dp),
+        tint = if (selected) {
+            MaterialTheme.colorScheme.primary
+        } else {
+            MaterialTheme.colorScheme.onSurfaceVariant
+        },
+    )
+}
+
+@Composable
+private fun AppNavigationLabel(
+    item: DestinationItem,
+    selected: Boolean,
+) {
+    Text(
+        text = item.destination.label,
+        style = MaterialTheme.typography.labelLarge,
+        fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+        color = if (selected) {
+            MaterialTheme.colorScheme.onSurface
+        } else {
+            MaterialTheme.colorScheme.onSurfaceVariant
+        },
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+        softWrap = false,
+    )
 }
 
 @Composable
