@@ -157,8 +157,8 @@ fun ActogramCanvas(
                         density = density.density,
                         axisHeightPx = axisHeightPx,
                         currentRowHeight = { currentRowHeight },
-                        onRowHeightChange = currentRowHeightChange,
-                        onTransformingChange = currentTransformingChange,
+                        onRowHeightChange = { currentRowHeightChange(it) },
+                        onTransformingChange = { currentTransformingChange(it) },
                         onTransformingStateChange = { isTransforming = it },
                         onPendingAnchoredScrollChange = { pendingAnchoredScroll = it },
                     )
