@@ -2,6 +2,7 @@ package one.aozora.darkhour.ui.actogram
 
 import android.graphics.Paint
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.calculateCentroid
 import androidx.compose.foundation.gestures.calculatePan
@@ -31,6 +32,7 @@ import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.input.pointer.PointerInputScope
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.semantics
@@ -150,84 +152,16 @@ fun ActogramCanvas(
             modifier = Modifier
                 .fillMaxSize()
                 .pointerInput(Unit) {
-                    awaitEachGesture {
-                        var gestureTransforming = false
-                        var gestureStartRowHeight: Float? = null
-                        var gestureZoom = 1f
-                        var anchoredRow: Float? = null
-                        var readyForZoom = false
-                        var currentFocalY: Float? = null
-
-                        try {
-                            do {
-                                val event = awaitPointerEvent()
-                                val pressed = event.changes.count { it.pressed }
-
-                                if (pressed >= 2) {
-                                    if (!gestureTransforming) {
-                                        gestureTransforming = true
-                                        isTransforming = true
-                                        currentTransformingChange(true)
-                                    }
-
-                                    val zoom = event.calculateZoom()
-                                    val pan = event.calculatePan()
-
-                                    if (!readyForZoom) {
-                                        readyForZoom = true
-
-                                        // 1. Initialize the focal point safely on the first multitouch frame
-                                        currentFocalY = event.calculateCentroid().y
-
-                                        // 2. Lock in starting anchors
-                                        gestureStartRowHeight = currentRowHeight
-                                        anchoredRow = calculateZoomAnchorRow(
-                                            currentScroll = scrollState.value.toFloat(),
-                                            focalY = currentFocalY,
-                                            axisHeight = axisHeightPx,
-                                            rowHeight = gestureStartRowHeight * density.density,
-                                        )
-
-                                        event.changes.forEach { it.consume() }
-                                        continue
-                                    }
-
-                                    // 3. Accumulate smoothed pan to track fingers without centroid jumps
-                                    currentFocalY = currentFocalY!! + pan.y
-
-                                    // 4. Trigger updates if either pan or zoom occurred
-                                    if (zoom != 1f || pan.y != 0f) {
-                                        gestureZoom *= zoom
-                                        val newRowHeight =
-                                            (gestureStartRowHeight!! * gestureZoom).coerceIn(
-                                                12f,
-                                                60f
-                                            )
-
-                                        val targetScroll = calculateZoomAnchoredScroll(
-                                            anchoredRow = anchoredRow!!,
-                                            focalY = currentFocalY,
-                                            axisHeight = axisHeightPx,
-                                            newRowHeight = newRowHeight * density.density,
-                                        )
-
-                                        pendingAnchoredScroll = targetScroll
-                                        scrollState.dispatchRawDelta(targetScroll - scrollState.value)
-
-                                        if (newRowHeight != currentRowHeight) {
-                                            currentRowHeightChange(newRowHeight)
-                                        }
-                                    }
-                                    event.changes.forEach { it.consume() }
-                                } else if (gestureTransforming) {
-                                    event.changes.forEach { it.consume() }
-                                }
-                            } while (event.changes.any { it.pressed })
-                        } finally {
-                            if (gestureTransforming) currentTransformingChange(false)
-                            isTransforming = false
-                        }
-                    }
+                    detectActogramTransformGestures(
+                        scrollState = scrollState,
+                        density = density.density,
+                        axisHeightPx = axisHeightPx,
+                        currentRowHeight = { currentRowHeight },
+                        onRowHeightChange = currentRowHeightChange,
+                        onTransformingChange = currentTransformingChange,
+                        onTransformingStateChange = { isTransforming = it },
+                        onPendingAnchoredScrollChange = { pendingAnchoredScroll = it },
+                    )
                 }
                 .verticalScroll(scrollState),
         ) {
@@ -261,6 +195,84 @@ fun ActogramCanvas(
                     labelWidthPx,
                 )
             }
+        }
+    }
+}
+
+private suspend fun PointerInputScope.detectActogramTransformGestures(
+    scrollState: ScrollState,
+    density: Float,
+    axisHeightPx: Float,
+    currentRowHeight: () -> Float,
+    onRowHeightChange: (Float) -> Unit,
+    onTransformingChange: (Boolean) -> Unit,
+    onTransformingStateChange: (Boolean) -> Unit,
+    onPendingAnchoredScrollChange: (Float) -> Unit,
+) {
+    awaitEachGesture {
+        var gestureTransforming = false
+        var gestureStartRowHeight: Float? = null
+        var gestureZoom = 1f
+        var anchoredRow: Float? = null
+        var readyForZoom = false
+        var currentFocalY: Float? = null
+
+        try {
+            do {
+                val event = awaitPointerEvent()
+                val pressed = event.changes.count { it.pressed }
+
+                if (pressed >= 2) {
+                    if (!gestureTransforming) {
+                        gestureTransforming = true
+                        onTransformingStateChange(true)
+                        onTransformingChange(true)
+                    }
+
+                    val zoom = event.calculateZoom()
+                    val pan = event.calculatePan()
+
+                    if (!readyForZoom) {
+                        readyForZoom = true
+                        currentFocalY = event.calculateCentroid().y
+                        gestureStartRowHeight = currentRowHeight()
+                        anchoredRow = calculateZoomAnchorRow(
+                            currentScroll = scrollState.value.toFloat(),
+                            focalY = currentFocalY,
+                            axisHeight = axisHeightPx,
+                            rowHeight = gestureStartRowHeight * density,
+                        )
+
+                        event.changes.forEach { it.consume() }
+                        continue
+                    }
+
+                    currentFocalY = currentFocalY!! + pan.y
+                    if (zoom != 1f || pan.y != 0f) {
+                        gestureZoom *= zoom
+                        val newRowHeight = (gestureStartRowHeight!! * gestureZoom).coerceIn(12f, 60f)
+                        val targetScroll = calculateZoomAnchoredScroll(
+                            anchoredRow = anchoredRow!!,
+                            focalY = currentFocalY,
+                            axisHeight = axisHeightPx,
+                            newRowHeight = newRowHeight * density,
+                        )
+
+                        onPendingAnchoredScrollChange(targetScroll)
+                        scrollState.dispatchRawDelta(targetScroll - scrollState.value)
+
+                        if (newRowHeight != currentRowHeight()) {
+                            onRowHeightChange(newRowHeight)
+                        }
+                    }
+                    event.changes.forEach { it.consume() }
+                } else if (gestureTransforming) {
+                    event.changes.forEach { it.consume() }
+                }
+            } while (event.changes.any { it.pressed })
+        } finally {
+            if (gestureTransforming) onTransformingChange(false)
+            onTransformingStateChange(false)
         }
     }
 }
