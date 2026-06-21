@@ -429,6 +429,44 @@ class ActogramLayoutTest {
         assertTrue(hit is ActogramSelection.Circadian)
     }
 
+    @Test
+    fun zoomAnchoredScrollKeepsFocalRowStable() {
+        val currentScroll = 300f
+        val focalY = 150f
+        val axisHeight = 30f
+        val oldRowHeight = 30f
+        val newRowHeight = 45f
+        val anchorRow = calculateZoomAnchorRow(
+            currentScroll = currentScroll,
+            focalY = focalY,
+            axisHeight = axisHeight,
+            rowHeight = oldRowHeight,
+        )
+
+        val targetScroll = calculateZoomAnchoredScroll(
+            anchoredRow = anchorRow,
+            focalY = focalY,
+            axisHeight = axisHeight,
+            newRowHeight = newRowHeight,
+        )
+
+        val rowBefore = (currentScroll + focalY - axisHeight) / oldRowHeight
+        val rowAfter = (targetScroll + focalY - axisHeight) / newRowHeight
+        assertEquals(rowBefore, rowAfter, 0.001f)
+    }
+
+    @Test
+    fun zoomAnchoredScrollDoesNotScrollBeforeTop() {
+        val targetScroll = calculateZoomAnchoredScroll(
+            anchoredRow = 0f,
+            focalY = 200f,
+            axisHeight = 30f,
+            newRowHeight = 12f,
+        )
+
+        assertEquals(0f, targetScroll, 0.001f)
+    }
+
     private fun record(date: LocalDate, startHour: Double, durationHours: Double): SleepRecord {
         val dayStart = date.atStartOfDay().toInstant(offset)
         val start = dayStart.plusMillis((startHour * 3_600_000).toLong())

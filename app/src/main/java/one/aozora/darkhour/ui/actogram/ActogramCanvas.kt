@@ -3,6 +3,7 @@ package one.aozora.darkhour.ui.actogram
 import android.graphics.Paint
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.calculateCentroid
 import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
@@ -13,9 +14,12 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -26,6 +30,7 @@ import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalViewConfiguration
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.semantics
@@ -45,6 +50,7 @@ import one.aozora.darkhour.ui.theme.SleepWake
 import kotlin.math.ceil
 import kotlin.math.floor
 import kotlin.math.max
+import kotlin.math.roundToInt
 
 @Composable
 fun ActogramCanvas(
@@ -58,6 +64,7 @@ fun ActogramCanvas(
     modifier: Modifier = Modifier,
 ) {
     val density = LocalDensity.current
+    val viewConfiguration = LocalViewConfiguration.current
     val use24HourTime =
         useIsoDateTime || android.text.format.DateFormat.is24HourFormat(LocalContext.current)
     val currentRowHeight by rememberUpdatedState(options.rowHeightDp)
@@ -128,35 +135,84 @@ fun ActogramCanvas(
             axisHeightPx + rowHeightPx * displayRowCount,
         )
         val canvasHeightDp = with(density) { canvasHeight.toDp() }
+        val scrollState = rememberScrollState()
+        var pendingAnchoredScroll by remember { mutableStateOf<Float?>(null) }
+        var isTransforming by remember { mutableStateOf(false) }
 
+        LaunchedEffect(options.rowHeightDp, canvasHeight, isTransforming) {
+            // Only snap if we aren't actively zooming/fighting the gesture
+            if (pendingAnchoredScroll != null && !isTransforming) {
+                scrollState.scrollTo(pendingAnchoredScroll!!.roundToInt().coerceIn(0, scrollState.maxValue))
+                pendingAnchoredScroll = null
+            }
+        }
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .verticalScroll(rememberScrollState())
                 .pointerInput(Unit) {
                     awaitEachGesture {
-                        var transforming = false
+                        var gestureTransforming = false
+                        var gestureStartRowHeight: Float? = null
+                        var gestureZoom = 1f
+                        var anchoredRow: Float? = null
+                        var readyForZoom = false
+                        var initialFocalY: Float? = null
                         try {
                             do {
                                 val event = awaitPointerEvent()
                                 val pressed = event.changes.count { it.pressed }
                                 if (pressed >= 2) {
-                                    if (!transforming) {
-                                        transforming = true
+                                    if (!gestureTransforming) {
+                                        gestureTransforming = true
+                                        isTransforming = true
                                         currentTransformingChange(true)
                                     }
                                     val zoom = event.calculateZoom()
-                                    if (zoom != 1f) {
-                                        currentRowHeightChange((currentRowHeight * zoom).coerceIn(12f, 60f))
+                                    val centroid = event.calculateCentroid()
+                                    val focal = initialFocalY ?: centroid.y.also { initialFocalY = it }
+                                    val startRowHeight = gestureStartRowHeight ?: currentRowHeight.also {
+                                        gestureStartRowHeight = it
                                     }
+                                    val anchor = anchoredRow ?: calculateZoomAnchorRow(
+                                        currentScroll = scrollState.value.toFloat(),
+                                        focalY = centroid.y,
+                                        axisHeight = axisHeightPx,
+                                        rowHeight = startRowHeight * density.density,
+                                    ).also {
+                                        anchoredRow = it
+                                    }
+                                    if (!readyForZoom) {
+                                        readyForZoom = true
+                                        event.changes.forEach { it.consume() }
+                                        continue
+                                    }
+                                    if (zoom != 1f) {
+                                        gestureZoom *= zoom
+                                        val newRowHeight = (startRowHeight * gestureZoom).coerceIn(12f, 60f)
+                                        if (newRowHeight != currentRowHeight) {
+                                            val targetScroll = calculateZoomAnchoredScroll(
+                                                anchoredRow = anchor,
+                                                focalY = focal,
+                                                axisHeight = axisHeightPx,
+                                                newRowHeight = newRowHeight * density.density,
+                                            )
+                                            pendingAnchoredScroll = targetScroll
+                                            scrollState.dispatchRawDelta(targetScroll - scrollState.value)
+                                            currentRowHeightChange(newRowHeight)
+                                        }
+                                    }
+                                    event.changes.forEach { it.consume() }
+                                } else if (gestureTransforming) {
                                     event.changes.forEach { it.consume() }
                                 }
                             } while (event.changes.any { it.pressed })
                         } finally {
-                            if (transforming) currentTransformingChange(false)
+                            if (gestureTransforming) currentTransformingChange(false)
+                            isTransforming = false
                         }
                     }
-                },
+                }
+                .verticalScroll(scrollState),
         ) {
             Canvas(
                 modifier = Modifier
@@ -190,6 +246,26 @@ fun ActogramCanvas(
             }
         }
     }
+}
+
+internal fun calculateZoomAnchorRow(
+    currentScroll: Float,
+    focalY: Float,
+    axisHeight: Float,
+    rowHeight: Float,
+): Float {
+    if (rowHeight <= 0f) return 0f
+    return ((currentScroll + focalY - axisHeight) / rowHeight).coerceAtLeast(0f)
+}
+
+internal fun calculateZoomAnchoredScroll(
+    anchoredRow: Float,
+    focalY: Float,
+    axisHeight: Float,
+    newRowHeight: Float,
+): Float {
+    if (newRowHeight <= 0f) return 0f
+    return (axisHeight + anchoredRow.coerceAtLeast(0f) * newRowHeight - focalY).coerceAtLeast(0f)
 }
 
 private fun DrawScope.drawActogram(

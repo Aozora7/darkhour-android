@@ -51,8 +51,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -474,7 +474,7 @@ private fun ActogramOptionsSheet(
     onDismiss: () -> Unit,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    val maxContentHeight = LocalConfiguration.current.screenHeightDp.dp * 0.82f
+    val maxContentHeight = LocalWindowInfo.current.containerDpSize.height * 0.82f
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
