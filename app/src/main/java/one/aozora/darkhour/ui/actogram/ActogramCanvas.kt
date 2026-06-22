@@ -2,19 +2,17 @@ package one.aozora.darkhour.ui.actogram
 
 import android.graphics.Paint
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.ScrollState
+import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.calculateCentroid
 import androidx.compose.foundation.gestures.calculatePan
 import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.rememberScrollableState
+import androidx.compose.foundation.gestures.scrollable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -55,7 +53,6 @@ import java.time.LocalDate
 import kotlin.math.ceil
 import kotlin.math.floor
 import kotlin.math.max
-import kotlin.math.roundToInt
 
 @Composable
 fun ActogramCanvas(
@@ -75,6 +72,7 @@ fun ActogramCanvas(
     val currentTransformingChange by rememberUpdatedState(onTransformingChange)
     val axisHeight = 30.dp
     val minimumHeight = 240.dp
+    var gestureRowHeightDp by remember { mutableStateOf<Float?>(null) }
 
     BoxWithConstraints(
         modifier = modifier
@@ -85,7 +83,8 @@ fun ActogramCanvas(
     ) {
         val viewportHeight = with(density) { maxHeight.toPx() }
         val axisHeightPx = with(density) { axisHeight.toPx() }
-        val rowHeightPx = with(density) { options.rowHeightDp.dp.toPx() }
+        val displayedRowHeightDp = gestureRowHeightDp ?: options.rowHeightDp
+        val rowHeightPx = with(density) { displayedRowHeightDp.dp.toPx() }
         val rowsNeededForViewport = ceil(
             ((viewportHeight - axisHeightPx).coerceAtLeast(0f) / rowHeightPx).toDouble(),
         ).toInt()
@@ -133,22 +132,36 @@ fun ActogramCanvas(
                 useIsoDateTime = useIsoDateTime,
             )
         }
-        val canvasHeight = max(
+        val contentHeight = max(
             max(viewportHeight, with(density) { minimumHeight.toPx() }),
             axisHeightPx + rowHeightPx * displayRowCount,
         )
-        val canvasHeightDp = with(density) { canvasHeight.toDp() }
-        val scrollState = rememberScrollState()
+        val maxScrollOffset = (contentHeight - viewportHeight).coerceAtLeast(0f)
+        var scrollOffsetPx by remember { mutableStateOf(0f) }
+        val currentScrollOffset by rememberUpdatedState(scrollOffsetPx)
+        val currentMaxScrollOffset by rememberUpdatedState(maxScrollOffset)
+        val scrollableState = rememberScrollableState { delta ->
+            val oldOffset = scrollOffsetPx
+            scrollOffsetPx = (scrollOffsetPx - delta).coerceIn(0f, currentMaxScrollOffset)
+            oldOffset - scrollOffsetPx
+        }
         var pendingAnchoredScroll by remember { mutableStateOf<Float?>(null) }
         var isTransforming by remember { mutableStateOf(false) }
 
-        LaunchedEffect(options.rowHeightDp, canvasHeight, isTransforming) {
+        LaunchedEffect(gestureRowHeightDp, options.rowHeightDp, isTransforming) {
+            val gestureHeight = gestureRowHeightDp ?: return@LaunchedEffect
+            if (!isTransforming && kotlin.math.abs(gestureHeight - options.rowHeightDp) < 0.001f) {
+                gestureRowHeightDp = null
+            }
+        }
+
+        LaunchedEffect(displayedRowHeightDp, contentHeight, isTransforming) {
             // Only snap if we aren't actively zooming/fighting the gesture
             if (pendingAnchoredScroll != null && !isTransforming) {
-                scrollState.scrollTo(
-                    pendingAnchoredScroll!!.roundToInt().coerceIn(0, scrollState.maxValue)
-                )
+                scrollOffsetPx = pendingAnchoredScroll!!.coerceIn(0f, maxScrollOffset)
                 pendingAnchoredScroll = null
+            } else if (!isTransforming && scrollOffsetPx > maxScrollOffset) {
+                scrollOffsetPx = maxScrollOffset
             }
         }
         Box(
@@ -156,23 +169,31 @@ fun ActogramCanvas(
                 .fillMaxSize()
                 .pointerInput(Unit) {
                     detectActogramTransformGestures(
-                        scrollState = scrollState,
+                        currentScroll = { currentScrollOffset },
+                        onScrollTargetChange = { target ->
+                            scrollOffsetPx = target.coerceIn(0f, currentMaxScrollOffset)
+                        },
                         density = density.density,
                         axisHeightPx = axisHeightPx,
-                        currentRowHeight = { currentRowHeight },
+                        currentRowHeight = { gestureRowHeightDp ?: currentRowHeight },
+                        onGestureRowHeightChange = { gestureRowHeightDp = it },
                         onRowHeightChange = { currentRowHeightChange(it) },
                         onTransformingChange = { currentTransformingChange(it) },
-                        onTransformingStateChange = { isTransforming = it },
+                        onTransformingStateChange = {
+                            isTransforming = it
+                        },
                         onPendingAnchoredScrollChange = { pendingAnchoredScroll = it },
                     )
                 }
-                .verticalScroll(scrollState),
+                .scrollable(
+                    state = scrollableState,
+                    orientation = Orientation.Vertical,
+                ),
         ) {
             Canvas(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .height(canvasHeightDp)
-                    .pointerInput(displayedRows, options, selection) {
+                    .fillMaxSize()
+                    .pointerInput(displayedRows, options, selection, labelWidthPx) {
                         detectTapGestures { position ->
                             onSelectionChange(
                                 hitTestActogram(
@@ -183,14 +204,25 @@ fun ActogramCanvas(
                                     position = position,
                                     density = density.density,
                                     labelWidthPx = labelWidthPx,
+                                    verticalScrollOffsetPx = currentScrollOffset,
                                 ),
                             )
                         }
                     },
             ) {
+                val visibleRows = calculateVisibleRowWindow(
+                    rowCount = displayedRows.size,
+                    scrollOffsetPx = scrollOffsetPx,
+                    viewportHeightPx = viewportHeight,
+                    axisHeightPx = axisHeightPx,
+                    rowHeightPx = rowHeightPx,
+                )
                 drawActogram(
                     layout,
                     displayedRows,
+                    visibleRows,
+                    scrollOffsetPx,
+                    displayedRowHeightDp,
                     options,
                     selection,
                     use24HourTime,
@@ -203,10 +235,12 @@ fun ActogramCanvas(
 }
 
 private suspend fun PointerInputScope.detectActogramTransformGestures(
-    scrollState: ScrollState,
+    currentScroll: () -> Float,
+    onScrollTargetChange: (Float) -> Unit,
     density: Float,
     axisHeightPx: Float,
     currentRowHeight: () -> Float,
+    onGestureRowHeightChange: (Float) -> Unit,
     onRowHeightChange: (Float) -> Unit,
     onTransformingChange: (Boolean) -> Unit,
     onTransformingStateChange: (Boolean) -> Unit,
@@ -240,7 +274,7 @@ private suspend fun PointerInputScope.detectActogramTransformGestures(
                         currentFocalY = event.calculateCentroid().y
                         gestureStartRowHeight = currentRowHeight()
                         anchoredRow = calculateZoomAnchorRow(
-                            currentScroll = scrollState.value.toFloat(),
+                            currentScroll = currentScroll(),
                             focalY = currentFocalY,
                             axisHeight = axisHeightPx,
                             rowHeight = gestureStartRowHeight * density,
@@ -262,9 +296,10 @@ private suspend fun PointerInputScope.detectActogramTransformGestures(
                         )
 
                         onPendingAnchoredScrollChange(targetScroll)
-                        scrollState.dispatchRawDelta(targetScroll - scrollState.value)
+                        onScrollTargetChange(targetScroll)
 
                         if (newRowHeight != currentRowHeight()) {
+                            onGestureRowHeightChange(newRowHeight)
                             onRowHeightChange(newRowHeight)
                         }
                     }
@@ -303,6 +338,9 @@ internal fun calculateZoomAnchoredScroll(
 private fun DrawScope.drawActogram(
     layout: ActogramLayout,
     displayedRows: List<ActogramRow>,
+    visibleRows: IntRange,
+    verticalScrollOffset: Float,
+    rowHeightDp: Float,
     options: ActogramDisplayOptions,
     selection: ActogramSelection?,
     use24HourTime: Boolean,
@@ -310,7 +348,7 @@ private fun DrawScope.drawActogram(
     labelWidth: Float,
 ) {
     val axisHeight = 30.dp.toPx()
-    val rowHeight = options.rowHeightDp.dp.toPx()
+    val rowHeight = rowHeightDp.dp.toPx()
     val tauMode = kotlin.math.abs(layout.rowHours - 24.0) >= 0.0001
     val rightPadding = 10.dp.toPx()
     val plotWidth = (size.width - labelWidth - rightPadding).coerceAtLeast(1f)
@@ -321,8 +359,9 @@ private fun DrawScope.drawActogram(
     drawHourAxis(labelWidth, axisHeight, plotWidth, displayedHours, layout.rowHours, use24HourTime)
 
     clipRect(top = axisHeight) {
-        displayedRows.forEachIndexed { index, row ->
-            val top = axisHeight + index * rowHeight
+        visibleRows.forEach { index ->
+            val row = displayedRows[index]
+            val top = axisHeight + index * rowHeight - verticalScrollOffset
             val centerY = top + rowHeight / 2f
             val blockHeight = (rowHeight * 0.62f).coerceAtLeast(5.dp.toPx())
 
@@ -629,10 +668,12 @@ internal fun hitTestActogram(
     position: Offset,
     density: Float,
     labelWidthPx: Float? = null,
+    verticalScrollOffsetPx: Float = 0f,
 ): ActogramSelection? {
     val axisHeight = 30f * density
     val rowHeight = options.rowHeightDp * density
-    if (position.y < axisHeight || rowHeight <= 0f) return null
+    val contentY = position.y + verticalScrollOffsetPx
+    if (contentY < axisHeight || rowHeight <= 0f) return null
 
     val tauMode = kotlin.math.abs(rowHours - 24.0) >= 0.0001
     val labelWidth = labelWidthPx ?: (actogramMaxLabelWidthDp(
@@ -644,7 +685,7 @@ internal fun hitTestActogram(
     val plotWidth = (canvasWidth - labelWidth - rightPadding).coerceAtLeast(1f)
     if (position.x < labelWidth || position.x > labelWidth + plotWidth) return null
 
-    val rowIndex = floor((position.y - axisHeight) / rowHeight).toInt()
+    val rowIndex = floor((contentY - axisHeight) / rowHeight).toInt()
     if (rowIndex !in rows.indices) return null
 
     val displayedHours = rowHours * if (options.doublePlot) 2.0 else 1.0
@@ -662,7 +703,7 @@ internal fun hitTestActogram(
     val blockHeight = (rowHeight * 0.62f).coerceAtLeast(5f * density)
     val rowTop = axisHeight + rowIndex * rowHeight
     val blockTop = rowTop + (rowHeight - blockHeight) / 2f
-    val withinSleepHeight = position.y in blockTop..(blockTop + blockHeight)
+    val withinSleepHeight = contentY in blockTop..(blockTop + blockHeight)
 
     if (withinSleepHeight) {
         sourceRow?.sleeps
@@ -685,6 +726,26 @@ private fun nextChronologicalRowIndex(index: Int, order: ActogramOrder): Int =
         ActogramOrder.NEWEST_FIRST -> index - 1
         ActogramOrder.OLDEST_FIRST -> index + 1
     }
+
+internal fun calculateVisibleRowWindow(
+    rowCount: Int,
+    scrollOffsetPx: Float,
+    viewportHeightPx: Float,
+    axisHeightPx: Float,
+    rowHeightPx: Float,
+    overscanRows: Int = 2,
+): IntRange {
+    if (rowCount <= 0) return IntRange.EMPTY
+    if (rowHeightPx <= 0f) return 0..0
+
+    val visibleTop = scrollOffsetPx.coerceAtLeast(0f)
+    val visibleBottom = (visibleTop + viewportHeightPx).coerceAtLeast(visibleTop)
+    val firstVisible = floor((visibleTop - axisHeightPx) / rowHeightPx).toInt()
+    val lastVisible = ceil((visibleBottom - axisHeightPx) / rowHeightPx).toInt()
+    val first = (firstVisible - overscanRows).coerceIn(0, rowCount - 1)
+    val last = (lastVisible + overscanRows).coerceIn(first, rowCount - 1)
+    return first..last
+}
 
 private fun calculateActogramLabelWidthPx(
     labels: List<String>,

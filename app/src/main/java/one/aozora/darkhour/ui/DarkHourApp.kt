@@ -39,6 +39,7 @@ import androidx.compose.material3.NavigationRailItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -55,6 +56,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 import one.aozora.darkhour.data.HealthConnectAccess
@@ -134,6 +136,10 @@ fun DarkHourApp(
             rowHours = rowHours,
         )
     }
+    LaunchedEffect(options) {
+        delay(300)
+        onDisplayOptionsChange(options)
+    }
 
     val pagerState = rememberPagerState(initialPage = 0, pageCount = { DestinationItems.size })
     val scope = rememberCoroutineScope()
@@ -149,7 +155,6 @@ fun DarkHourApp(
 
     fun updateDisplayOptions(updated: ActogramDisplayOptions) {
         options = updated
-        onDisplayOptionsChange(updated)
     }
 
     fun updateScheduleEntries(updated: List<ScheduleEntry>) {

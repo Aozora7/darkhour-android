@@ -430,6 +430,161 @@ class ActogramLayoutTest {
     }
 
     @Test
+    fun visibleRowWindowIncludesTopRowsWithOverscan() {
+        val window = calculateVisibleRowWindow(
+            rowCount = 100,
+            scrollOffsetPx = 0f,
+            viewportHeightPx = 110f,
+            axisHeightPx = 30f,
+            rowHeightPx = 20f,
+            overscanRows = 2,
+        )
+
+        assertEquals(0..6, window)
+    }
+
+    @Test
+    fun visibleRowWindowTracksMiddleScrollWithOverscan() {
+        val window = calculateVisibleRowWindow(
+            rowCount = 100,
+            scrollOffsetPx = 430f,
+            viewportHeightPx = 110f,
+            axisHeightPx = 30f,
+            rowHeightPx = 20f,
+            overscanRows = 2,
+        )
+
+        assertEquals(18..28, window)
+    }
+
+    @Test
+    fun visibleRowWindowClampsAtBottom() {
+        val window = calculateVisibleRowWindow(
+            rowCount = 30,
+            scrollOffsetPx = 1_000f,
+            viewportHeightPx = 200f,
+            axisHeightPx = 30f,
+            rowHeightPx = 20f,
+            overscanRows = 2,
+        )
+
+        assertEquals(29..29, window)
+    }
+
+    @Test
+    fun visibleRowWindowShorterThanOneRowStillIncludesIntersectingRow() {
+        val window = calculateVisibleRowWindow(
+            rowCount = 10,
+            scrollOffsetPx = 50f,
+            viewportHeightPx = 1f,
+            axisHeightPx = 30f,
+            rowHeightPx = 20f,
+            overscanRows = 0,
+        )
+
+        assertTrue(1 in window)
+    }
+
+    @Test
+    fun scrolledHitTestingUsesContentCoordinatesForSleepCircadianAndSchedule() {
+        val firstDate = LocalDate.parse("2026-06-15")
+        val sleep = record(firstDate.plusDays(1), 1.0, 4.0)
+        val layout = ActogramLayoutEngine.build(
+            records = listOf(
+                record(firstDate, 1.0, 4.0),
+                sleep,
+                record(firstDate.plusDays(2), 1.0, 4.0),
+            ),
+            circadianDays = listOf(circadian(firstDate.plusDays(1), sleep, 10.0, 12.0)),
+            scheduleEntries = listOf(
+                schedule(start = LocalTime.of(14, 0), end = LocalTime.of(15, 0), days = setOf(DayOfWeek.TUESDAY)),
+            ),
+            minimumRows = 3,
+        )
+        val rows = layout.rowsForDisplay(ActogramOrder.OLDEST_FIRST, minimumRows = 3)
+        val options = ActogramDisplayOptions(order = ActogramOrder.OLDEST_FIRST)
+
+        val sleepHit = hitTestActogram(
+            rows = rows,
+            options = options,
+            rowHours = 24.0,
+            canvasWidth = 1_000f,
+            position = Offset(160f, 41f),
+            density = 1f,
+            labelWidthPx = 100f,
+            verticalScrollOffsetPx = 22f,
+        )
+        val circadianHit = hitTestActogram(
+            rows = rows,
+            options = options,
+            rowHours = 24.0,
+            canvasWidth = 1_000f,
+            position = Offset(489f, 41f),
+            density = 1f,
+            labelWidthPx = 100f,
+            verticalScrollOffsetPx = 22f,
+        )
+        val scheduleHit = hitTestActogram(
+            rows = rows,
+            options = options,
+            rowHours = 24.0,
+            canvasWidth = 1_000f,
+            position = Offset(638f, 41f),
+            density = 1f,
+            labelWidthPx = 100f,
+            verticalScrollOffsetPx = 22f,
+        )
+
+        assertTrue(sleepHit is ActogramSelection.Sleep)
+        assertEquals(firstDate.plusDays(1).toEpochDay(), (sleepHit as ActogramSelection.Sleep).logId)
+        assertTrue(circadianHit is ActogramSelection.Circadian)
+        assertEquals(firstDate.plusDays(1), (circadianHit as ActogramSelection.Circadian).date)
+        assertTrue(scheduleHit is ActogramSelection.Schedule)
+    }
+
+    @Test
+    fun doublePlotHitTestingSelectsNextChronologicalSleepInOldestFirstOrder() {
+        val firstDate = LocalDate.parse("2026-06-15")
+        val layout = ActogramLayoutEngine.build(
+            records = listOf(
+                record(firstDate, 1.0, 4.0),
+                record(firstDate.plusDays(1), 1.0, 4.0),
+            ),
+            minimumRows = 2,
+        )
+        val rows = layout.rowsForDisplay(ActogramOrder.OLDEST_FIRST, minimumRows = 2)
+        val options = ActogramDisplayOptions(
+            doublePlot = true,
+            order = ActogramOrder.OLDEST_FIRST,
+        )
+
+        val right = hitTestActogram(rows, options, 24.0, 1_000f, Offset(582f, 41f), 1f)
+
+        assertTrue(right is ActogramSelection.Sleep)
+        assertEquals(firstDate.plusDays(1).toEpochDay(), (right as ActogramSelection.Sleep).logId)
+    }
+
+    @Test
+    fun fixedDurationRecordCandidatesClipLongSleepAcrossIndexedRows() {
+        val date = LocalDate.parse("2026-06-15")
+        val layout = ActogramLayoutEngine.build(
+            records = listOf(record(date, 23.0, 30.0)),
+            rowHours = 24.5,
+            minimumRows = 3,
+        )
+
+        assertEquals(1, layout.rows[0].sleeps.size)
+        assertEquals(1, layout.rows[1].sleeps.size)
+        assertEquals(1, layout.rows[2].sleeps.size)
+        assertEquals(23.0, layout.rows[0].sleeps.single().startHour, 0.001)
+        assertEquals(24.5, layout.rows[0].sleeps.single().endHour, 0.001)
+        assertEquals(0.0, layout.rows[1].sleeps.single().startHour, 0.001)
+        assertEquals(24.5, layout.rows[1].sleeps.single().endHour, 0.001)
+        assertEquals(0.0, layout.rows[2].sleeps.single().startHour, 0.001)
+        assertEquals(4.0, layout.rows[2].sleeps.single().endHour, 0.001)
+    }
+
+    @Test
     fun zoomAnchoredScrollKeepsFocalRowStable() {
         val currentScroll = 300f
         val focalY = 150f

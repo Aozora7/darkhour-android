@@ -14,6 +14,8 @@ import java.time.format.DateTimeFormatter
 import one.aozora.darkhour.ui.ActogramOrder
 import kotlin.math.ceil
 import kotlin.math.floor
+import kotlin.math.max
+import kotlin.math.min
 import kotlin.math.roundToLong
 
 data class ActogramStageBlock(
@@ -195,6 +197,8 @@ object ActogramLayoutEngine {
         val naturalFirstDate = allDates.minOrNull() ?: lastDate
         val paddedFirstDate = lastDate.minusDays((minimumRows - 1).toLong())
         val firstDate = minOf(naturalFirstDate, paddedFirstDate)
+        val recordsByDate = records.toCalendarRecordCandidates()
+        val circadianByDate = circadianDays.toCalendarCircadianCandidates()
 
         val rows = generateSequence(firstDate) { current ->
             if (current < lastDate) current.plusDays(1) else null
@@ -202,10 +206,10 @@ object ActogramLayoutEngine {
             val offset = offsetByDate[date] ?: fallbackOffset
             val rowStart = date.atStartOfDay().toInstant(offset)
             val rowEnd = date.plusDays(1).atStartOfDay().toInstant(offset)
-            val sleeps = records.mapNotNull { record ->
+            val sleeps = recordsByDate[date].orEmpty().mapNotNull { record ->
                 record.toBlock(rowStart, rowEnd)
             }
-            val overlays = circadianDays.flatMap { circadian ->
+            val overlays = circadianByDate[date].orEmpty().flatMap { circadian ->
                 circadian.toCalendarOverlays(
                     rowStart = rowStart,
                     rowEnd = rowEnd,
@@ -261,6 +265,11 @@ object ActogramLayoutEngine {
         ).toInt()
         val rowCount = maxOf(minimumRows, naturalCount)
         val circadianByDate = circadianDays.associateBy { it.date }
+        val recordsByRow = records.toFixedDurationRecordCandidates(
+            origin = origin,
+            rowDurationMs = rowDurationMs,
+            rowCount = rowCount,
+        )
 
         val rows = (0 until rowCount).map { index ->
             val rowStart = origin.plusMillis(index * rowDurationMs)
@@ -280,7 +289,7 @@ object ActogramLayoutEngine {
                 date = date,
                 label = label,
                 startTime = rowStart,
-                sleeps = records.mapNotNull { it.toBlock(rowStart, rowEnd) },
+                sleeps = recordsByRow[index].mapNotNull { it.toBlock(rowStart, rowEnd) },
                 overlays = circadian?.toFixedDurationOverlays(rowStart, rowEnd, circadianMidnight, fallbackOffset)
                     ?: emptyList(),
                 schedules = scheduleEntries.toScheduleBlocks(rowStart, rowEnd, fallbackOffset),
@@ -293,6 +302,70 @@ object ActogramLayoutEngine {
             hasRealData = records.isNotEmpty(),
             zoneOffset = fallbackOffset,
         )
+    }
+
+    private fun List<SleepRecord>.toCalendarRecordCandidates(): Map<LocalDate, List<SleepRecord>> {
+        if (isEmpty()) return emptyMap()
+        val candidates = mutableMapOf<LocalDate, MutableList<SleepRecord>>()
+        forEach { record ->
+            val startOffset = record.startZoneOffset ?: ZoneOffset.UTC
+            val endOffset = record.endZoneOffset ?: startOffset
+            val startDate = record.startTime.atOffset(startOffset).toLocalDate()
+            val endDate = record.endTime.atOffset(endOffset).toLocalDate()
+            val dates = buildSet {
+                add(record.dateOfSleep)
+                var current = startDate
+                while (current <= endDate) {
+                    add(current)
+                    current = current.plusDays(1)
+                }
+            }
+            dates.forEach { date ->
+                candidates.getOrPut(date) { mutableListOf() }.add(record)
+            }
+        }
+        return candidates
+    }
+
+    private fun List<SleepRecord>.toFixedDurationRecordCandidates(
+        origin: Instant,
+        rowDurationMs: Long,
+        rowCount: Int,
+    ): List<List<SleepRecord>> {
+        if (rowCount <= 0) return emptyList()
+        val buckets = List(rowCount) { mutableListOf<SleepRecord>() }
+        if (isEmpty() || rowDurationMs <= 0L) return buckets
+
+        forEach { record ->
+            if (record.endTime <= record.startTime) return@forEach
+            val firstIndex = floor(
+                Duration.between(origin, record.startTime).toMillis().toDouble() / rowDurationMs,
+            ).toInt()
+            val lastIndex = floor(
+                (Duration.between(origin, record.endTime).toMillis() - 1L).toDouble() / rowDurationMs,
+            ).toInt()
+            val first = max(0, firstIndex)
+            val last = min(rowCount - 1, lastIndex)
+            if (first <= last) {
+                for (index in first..last) {
+                    buckets[index].add(record)
+                }
+            }
+        }
+        return buckets
+    }
+
+    private fun List<CircadianDay>.toCalendarCircadianCandidates(): Map<LocalDate, List<CircadianDay>> {
+        if (isEmpty()) return emptyMap()
+        val candidates = mutableMapOf<LocalDate, MutableList<CircadianDay>>()
+        forEach { day ->
+            if (!day.isGap) {
+                day.coveredCalendarDates().forEach { date ->
+                    candidates.getOrPut(date) { mutableListOf() }.add(day)
+                }
+            }
+        }
+        return candidates
     }
 
     private fun CircadianDay.toCalendarOverlays(
