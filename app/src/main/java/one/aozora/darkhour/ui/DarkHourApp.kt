@@ -59,6 +59,7 @@ import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 import one.aozora.darkhour.data.HealthConnectAccess
 import one.aozora.darkhour.data.HealthDataRange
+import one.aozora.darkhour.data.HealthImportPhase
 import one.aozora.darkhour.core.circadian.CircadianAnalyzer
 import one.aozora.darkhour.core.model.SleepRecord
 import one.aozora.darkhour.core.periodogram.buildPeriodogramAnchors
@@ -96,6 +97,10 @@ fun DarkHourApp(
     healthDataRange: HealthDataRange = HealthDataRange.DEFAULT_PERIOD,
     hasHistoryPermission: Boolean = true,
     isRefreshing: Boolean = false,
+    importedRecordCount: Int = 0,
+    expectedRecordCount: Int? = null,
+    isImportPartial: Boolean = false,
+    importPhase: HealthImportPhase = HealthImportPhase.IDLE,
     importError: String? = null,
     totalHistoryDays: Int? = null,
     onRequestHealthPermissions: () -> Unit = {},
@@ -194,6 +199,10 @@ fun DarkHourApp(
                         healthDataRange = healthDataRange,
                         hasHistoryPermission = hasHistoryPermission,
                         isRefreshing = isRefreshing,
+                        importedRecordCount = importedRecordCount,
+                        expectedRecordCount = expectedRecordCount,
+                        isImportPartial = isImportPartial,
+                        importPhase = importPhase,
                         importError = importError,
                         totalHistoryDays = totalHistoryDays,
                         onRequestHealthPermissions = onRequestHealthPermissions,
@@ -235,6 +244,10 @@ fun DarkHourApp(
                         healthDataRange = healthDataRange,
                         hasHistoryPermission = hasHistoryPermission,
                         isRefreshing = isRefreshing,
+                        importedRecordCount = importedRecordCount,
+                        expectedRecordCount = expectedRecordCount,
+                        isImportPartial = isImportPartial,
+                        importPhase = importPhase,
                         importError = importError,
                         totalHistoryDays = totalHistoryDays,
                         onRequestHealthPermissions = onRequestHealthPermissions,
@@ -271,6 +284,10 @@ private fun AppPager(
     healthDataRange: HealthDataRange,
     hasHistoryPermission: Boolean,
     isRefreshing: Boolean,
+    importedRecordCount: Int,
+    expectedRecordCount: Int?,
+    isImportPartial: Boolean,
+    importPhase: HealthImportPhase,
     importError: String?,
     totalHistoryDays: Int?,
     onRequestHealthPermissions: () -> Unit,
@@ -318,6 +335,10 @@ private fun AppPager(
                 healthDataRange = healthDataRange,
                 hasHistoryPermission = hasHistoryPermission,
                 isRefreshing = isRefreshing,
+                importedRecordCount = importedRecordCount,
+                expectedRecordCount = expectedRecordCount,
+                isImportPartial = isImportPartial,
+                importPhase = importPhase,
                 importError = importError,
                 recordCount = records.size,
                 totalHistoryDays = totalHistoryDays,

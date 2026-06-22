@@ -9,17 +9,21 @@ import androidx.health.connect.client.request.ReadRecordsRequest
 import androidx.health.connect.client.time.TimeRangeFilter
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import one.aozora.darkhour.core.model.SleepRecord
 import java.time.Clock
 import java.time.Duration
 import java.time.Instant
-import java.time.temporal.ChronoUnit
 import java.time.ZoneId
+import java.time.temporal.ChronoUnit
 
 sealed class HealthDataRange {
     data object DefaultPeriod : HealthDataRange()
@@ -47,6 +51,12 @@ enum class HealthConnectAccess {
     UPDATE_REQUIRED,
 }
 
+enum class HealthImportPhase {
+    IDLE,
+    RECENT,
+    HISTORY,
+}
+
 data class HealthConnectUiState(
     val records: List<SleepRecord> = emptyList(),
     val access: HealthConnectAccess = HealthConnectAccess.UNAVAILABLE,
@@ -54,6 +64,10 @@ data class HealthConnectUiState(
     val totalHistoryDays: Int? = null,
     val hasHistoryPermission: Boolean = false,
     val isRefreshing: Boolean = false,
+    val importedRecordCount: Int = 0,
+    val expectedRecordCount: Int? = null,
+    val isImportPartial: Boolean = false,
+    val importPhase: HealthImportPhase = HealthImportPhase.IDLE,
     val errorMessage: String? = null,
 )
 
@@ -98,6 +112,10 @@ class HealthConnectDataController(
                             totalHistoryDays = null,
                             hasHistoryPermission = false,
                             isRefreshing = false,
+                            importedRecordCount = 0,
+                            expectedRecordCount = null,
+                            isImportPartial = false,
+                            importPhase = HealthImportPhase.IDLE,
                             errorMessage = null,
                         )
                     }
@@ -108,6 +126,10 @@ class HealthConnectDataController(
                             totalHistoryDays = null,
                             hasHistoryPermission = false,
                             isRefreshing = false,
+                            importedRecordCount = 0,
+                            expectedRecordCount = null,
+                            isImportPartial = false,
+                            importPhase = HealthImportPhase.IDLE,
                             errorMessage = null,
                         )
                     }
@@ -136,6 +158,10 @@ class HealthConnectDataController(
                 totalHistoryDays = if (hasHistoryPermission) state.value.totalHistoryDays else null,
                 hasHistoryPermission = hasHistoryPermission,
                 isRefreshing = false,
+                importedRecordCount = 0,
+                expectedRecordCount = null,
+                isImportPartial = false,
+                importPhase = HealthImportPhase.IDLE,
                 errorMessage = null,
             )
             return
@@ -145,24 +171,55 @@ class HealthConnectDataController(
             access = HealthConnectAccess.CONNECTED,
             hasHistoryPermission = hasHistoryPermission,
             isRefreshing = true,
+            importedRecordCount = 0,
+            expectedRecordCount = null,
+            isImportPartial = false,
+            importPhase = HealthImportPhase.RECENT,
             errorMessage = null,
         )
-        runCatching {
-            client.readSleepRecords(range, clock.instant(), zoneId)
-        }.onSuccess { imported ->
+        try {
+            val imported = withContext(Dispatchers.IO) {
+                client.readSleepRecords(
+                    range = range,
+                    now = clock.instant(),
+                    zoneId = zoneId,
+                    onProgress = ::publishImportProgress,
+                )
+            }
             mutableState.value = state.value.copy(
                 records = imported.records.map(ImportedSleepRecord::record).sortedBy(SleepRecord::startTime),
                 totalHistoryDays = imported.totalHistoryDays ?: state.value.totalHistoryDays,
                 access = HealthConnectAccess.CONNECTED,
                 isRefreshing = false,
+                importedRecordCount = imported.records.size,
+                expectedRecordCount = imported.records.size,
+                isImportPartial = false,
+                importPhase = HealthImportPhase.IDLE,
                 errorMessage = null,
             )
-        }.onFailure { failure ->
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (failure: Exception) {
             mutableState.value = state.value.copy(
                 isRefreshing = false,
+                isImportPartial = false,
+                importPhase = HealthImportPhase.IDLE,
                 errorMessage = failure.message ?: "Health Connect import failed",
             )
         }
+    }
+
+    private fun publishImportProgress(progress: HealthImportProgress) {
+        val progressRecords = progress.records
+            ?.map(ImportedSleepRecord::record)
+            ?.sortedBy(SleepRecord::startTime)
+        mutableState.value = state.value.copy(
+            records = progressRecords ?: state.value.records,
+            importedRecordCount = progress.importedRecordCount,
+            expectedRecordCount = progress.expectedRecordCount,
+            isImportPartial = progress.isImportPartial,
+            importPhase = progress.phase,
+        )
     }
 
     companion object {
@@ -178,23 +235,112 @@ internal suspend fun HealthConnectClient.readSleepRecords(
     range: HealthDataRange,
     now: Instant,
     zoneId: ZoneId,
+    onProgress: (HealthImportProgress) -> Unit = {},
 ): ImportedSleepRecords {
-    val queryStart = when (range) {
-        HealthDataRange.DefaultPeriod -> now.minus(DEFAULT_HISTORY_DURATION)
-        HealthDataRange.EntireHistory,
-        is HealthDataRange.Custom -> if (range.requiresHistoryPermission) {
-            Instant.EPOCH
-        } else {
-            now.minus(DEFAULT_HISTORY_DURATION)
-        }
+    if (!range.requiresHistoryPermission) {
+        val queryStart = now.minus(DEFAULT_HISTORY_DURATION)
+        val rawRecords = readSleepRecordsPageRange(queryStart, now)
+        return importSleepRecords(
+            rawRecords = rawRecords,
+            range = range,
+            now = now,
+            zoneId = zoneId,
+            totalHistoryComplete = false,
+        )
     }
+
+    return readSleepRecordsRecentFirst(
+        range = range,
+        now = now,
+        zoneId = zoneId,
+        onProgress = onProgress,
+    )
+}
+
+internal suspend fun HealthConnectClient.readSleepRecordsRecentFirst(
+    range: HealthDataRange,
+    now: Instant,
+    zoneId: ZoneId,
+    onProgress: (HealthImportProgress) -> Unit = {},
+): ImportedSleepRecords {
+    val accumulator = ImportedSleepAccumulator(zoneId)
+
+    val recentRange = HealthConnectReadRange(now.minus(DEFAULT_HISTORY_DURATION), now)
+    val recentRecords = readSleepRecordsPageRange(recentRange.start, recentRange.end)
+    accumulator.add(recentRecords)
+    currentCoroutineContext().ensureActive()
+    onProgress(
+        HealthImportProgress(
+            phase = HealthImportPhase.HISTORY,
+            records = accumulator.sortedRecords(),
+            importedRecordCount = accumulator.size,
+            expectedRecordCount = null,
+            isImportPartial = true,
+        ),
+    )
+
+    val oldestAvailableStart = if (range == HealthDataRange.EntireHistory) {
+        readOldestSleepRecord(Instant.EPOCH, recentRange.start)?.startTime
+    } else {
+        null
+    }
+    val olderRanges = if (range == HealthDataRange.EntireHistory && oldestAvailableStart == null) {
+        emptyList()
+    } else {
+        healthConnectReadRanges(
+            range = range,
+            now = now,
+            oldestAvailableStart = oldestAvailableStart,
+        ).drop(1)
+    }
+    olderRanges.forEachIndexed { index, readRange ->
+        currentCoroutineContext().ensureActive()
+        val rawRecords = readSleepRecordsPageRange(readRange.start, readRange.end)
+        accumulator.add(rawRecords)
+        currentCoroutineContext().ensureActive()
+        onProgress(
+            HealthImportProgress(
+                phase = HealthImportPhase.HISTORY,
+                records = null,
+                importedRecordCount = accumulator.size,
+                expectedRecordCount = null,
+                isImportPartial = index < olderRanges.lastIndex,
+            ),
+        )
+    }
+
+    return ImportedSleepRecords(
+        records = accumulator.sortedRecords(),
+        totalHistoryDays = accumulator.totalHistoryDays(now, zoneId),
+    )
+}
+
+internal suspend fun HealthConnectClient.readOldestSleepRecord(
+    start: Instant,
+    end: Instant,
+): SleepSessionRecord? {
+    if (start >= end) return null
+    return readRecords(
+        ReadRecordsRequest(
+            recordType = SleepSessionRecord::class,
+            timeRangeFilter = TimeRangeFilter.between(start, end),
+            ascendingOrder = true,
+            pageSize = 1,
+        ),
+    ).records.firstOrNull()
+}
+
+internal suspend fun HealthConnectClient.readSleepRecordsPageRange(
+    start: Instant,
+    end: Instant,
+): List<SleepSessionRecord> {
     val rawRecords = mutableListOf<SleepSessionRecord>()
     var pageToken: String? = null
     do {
         val response = readRecords(
             ReadRecordsRequest(
                 recordType = SleepSessionRecord::class,
-                timeRangeFilter = TimeRangeFilter.between(queryStart, now),
+                timeRangeFilter = TimeRangeFilter.between(start, end),
                 ascendingOrder = true,
                 pageSize = PAGE_SIZE,
                 pageToken = pageToken,
@@ -203,14 +349,7 @@ internal suspend fun HealthConnectClient.readSleepRecords(
         rawRecords += response.records
         pageToken = response.pageToken
     } while (pageToken != null)
-
-    return importSleepRecords(
-        rawRecords = rawRecords,
-        range = range,
-        now = now,
-        zoneId = zoneId,
-        totalHistoryComplete = queryStart == Instant.EPOCH,
-    )
+    return rawRecords
 }
 
 internal fun importSleepRecords(
@@ -239,6 +378,79 @@ internal data class ImportedSleepRecords(
     val totalHistoryDays: Int?,
 )
 
+internal data class HealthImportProgress(
+    val phase: HealthImportPhase,
+    val records: List<ImportedSleepRecord>? = null,
+    val importedRecordCount: Int,
+    val expectedRecordCount: Int?,
+    val isImportPartial: Boolean,
+)
+
+internal data class HealthConnectReadRange(
+    val start: Instant,
+    val end: Instant,
+)
+
+internal fun healthConnectReadRanges(
+    range: HealthDataRange,
+    now: Instant,
+    oldestAvailableStart: Instant? = null,
+): List<HealthConnectReadRange> {
+    val recentStart = now.minus(DEFAULT_HISTORY_DURATION)
+    if (!range.requiresHistoryPermission) {
+        return listOf(HealthConnectReadRange(recentStart, now))
+    }
+
+    val oldestStart = when (range) {
+        HealthDataRange.EntireHistory -> oldestAvailableStart ?: Instant.EPOCH
+        is HealthDataRange.Custom -> now.minus(Duration.ofDays(range.days.toLong()))
+        HealthDataRange.DefaultPeriod -> recentStart
+    }
+    if (oldestStart >= recentStart) {
+        return listOf(HealthConnectReadRange(oldestStart, now))
+    }
+
+    val ranges = mutableListOf(HealthConnectReadRange(recentStart, now))
+    var chunkEnd = recentStart
+    while (chunkEnd > oldestStart) {
+        val chunkStart = maxOf(oldestStart, chunkEnd.minus(OLDER_HISTORY_CHUNK_DURATION))
+        ranges += HealthConnectReadRange(chunkStart, chunkEnd)
+        chunkEnd = chunkStart
+    }
+    return ranges
+}
+
+internal class ImportedSleepAccumulator(
+    private val zoneId: ZoneId,
+) {
+    private val recordsByIdentity = LinkedHashMap<Any, ImportedSleepRecord>()
+
+    val size: Int
+        get() = recordsByIdentity.size
+
+    fun add(rawRecords: List<SleepSessionRecord>) {
+        rawRecords.forEach { rawRecord ->
+            val imported = rawRecord.toImportedSleepRecord(zoneId)
+            recordsByIdentity[imported.deduplicationIdentity()] = imported
+        }
+    }
+
+    fun sortedRecords(): List<ImportedSleepRecord> =
+        recordsByIdentity.values.sortedBy { it.record.startTime }
+
+    fun totalHistoryDays(now: Instant, zoneId: ZoneId): Int? {
+        val oldest = recordsByIdentity.values.minOfOrNull { it.record.startTime } ?: return null
+        val oldestDate = oldest.atZone(zoneId).toLocalDate()
+        val currentDate = now.atZone(zoneId).toLocalDate()
+        return (ChronoUnit.DAYS.between(oldestDate, currentDate) + 1)
+            .coerceAtLeast(HealthDataRange.MINIMUM_CUSTOM_DAYS.toLong())
+            .toInt()
+    }
+}
+
+private fun ImportedSleepRecord.deduplicationIdentity(): Any =
+    sourceRecordId ?: record.logId
+
 private fun List<SleepSessionRecord>.totalHistoryDays(now: Instant, zoneId: ZoneId): Int? {
     val oldest = minOfOrNull { it.startTime } ?: return null
     val oldestDate = oldest.atZone(zoneId).toLocalDate()
@@ -258,4 +470,5 @@ private fun SleepSessionRecord.isInRange(range: HealthDataRange, now: Instant): 
 }
 
 private val DEFAULT_HISTORY_DURATION = Duration.ofDays(30)
+private val OLDER_HISTORY_CHUNK_DURATION = Duration.ofDays(180)
 private const val PAGE_SIZE = 1000

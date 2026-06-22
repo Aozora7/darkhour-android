@@ -57,6 +57,10 @@ class MainActivity : ComponentActivity() {
                     healthDataRange = healthState.dataRange,
                     hasHistoryPermission = BuildConfig.USE_DEMO_DATA || healthState.hasHistoryPermission,
                     isRefreshing = !BuildConfig.USE_DEMO_DATA && healthState.isRefreshing,
+                    importedRecordCount = healthState.importedRecordCount,
+                    expectedRecordCount = healthState.expectedRecordCount,
+                    isImportPartial = healthState.isImportPartial,
+                    importPhase = healthState.importPhase,
                     importError = if (BuildConfig.USE_DEMO_DATA) null else healthState.errorMessage,
                     totalHistoryDays = healthState.totalHistoryDays,
                     onRequestHealthPermissions = {

@@ -30,6 +30,7 @@ import androidx.compose.ui.unit.dp
 import one.aozora.darkhour.ui.AppSettings
 import one.aozora.darkhour.data.HealthConnectAccess
 import one.aozora.darkhour.data.HealthDataRange
+import one.aozora.darkhour.data.HealthImportPhase
 import kotlin.math.roundToInt
 
 @Composable
@@ -41,6 +42,10 @@ fun SettingsScreen(
     healthDataRange: HealthDataRange = HealthDataRange.DEFAULT_PERIOD,
     hasHistoryPermission: Boolean = true,
     isRefreshing: Boolean = false,
+    importedRecordCount: Int = 0,
+    expectedRecordCount: Int? = null,
+    isImportPartial: Boolean = false,
+    importPhase: HealthImportPhase = HealthImportPhase.IDLE,
     importError: String? = null,
     recordCount: Int = 0,
     totalHistoryDays: Int? = null,
@@ -149,7 +154,13 @@ fun SettingsScreen(
                         "Provider update required"
                     healthConnectAccess == HealthConnectAccess.UNAVAILABLE ->
                         "Unavailable on this device"
-                    isRefreshing -> "Refreshing sleep data..."
+                    isRefreshing -> importStatusText(
+                        importPhase = importPhase,
+                        importedRecordCount = importedRecordCount,
+                        expectedRecordCount = expectedRecordCount,
+                        isImportPartial = isImportPartial,
+                        visibleRecordCount = recordCount,
+                    )
                     else -> "$recordCount sleep records imported"
                 },
                 style = MaterialTheme.typography.bodyMedium,
@@ -215,6 +226,30 @@ private enum class HealthDataRangeOption(
 }
 
 private val HealthDataRangeOptions = HealthDataRangeOption.entries
+
+private fun importStatusText(
+    importPhase: HealthImportPhase,
+    importedRecordCount: Int,
+    expectedRecordCount: Int?,
+    isImportPartial: Boolean,
+    visibleRecordCount: Int,
+): String {
+    val count = maxOf(importedRecordCount, visibleRecordCount)
+    return when (importPhase) {
+        HealthImportPhase.RECENT -> "Loading recent sleep data..."
+        HealthImportPhase.HISTORY -> if (isImportPartial) {
+            val expected = expectedRecordCount?.let { " of $it" } ?: ""
+            "Loading older history... $count$expected records found"
+        } else {
+            "Loading older history..."
+        }
+        HealthImportPhase.IDLE -> if (isImportPartial) {
+            "$count sleep records imported; full history still loading"
+        } else {
+            "Refreshing sleep data..."
+        }
+    }
+}
 
 @Composable
 private fun SettingsSection(

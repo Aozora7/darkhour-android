@@ -40,6 +40,75 @@ class HealthConnectSleepImportTest {
     }
 
     @Test
+    fun defaultRangePlansOnlyRecentThirtyDays() {
+        val now = Instant.parse("2026-06-20T00:00:00Z")
+
+        val ranges = healthConnectReadRanges(HealthDataRange.DEFAULT_PERIOD, now)
+
+        assertEquals(listOf(HealthConnectReadRange(now.minusSeconds(30L * 24 * 60 * 60), now)), ranges)
+    }
+
+    @Test
+    fun allHistoryPlansRecentFirstThenOlderChunks() {
+        val now = Instant.parse("2026-06-20T00:00:00Z")
+        val recentStart = now.minusSeconds(30L * 24 * 60 * 60)
+
+        val ranges = healthConnectReadRanges(HealthDataRange.ENTIRE_HISTORY, now)
+
+        assertEquals(HealthConnectReadRange(recentStart, now), ranges.first())
+        assertEquals(recentStart, ranges[1].end)
+        assertEquals(Instant.EPOCH, ranges.last().start)
+    }
+
+    @Test
+    fun allHistoryPlanCanBeBoundedByDiscoveredOldestRecord() {
+        val now = Instant.parse("2026-06-20T00:00:00Z")
+        val oldest = Instant.parse("2022-06-20T00:00:00Z")
+
+        val ranges = healthConnectReadRanges(
+            range = HealthDataRange.ENTIRE_HISTORY,
+            now = now,
+            oldestAvailableStart = oldest,
+        )
+
+        assertEquals(oldest, ranges.last().start)
+    }
+
+    @Test
+    fun customHistoryRangeStopsAtRequestedDayCount() {
+        val now = Instant.parse("2026-06-20T00:00:00Z")
+        val oldestStart = now.minusSeconds(90L * 24 * 60 * 60)
+        val recentStart = now.minusSeconds(30L * 24 * 60 * 60)
+
+        val ranges = healthConnectReadRanges(HealthDataRange.custom(90), now)
+
+        assertEquals(
+            listOf(
+                HealthConnectReadRange(recentStart, now),
+                HealthConnectReadRange(oldestStart, recentStart),
+            ),
+            ranges,
+        )
+    }
+
+    @Test
+    fun accumulatorDeduplicatesByStableGeneratedIdentity() {
+        val start = Instant.parse("2026-06-10T21:00:00Z")
+        val accumulator = ImportedSleepAccumulator(ZoneId.of("UTC"))
+
+        accumulator.add(
+            listOf(
+                sleepRecord(start),
+                sleepRecord(start),
+                sleepRecord(start.plusSeconds(24 * 60 * 60)),
+            ),
+        )
+
+        assertEquals(2, accumulator.size)
+        assertEquals(start, accumulator.sortedRecords().first().record.startTime)
+    }
+
+    @Test
     fun mapsStagesTotalsOffsetsAndSourceIdentity() {
         val start = Instant.parse("2026-06-10T21:00:00Z")
         val record = SleepSessionRecord(
