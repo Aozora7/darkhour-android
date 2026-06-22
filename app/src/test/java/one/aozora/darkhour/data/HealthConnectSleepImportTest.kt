@@ -8,6 +8,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -46,6 +47,27 @@ class HealthConnectSleepImportTest {
         val ranges = healthConnectReadRanges(HealthDataRange.DEFAULT_PERIOD, now)
 
         assertEquals(listOf(HealthConnectReadRange(now.minusSeconds(30L * 24 * 60 * 60), now)), ranges)
+    }
+
+    @Test
+    fun defaultRangePlansVisibleWindowBeforeRestOfThirtyDays() {
+        val now = Instant.parse("2026-06-20T00:00:00Z")
+        val visibleStart = now.minusSeconds(8L * 24 * 60 * 60)
+        val defaultStart = now.minusSeconds(30L * 24 * 60 * 60)
+
+        val ranges = healthConnectReadRanges(
+            range = HealthDataRange.DEFAULT_PERIOD,
+            now = now,
+            initialImportDuration = Duration.ofDays(8),
+        )
+
+        assertEquals(
+            listOf(
+                HealthConnectReadRange(visibleStart, now),
+                HealthConnectReadRange(defaultStart, visibleStart),
+            ),
+            ranges,
+        )
     }
 
     @Test

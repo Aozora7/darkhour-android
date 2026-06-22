@@ -11,9 +11,13 @@ import androidx.lifecycle.lifecycleScope
 import one.aozora.darkhour.data.HealthConnectDataController
 import one.aozora.darkhour.data.HealthDataRange
 import one.aozora.darkhour.ui.AppSettingsStore
+import one.aozora.darkhour.ui.ActogramDisplayOptions
+import one.aozora.darkhour.ui.ActogramTimeScale
 import one.aozora.darkhour.ui.DarkHourApp
 import one.aozora.darkhour.ui.DemoData
 import one.aozora.darkhour.ui.theme.DarkHourTheme
+import java.time.Duration
+import kotlin.math.ceil
 
 class MainActivity : ComponentActivity() {
     private lateinit var healthConnect: HealthConnectDataController
@@ -27,16 +31,18 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         appSettings = AppSettingsStore(this)
+        val startupDisplayOptions = appSettings.readDisplayOptions()
         healthConnect = HealthConnectDataController(
             context = this,
             scope = lifecycleScope,
             initialDataRange = appSettings.readHealthDataRange(),
+            initialImportDuration = initialVisibleImportDuration(startupDisplayOptions),
         )
         enableEdgeToEdge()
         setContent {
             val healthState by healthConnect.state.collectAsState()
             val initialSettings = remember { appSettings.read() }
-            val initialDisplayOptions = remember { appSettings.readDisplayOptions() }
+            val initialDisplayOptions = remember { startupDisplayOptions }
             val initialScheduleEntries = remember { appSettings.readScheduleEntries() }
             val records = if (BuildConfig.USE_DEMO_DATA) DemoData.records else healthState.records
             val healthConnectAccess = if (BuildConfig.USE_DEMO_DATA) {
@@ -99,3 +105,25 @@ class MainActivity : ComponentActivity() {
         }
     }
 }
+
+private fun ComponentActivity.initialVisibleImportDuration(
+    options: ActogramDisplayOptions,
+): Duration {
+    val heightDp = resources.displayMetrics.heightPixels / resources.displayMetrics.density
+    val visibleRows = ceil(
+        ((heightDp - ACTOGRAM_AXIS_HEIGHT_DP).coerceAtLeast(0f) / options.rowHeightDp)
+            .toDouble(),
+    ).toLong()
+    val doublePlotRows = if (options.doublePlot) 1L else 0L
+    val rowHours = when (options.timeScale) {
+        ActogramTimeScale.HOURS_24 -> 24.0
+        ActogramTimeScale.CIRCADIAN_TAU -> 24.0
+        ActogramTimeScale.CUSTOM -> options.customHours.toDouble()
+    }
+    val days = ceil(((visibleRows + doublePlotRows).coerceAtLeast(1L) * rowHours) / 24.0)
+        .toLong()
+        .coerceAtLeast(1L)
+    return Duration.ofDays(days)
+}
+
+private const val ACTOGRAM_AXIS_HEIGHT_DP = 30f

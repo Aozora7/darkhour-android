@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -50,6 +51,7 @@ import one.aozora.darkhour.ui.theme.SleepRem
 import one.aozora.darkhour.ui.theme.SleepWake
 import java.time.DayOfWeek
 import java.time.LocalDate
+import kotlin.math.abs
 import kotlin.math.ceil
 import kotlin.math.floor
 import kotlin.math.max
@@ -90,7 +92,7 @@ fun ActogramCanvas(
         ).toInt()
         val displayRowCount = max(layout.rows.size, rowsNeededForViewport)
         val displayedRows = layout.rowsForDisplay(options.order, displayRowCount)
-        val tauMode = kotlin.math.abs(layout.rowHours - 24.0) >= 0.0001
+        val tauMode = abs(layout.rowHours - 24.0) >= 0.0001
         val displayedLabels = remember(
             displayedRows,
             tauMode,
@@ -137,11 +139,15 @@ fun ActogramCanvas(
             axisHeightPx + rowHeightPx * displayRowCount,
         )
         val maxScrollOffset = (contentHeight - viewportHeight).coerceAtLeast(0f)
-        var scrollOffsetPx by remember { mutableStateOf(0f) }
+        var scrollOffsetPx by remember { mutableFloatStateOf(0f) }
+        var userScrolledFromInitialPosition by remember(options.order) { mutableStateOf(false) }
         val currentScrollOffset by rememberUpdatedState(scrollOffsetPx)
         val currentMaxScrollOffset by rememberUpdatedState(maxScrollOffset)
         val scrollableState = rememberScrollableState { delta ->
             val oldOffset = scrollOffsetPx
+            if (abs(delta) > 0.001f) {
+                userScrolledFromInitialPosition = true
+            }
             scrollOffsetPx = (scrollOffsetPx - delta).coerceIn(0f, currentMaxScrollOffset)
             oldOffset - scrollOffsetPx
         }
@@ -150,16 +156,28 @@ fun ActogramCanvas(
 
         LaunchedEffect(gestureRowHeightDp, options.rowHeightDp, isTransforming) {
             val gestureHeight = gestureRowHeightDp ?: return@LaunchedEffect
-            if (!isTransforming && kotlin.math.abs(gestureHeight - options.rowHeightDp) < 0.001f) {
+            if (!isTransforming && abs(gestureHeight - options.rowHeightDp) < 0.001f) {
                 gestureRowHeightDp = null
             }
         }
 
-        LaunchedEffect(displayedRowHeightDp, contentHeight, isTransforming) {
+        LaunchedEffect(
+            displayedRowHeightDp,
+            contentHeight,
+            isTransforming,
+            options.order,
+            userScrolledFromInitialPosition,
+        ) {
             // Only snap if we aren't actively zooming/fighting the gesture
             if (pendingAnchoredScroll != null && !isTransforming) {
                 scrollOffsetPx = pendingAnchoredScroll!!.coerceIn(0f, maxScrollOffset)
                 pendingAnchoredScroll = null
+            } else if (
+                !isTransforming &&
+                options.order == ActogramOrder.OLDEST_FIRST &&
+                !userScrolledFromInitialPosition
+            ) {
+                scrollOffsetPx = maxScrollOffset
             } else if (!isTransforming && scrollOffsetPx > maxScrollOffset) {
                 scrollOffsetPx = maxScrollOffset
             }
@@ -171,6 +189,7 @@ fun ActogramCanvas(
                     detectActogramTransformGestures(
                         currentScroll = { currentScrollOffset },
                         onScrollTargetChange = { target ->
+                            userScrolledFromInitialPosition = true
                             scrollOffsetPx = target.coerceIn(0f, currentMaxScrollOffset)
                         },
                         density = density.density,
@@ -349,7 +368,7 @@ private fun DrawScope.drawActogram(
 ) {
     val axisHeight = 30.dp.toPx()
     val rowHeight = rowHeightDp.dp.toPx()
-    val tauMode = kotlin.math.abs(layout.rowHours - 24.0) >= 0.0001
+    val tauMode = abs(layout.rowHours - 24.0) >= 0.0001
     val rightPadding = 10.dp.toPx()
     val plotWidth = (size.width - labelWidth - rightPadding).coerceAtLeast(1f)
     val displayedHours = layout.rowHours * if (options.doublePlot) 2.0 else 1.0
@@ -510,7 +529,7 @@ private fun DrawScope.drawHourAxis(
     }
     val hourWidth = plotWidth / displayedHours.toFloat()
     for (hour in 0..displayedHours.toInt() step 6) {
-        val label = if (kotlin.math.abs(rowHours - 24.0) < 0.0001) {
+        val label = if (abs(rowHours - 24.0) < 0.0001) {
             formatActogramAxisHour(hour, use24HourTime)
         } else {
             "+$hour"
@@ -675,7 +694,7 @@ internal fun hitTestActogram(
     val contentY = position.y + verticalScrollOffsetPx
     if (contentY < axisHeight || rowHeight <= 0f) return null
 
-    val tauMode = kotlin.math.abs(rowHours - 24.0) >= 0.0001
+    val tauMode = abs(rowHours - 24.0) >= 0.0001
     val labelWidth = labelWidthPx ?: (actogramMaxLabelWidthDp(
         showDateLabels = options.showDateLabels,
         tauMode = tauMode,
