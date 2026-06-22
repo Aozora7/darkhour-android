@@ -279,11 +279,7 @@ internal suspend fun HealthConnectClient.readSleepRecordsRecentFirst(
         ),
     )
 
-    val oldestAvailableStart = if (range == HealthDataRange.EntireHistory) {
-        readOldestSleepRecord(Instant.EPOCH, recentRange.start)?.startTime
-    } else {
-        null
-    }
+    val oldestAvailableStart = readOldestSleepRecord(Instant.EPOCH, now)?.startTime
     val olderRanges = if (range == HealthDataRange.EntireHistory && oldestAvailableStart == null) {
         emptyList()
     } else {
@@ -311,7 +307,11 @@ internal suspend fun HealthConnectClient.readSleepRecordsRecentFirst(
 
     return ImportedSleepRecords(
         records = accumulator.sortedRecords(),
-        totalHistoryDays = accumulator.totalHistoryDays(now, zoneId),
+        totalHistoryDays = totalHistoryDaysFromOldest(
+            oldest = oldestAvailableStart ?: accumulator.oldestStartTime(),
+            now = now,
+            zoneId = zoneId,
+        ),
     )
 }
 
@@ -439,13 +439,11 @@ internal class ImportedSleepAccumulator(
         recordsByIdentity.values.sortedBy { it.record.startTime }
 
     fun totalHistoryDays(now: Instant, zoneId: ZoneId): Int? {
-        val oldest = recordsByIdentity.values.minOfOrNull { it.record.startTime } ?: return null
-        val oldestDate = oldest.atZone(zoneId).toLocalDate()
-        val currentDate = now.atZone(zoneId).toLocalDate()
-        return (ChronoUnit.DAYS.between(oldestDate, currentDate) + 1)
-            .coerceAtLeast(HealthDataRange.MINIMUM_CUSTOM_DAYS.toLong())
-            .toInt()
+        return totalHistoryDaysFromOldest(oldestStartTime(), now, zoneId)
     }
+
+    fun oldestStartTime(): Instant? =
+        recordsByIdentity.values.minOfOrNull { it.record.startTime }
 }
 
 private fun ImportedSleepRecord.deduplicationIdentity(): Any =
@@ -453,6 +451,15 @@ private fun ImportedSleepRecord.deduplicationIdentity(): Any =
 
 private fun List<SleepSessionRecord>.totalHistoryDays(now: Instant, zoneId: ZoneId): Int? {
     val oldest = minOfOrNull { it.startTime } ?: return null
+    return totalHistoryDaysFromOldest(oldest, now, zoneId)
+}
+
+private fun totalHistoryDaysFromOldest(
+    oldest: Instant?,
+    now: Instant,
+    zoneId: ZoneId,
+): Int? {
+    if (oldest == null) return null
     val oldestDate = oldest.atZone(zoneId).toLocalDate()
     val currentDate = now.atZone(zoneId).toLocalDate()
     return (ChronoUnit.DAYS.between(oldestDate, currentDate) + 1)
