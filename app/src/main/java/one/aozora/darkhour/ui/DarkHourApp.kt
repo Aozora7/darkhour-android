@@ -71,6 +71,7 @@ import one.aozora.darkhour.ui.actogram.ActogramScreen
 import one.aozora.darkhour.ui.schedule.ScheduleScreen
 import one.aozora.darkhour.ui.settings.SettingsScreen
 import one.aozora.darkhour.ui.stats.StatsScreen
+import kotlin.time.Duration.Companion.milliseconds
 
 private data class DestinationItem(
     val destination: DarkHourDestination,
@@ -137,7 +138,7 @@ fun DarkHourApp(
         )
     }
     LaunchedEffect(options) {
-        delay(300)
+        delay(300.milliseconds)
         onDisplayOptionsChange(options)
     }
 

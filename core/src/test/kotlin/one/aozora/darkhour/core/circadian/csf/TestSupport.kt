@@ -11,7 +11,6 @@ import kotlin.math.cos
 import kotlin.math.ln
 import kotlin.math.max
 import kotlin.math.roundToInt
-import kotlin.math.sin
 import kotlin.math.sqrt
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -59,7 +58,7 @@ private class Mulberry32(seed: Int) {
 
     fun next(): Double {
         state = state or 0
-        state = state + 0x6d2b79f5
+        state += 0x6d2b79f5
         var t = state
         t = (t xor (t ushr 15)) * (1 or t)
         t = t xor ((t xor (t ushr 7)) * (61 or t))

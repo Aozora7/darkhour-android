@@ -30,7 +30,7 @@ fun prepareAnchors(
         record to weight
     }
 
-    val bestByDate = linkedMapOf<java.time.LocalDate, CsfAnchor>()
+    val bestByDate = linkedMapOf<LocalDate, CsfAnchor>()
 
     for ((record, weight) in candidates) {
         val existing = bestByDate[record.dateOfSleep]

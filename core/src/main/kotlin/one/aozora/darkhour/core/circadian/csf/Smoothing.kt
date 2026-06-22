@@ -123,9 +123,9 @@ private fun correctSingleEdge(
         while (correction < -12.0) correction += 24.0
 
         val t = if (edge == EdgeType.END) {
-            if (EDGE_WINDOW > 0) (localD - edgeStart).toDouble() / EDGE_WINDOW else 1.0
+            (localD - edgeStart).toDouble() / EDGE_WINDOW
         } else {
-            if (EDGE_WINDOW > 0) 1.0 - localD.toDouble() / EDGE_WINDOW else 1.0
+            1.0 - localD.toDouble() / EDGE_WINDOW
         }
         val blendWeight = t * t
         states[localD] = state.withSmoothed(smoothedPhase = state.smoothedPhase + blendWeight * correction)
@@ -185,7 +185,7 @@ private fun correctStartEdgeFromInterior(states: MutableList<SmoothedState>) {
         val state = states[localD]
         val targetPhase = slope * localD + intercept
         val correction = (targetPhase - state.smoothedPhase).coerceIn(-6.0, 6.0)
-        val t = if (EDGE_WINDOW > 0) 1.0 - localD.toDouble() / EDGE_WINDOW else 1.0
+        val t = 1.0 - localD.toDouble() / EDGE_WINDOW
         states[localD] = state.withSmoothed(smoothedPhase = state.smoothedPhase + t * t * correction)
     }
 }

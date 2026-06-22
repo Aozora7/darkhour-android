@@ -281,9 +281,8 @@ object ActogramLayoutEngine {
             } else {
                 localStart.format(RowDateTimeFormatter)
             }
-            val overlayDate = date
-            val circadian = circadianByDate[overlayDate]
-            val circadianMidnight = overlayDate.atStartOfDay().toInstant(fallbackOffset)
+            val circadian = circadianByDate[date]
+            val circadianMidnight = date.atStartOfDay().toInstant(fallbackOffset)
 
             ActogramRow(
                 date = date,
