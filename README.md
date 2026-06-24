@@ -4,6 +4,7 @@ Dark Hour Android is a native Android/Jetpack Compose app for inspecting sleep,
 circadian timing, and schedule alignment from Health Connect data. It is an Android native reimlementation of [25h.aozora.one](https://25h.aozora.one)
 ([Aozora7/darkhour](https://github.com/Aozora7/darkhour)) that uses Health Connect instead of Google Health API as the source of data, making it usable with more wearable vendors.
 
+[![GooglePlay](images/google_play.webp)](https://play.google.com/store/apps/details?id=one.aozora.darkhour)
 
 ## Screenshots
 
@@ -12,7 +13,6 @@ circadian timing, and schedule alignment from Health Connect data. It is an Andr
   <img src="images/actogram-options.webp" width="200">
   <img src="images/stats-screen.webp" width="200">
   <img src="images/schedule-add-entry.webp" width="200">
-  <img src="images/settings-screen.webp" width="200">
 </div>
 
 ## Features
