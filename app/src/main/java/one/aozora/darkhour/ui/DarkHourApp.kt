@@ -32,7 +32,6 @@ import androidx.compose.material.icons.outlined.Bedtime
 import androidx.compose.material.icons.outlined.QueryStats
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.Icon
-import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationRail
 import androidx.compose.material3.NavigationRailItem
@@ -171,97 +170,84 @@ fun DarkHourApp(
         if (scheduleIndex >= 0) selectDestination(scheduleIndex)
     }
 
-    androidx.compose.material3.Surface(
-        modifier = modifier.fillMaxSize(),
-        color = MaterialTheme.colorScheme.surface,
-        contentColor = MaterialTheme.colorScheme.onSurface
+    DarkHourStateProvider(
+        sleepAnalysis = SleepAnalysisState(
+            records = filteredRecords,
+            analysis = analysis,
+            periodogram = periodogram,
+        ),
+        appSettings = AppSettingsState(
+            settings = settings,
+            onSettingsChange = ::updateSettings,
+        ),
+        actogramDisplay = ActogramDisplayState(
+            layout = layout,
+            options = options,
+            onOptionsChange = ::updateDisplayOptions,
+        ),
+        schedule = ScheduleState(
+            entries = scheduleEntries,
+            pendingEditId = pendingScheduleEditId,
+            onEntriesChange = ::updateScheduleEntries,
+            onEditConsumed = { pendingScheduleEditId = null },
+            onEditEntry = ::editScheduleEntry,
+        ),
+        healthConnect = HealthConnectState(
+            access = healthConnectAccess,
+            dataRange = healthDataRange,
+            hasHistoryPermission = hasHistoryPermission,
+            isRefreshing = isRefreshing,
+            importedRecordCount = importedRecordCount,
+            expectedRecordCount = expectedRecordCount,
+            isImportPartial = isImportPartial,
+            importPhase = importPhase,
+            importError = importError,
+            totalHistoryDays = totalHistoryDays,
+            onRequestHealthPermissions = onRequestHealthPermissions,
+            onRequestHistoryPermission = onRequestHistoryPermission,
+            onDataRangeChange = onHealthDataRangeChange,
+        ),
     ) {
-        BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-            val wide = maxWidth >= 600.dp
+        androidx.compose.material3.Surface(
+            modifier = modifier.fillMaxSize(),
+            color = MaterialTheme.colorScheme.surface,
+            contentColor = MaterialTheme.colorScheme.onSurface
+        ) {
+            BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+                val wide = maxWidth >= 600.dp
 
-            if (wide) {
-                Row(Modifier.fillMaxSize()) {
-                    AppNavigationRail(
-                        selectedIndex = pagerState.currentPage,
-                        onSelected = ::selectDestination,
-                    )
-                    AppPager(
-                        pagerState = pagerState,
-                        records = filteredRecords,
-                        analysis = analysis,
-                        periodogram = periodogram,
-                        layout = layout,
-                        options = options,
-                        settings = settings,
-                        scheduleEntries = scheduleEntries,
-                        onOptionsChange = ::updateDisplayOptions,
-                        onTransformingChange = { actogramTransforming = it },
-                        onSettingsChange = ::updateSettings,
-                        onScheduleEntriesChange = ::updateScheduleEntries,
-                        pendingScheduleEditId = pendingScheduleEditId,
-                        onScheduleEditConsumed = { pendingScheduleEditId = null },
-                        onEditScheduleEntry = ::editScheduleEntry,
-                        healthConnectAccess = healthConnectAccess,
-                        healthDataRange = healthDataRange,
-                        hasHistoryPermission = hasHistoryPermission,
-                        isRefreshing = isRefreshing,
-                        importedRecordCount = importedRecordCount,
-                        expectedRecordCount = expectedRecordCount,
-                        isImportPartial = isImportPartial,
-                        importPhase = importPhase,
-                        importError = importError,
-                        totalHistoryDays = totalHistoryDays,
-                        onRequestHealthPermissions = onRequestHealthPermissions,
-                        onRequestHistoryPermission = onRequestHistoryPermission,
-                        onHealthDataRangeChange = onHealthDataRangeChange,
-                        userScrollEnabled = !actogramTransforming,
-                        modifier = Modifier.weight(1f),
-                    )
-                }
-            } else {
-                Scaffold(
-                    modifier = Modifier.fillMaxSize(),
-                    containerColor = MaterialTheme.colorScheme.surface,
-                    bottomBar = {
-                        AppNavigationBar(
+                if (wide) {
+                    Row(Modifier.fillMaxSize()) {
+                        AppNavigationRail(
                             selectedIndex = pagerState.currentPage,
-                            pagerState = pagerState,
                             onSelected = ::selectDestination,
                         )
-                    },
-                ) { padding ->
-                    AppPager(
-                        pagerState = pagerState,
-                        records = filteredRecords,
-                        analysis = analysis,
-                        periodogram = periodogram,
-                        layout = layout,
-                        options = options,
-                        settings = settings,
-                        scheduleEntries = scheduleEntries,
-                        onOptionsChange = ::updateDisplayOptions,
-                        onTransformingChange = { actogramTransforming = it },
-                        onSettingsChange = ::updateSettings,
-                        onScheduleEntriesChange = ::updateScheduleEntries,
-                        pendingScheduleEditId = pendingScheduleEditId,
-                        onScheduleEditConsumed = { pendingScheduleEditId = null },
-                        onEditScheduleEntry = ::editScheduleEntry,
-                        healthConnectAccess = healthConnectAccess,
-                        healthDataRange = healthDataRange,
-                        hasHistoryPermission = hasHistoryPermission,
-                        isRefreshing = isRefreshing,
-                        importedRecordCount = importedRecordCount,
-                        expectedRecordCount = expectedRecordCount,
-                        isImportPartial = isImportPartial,
-                        importPhase = importPhase,
-                        importError = importError,
-                        totalHistoryDays = totalHistoryDays,
-                        onRequestHealthPermissions = onRequestHealthPermissions,
-                        onRequestHistoryPermission = onRequestHistoryPermission,
-                        onHealthDataRangeChange = onHealthDataRangeChange,
-                        userScrollEnabled = !actogramTransforming,
-                        modifier = Modifier.padding(padding),
-                    )
+                        AppPager(
+                            pagerState = pagerState,
+                            userScrollEnabled = !actogramTransforming,
+                            onTransformingChange = { actogramTransforming = it },
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                } else {
+                    Scaffold(
+                        modifier = Modifier.fillMaxSize(),
+                        containerColor = MaterialTheme.colorScheme.surface,
+                        bottomBar = {
+                            AppNavigationBar(
+                                selectedIndex = pagerState.currentPage,
+                                pagerState = pagerState,
+                                onSelected = ::selectDestination,
+                            )
+                        },
+                    ) { padding ->
+                        AppPager(
+                            pagerState = pagerState,
+                            userScrollEnabled = !actogramTransforming,
+                            onTransformingChange = { actogramTransforming = it },
+                            modifier = Modifier.padding(padding),
+                        )
+                    }
                 }
             }
         }
@@ -272,33 +258,7 @@ fun DarkHourApp(
 @Composable
 private fun AppPager(
     pagerState: androidx.compose.foundation.pager.PagerState,
-    records: List<SleepRecord>,
-    analysis: one.aozora.darkhour.core.circadian.csf.CsfAnalysis,
-    periodogram: one.aozora.darkhour.core.periodogram.PeriodogramResult,
-    layout: one.aozora.darkhour.ui.actogram.ActogramLayout,
-    options: ActogramDisplayOptions,
-    settings: AppSettings,
-    scheduleEntries: List<ScheduleEntry>,
-    onOptionsChange: (ActogramDisplayOptions) -> Unit,
     onTransformingChange: (Boolean) -> Unit,
-    onSettingsChange: (AppSettings) -> Unit,
-    onScheduleEntriesChange: (List<ScheduleEntry>) -> Unit,
-    pendingScheduleEditId: Long?,
-    onScheduleEditConsumed: () -> Unit,
-    onEditScheduleEntry: (Long) -> Unit,
-    healthConnectAccess: HealthConnectAccess,
-    healthDataRange: HealthDataRange,
-    hasHistoryPermission: Boolean,
-    isRefreshing: Boolean,
-    importedRecordCount: Int,
-    expectedRecordCount: Int?,
-    isImportPartial: Boolean,
-    importPhase: HealthImportPhase,
-    importError: String?,
-    totalHistoryDays: Int?,
-    onRequestHealthPermissions: () -> Unit,
-    onRequestHistoryPermission: () -> Unit,
-    onHealthDataRangeChange: (HealthDataRange) -> Unit,
     userScrollEnabled: Boolean,
     modifier: Modifier = Modifier,
 ) {
@@ -309,104 +269,12 @@ private fun AppPager(
         beyondViewportPageCount = 1,
     ) { page ->
         when (DarkHourDestination.entries[page]) {
-            DarkHourDestination.ACTOGRAM -> {
-                if (healthConnectAccess == HealthConnectAccess.CONNECTED) {
-                    ActogramScreen(
-                        layout = layout,
-                        options = options,
-                        useIsoDateTime = settings.useIsoDateTime,
-                        onOptionsChange = onOptionsChange,
-                        onTransformingChange = onTransformingChange,
-                        onEditScheduleEntry = onEditScheduleEntry,
-                    )
-                } else {
-                    HealthConnectGate(
-                        access = healthConnectAccess,
-                        dataRange = healthDataRange,
-                        onRequestPermissions = onRequestHealthPermissions,
-                    )
-                }
-            }
-            DarkHourDestination.STATS -> StatsScreen(records, analysis, periodogram)
-            DarkHourDestination.SCHEDULE -> ScheduleScreen(
-                entries = scheduleEntries,
-                onEntriesChange = onScheduleEntriesChange,
-                editEntryId = pendingScheduleEditId,
-                onEditEntryConsumed = onScheduleEditConsumed,
+            DarkHourDestination.ACTOGRAM -> ActogramScreen(
+                onTransformingChange = onTransformingChange,
             )
-            DarkHourDestination.SETTINGS -> SettingsScreen(
-                settings = settings,
-                onSettingsChange = onSettingsChange,
-                healthConnectAccess = healthConnectAccess,
-                healthDataRange = healthDataRange,
-                hasHistoryPermission = hasHistoryPermission,
-                isRefreshing = isRefreshing,
-                importedRecordCount = importedRecordCount,
-                expectedRecordCount = expectedRecordCount,
-                isImportPartial = isImportPartial,
-                importPhase = importPhase,
-                importError = importError,
-                recordCount = records.size,
-                totalHistoryDays = totalHistoryDays,
-                onRequestHistoryPermission = onRequestHistoryPermission,
-                onHealthDataRangeChange = onHealthDataRangeChange,
-            )
-        }
-    }
-}
-
-@Composable
-private fun HealthConnectGate(
-    access: HealthConnectAccess,
-    dataRange: HealthDataRange,
-    onRequestPermissions: () -> Unit,
-) {
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(32.dp)
-            .testTag("health_connect_gate"),
-        contentAlignment = Alignment.Center,
-    ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            Text(
-                text = when (access) {
-                    HealthConnectAccess.PERMISSION_REQUIRED -> "Connect Health Connect"
-                    HealthConnectAccess.UPDATE_REQUIRED -> "Update Health Connect"
-                    HealthConnectAccess.UNAVAILABLE -> "Health Connect unavailable"
-                    HealthConnectAccess.CONNECTED -> ""
-                },
-                style = MaterialTheme.typography.headlineSmall,
-            )
-            Spacer(Modifier.height(10.dp))
-            Text(
-                text = when (access) {
-                    HealthConnectAccess.PERMISSION_REQUIRED -> if (
-                        dataRange.requiresHistoryPermission
-                    ) {
-                        "Allow sleep and history access to show your complete actogram."
-                    } else {
-                        "Allow sleep access to show your last 30 days in the actogram."
-                    }
-                    HealthConnectAccess.UPDATE_REQUIRED ->
-                        "Install the available Health Connect update, then return to Dark Hour."
-                    HealthConnectAccess.UNAVAILABLE ->
-                        "This device does not provide Health Connect."
-                    HealthConnectAccess.CONNECTED -> ""
-                },
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            if (access == HealthConnectAccess.PERMISSION_REQUIRED) {
-                Spacer(Modifier.height(18.dp))
-                Button(
-                    onClick = onRequestPermissions,
-                    modifier = Modifier.testTag("request_health_permissions"),
-                ) {
-                    Text("Allow access")
-                }
-            }
+            DarkHourDestination.STATS -> StatsScreen()
+            DarkHourDestination.SCHEDULE -> ScheduleScreen()
+            DarkHourDestination.SETTINGS -> SettingsScreen()
         }
     }
 }

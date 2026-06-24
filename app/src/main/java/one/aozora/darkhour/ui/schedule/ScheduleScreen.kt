@@ -56,6 +56,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import one.aozora.darkhour.ui.DEFAULT_SCHEDULE_COLOR
+import one.aozora.darkhour.ui.LocalScheduleState
 import one.aozora.darkhour.ui.ScheduleEntry
 import java.time.DayOfWeek
 import java.time.LocalDate
@@ -66,20 +67,22 @@ import java.time.format.TextStyle
 @Composable
 fun ScheduleScreen(
     modifier: Modifier = Modifier,
-    entries: List<ScheduleEntry>,
-    onEntriesChange: (List<ScheduleEntry>) -> Unit,
-    editEntryId: Long? = null,
-    onEditEntryConsumed: () -> Unit = {},
 ) {
+    val (
+        entries,
+        pendingEditId,
+        onEntriesChange,
+        onEditConsumed,
+    ) = LocalScheduleState.current
     val locale = LocalLocale.current.platformLocale
     var editingEntry by remember { mutableStateOf<ScheduleEntry?>(null) }
     var addingEntry by remember { mutableStateOf(false) }
 
-    LaunchedEffect(editEntryId, entries) {
-        val entryId = editEntryId ?: return@LaunchedEffect
+    LaunchedEffect(pendingEditId, entries) {
+        val entryId = pendingEditId ?: return@LaunchedEffect
         editingEntry = entries.firstOrNull { it.id == entryId }
         addingEntry = false
-        onEditEntryConsumed()
+        onEditConsumed()
     }
 
     Box(

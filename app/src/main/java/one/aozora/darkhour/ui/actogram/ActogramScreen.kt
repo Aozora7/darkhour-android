@@ -13,8 +13,10 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -56,10 +58,15 @@ import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import one.aozora.darkhour.data.HealthConnectAccess
 import one.aozora.darkhour.ui.ActogramColorMode
 import one.aozora.darkhour.ui.ActogramDisplayOptions
 import one.aozora.darkhour.ui.ActogramOrder
 import one.aozora.darkhour.ui.ActogramTimeScale
+import one.aozora.darkhour.ui.LocalActogramDisplay
+import one.aozora.darkhour.ui.LocalAppSettings
+import one.aozora.darkhour.ui.LocalHealthConnectState
+import one.aozora.darkhour.ui.LocalScheduleState
 import one.aozora.darkhour.ui.theme.CircadianForecast
 import one.aozora.darkhour.ui.theme.CircadianObserved
 import one.aozora.darkhour.ui.theme.SleepDeep
@@ -74,14 +81,25 @@ import java.util.Locale
 
 @Composable
 fun ActogramScreen(
-    layout: ActogramLayout,
-    options: ActogramDisplayOptions,
-    useIsoDateTime: Boolean,
-    onOptionsChange: (ActogramDisplayOptions) -> Unit,
     onTransformingChange: (Boolean) -> Unit,
-    onEditScheduleEntry: (Long) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val (layout, options, onOptionsChange) = LocalActogramDisplay.current
+    val (settings) = LocalAppSettings.current
+    val schedule = LocalScheduleState.current
+    val healthConnect = LocalHealthConnectState.current
+
+    if (healthConnect.access != HealthConnectAccess.CONNECTED) {
+        HealthConnectGate(
+            access = healthConnect.access,
+            dataRangeRequiresHistoryPermission = healthConnect.dataRange.requiresHistoryPermission,
+            onRequestPermissions = healthConnect.onRequestHealthPermissions,
+            modifier = modifier,
+        )
+        return
+    }
+
+    val useIsoDateTime = settings.useIsoDateTime
     var showOptions by remember { mutableStateOf(false) }
     var selection by remember(layout) { mutableStateOf<ActogramSelection?>(null) }
 
@@ -122,7 +140,7 @@ fun ActogramScreen(
                     useIsoDateTime = useIsoDateTime,
                     onEditScheduleEntry = { entryId ->
                         selection = null
-                        onEditScheduleEntry(entryId)
+                        schedule.onEditEntry(entryId)
                     },
                     onDismiss = { selection = null },
                 )
@@ -136,6 +154,61 @@ fun ActogramScreen(
             onOptionsChange = onOptionsChange,
             onDismiss = { showOptions = false },
         )
+    }
+}
+
+@Composable
+private fun HealthConnectGate(
+    access: HealthConnectAccess,
+    dataRangeRequiresHistoryPermission: Boolean,
+    onRequestPermissions: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .padding(32.dp)
+            .testTag("health_connect_gate"),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Text(
+                text = when (access) {
+                    HealthConnectAccess.PERMISSION_REQUIRED -> "Connect Health Connect"
+                    HealthConnectAccess.UPDATE_REQUIRED -> "Update Health Connect"
+                    HealthConnectAccess.UNAVAILABLE -> "Health Connect unavailable"
+                    HealthConnectAccess.CONNECTED -> ""
+                },
+                style = MaterialTheme.typography.headlineSmall,
+            )
+            Spacer(Modifier.height(10.dp))
+            Text(
+                text = when (access) {
+                    HealthConnectAccess.PERMISSION_REQUIRED -> if (dataRangeRequiresHistoryPermission) {
+                        "Allow sleep and history access to show your complete actogram."
+                    } else {
+                        "Allow sleep access to show your last 30 days in the actogram."
+                    }
+                    HealthConnectAccess.UPDATE_REQUIRED ->
+                        "Install the available Health Connect update, then return to Dark Hour."
+                    HealthConnectAccess.UNAVAILABLE ->
+                        "This device does not provide Health Connect."
+                    HealthConnectAccess.CONNECTED -> ""
+                },
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            if (access == HealthConnectAccess.PERMISSION_REQUIRED) {
+                Spacer(Modifier.height(18.dp))
+                Button(
+                    onClick = onRequestPermissions,
+                    modifier = Modifier.testTag("request_health_permissions"),
+                ) {
+                    Text("Allow access")
+                }
+            }
+        }
     }
 }
 
@@ -445,7 +518,7 @@ private fun ScheduleDetails(
             modifier = Modifier.align(Alignment.End),
         ) {
             Icon(Icons.Outlined.Edit, contentDescription = null)
-            androidx.compose.foundation.layout.Spacer(Modifier.size(8.dp))
+            Spacer(Modifier.size(8.dp))
             Text("Edit")
         }
     }

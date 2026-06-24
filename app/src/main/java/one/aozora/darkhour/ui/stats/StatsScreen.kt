@@ -23,19 +23,16 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
-import one.aozora.darkhour.core.circadian.csf.CsfAnalysis
 import one.aozora.darkhour.core.model.SleepRecord
-import one.aozora.darkhour.core.periodogram.PeriodogramResult
+import one.aozora.darkhour.ui.LocalSleepAnalysis
 import java.time.Duration
 import kotlin.math.roundToInt
 
 @Composable
 fun StatsScreen(
-    records: List<SleepRecord>,
-    analysis: CsfAnalysis,
-    periodogram: PeriodogramResult,
     modifier: Modifier = Modifier,
 ) {
+    val (records, analysis, periodogram) = LocalSleepAnalysis.current
     val mainSleeps = records.filter { it.isMainSleep }
     val metrics = calculateStatsMetrics(records, analysis.globalDailyDrift)
 

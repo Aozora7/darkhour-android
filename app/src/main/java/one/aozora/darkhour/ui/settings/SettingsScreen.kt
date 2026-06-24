@@ -27,37 +27,28 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
-import one.aozora.darkhour.ui.AppSettings
 import one.aozora.darkhour.data.HealthConnectAccess
 import one.aozora.darkhour.data.HealthDataRange
 import one.aozora.darkhour.data.HealthImportPhase
+import one.aozora.darkhour.ui.LocalAppSettings
+import one.aozora.darkhour.ui.LocalHealthConnectState
+import one.aozora.darkhour.ui.LocalSleepAnalysis
 import kotlin.math.roundToInt
 
 @Composable
 fun SettingsScreen(
-    settings: AppSettings,
-    onSettingsChange: (AppSettings) -> Unit,
     modifier: Modifier = Modifier,
-    healthConnectAccess: HealthConnectAccess = HealthConnectAccess.CONNECTED,
-    healthDataRange: HealthDataRange = HealthDataRange.DEFAULT_PERIOD,
-    hasHistoryPermission: Boolean = true,
-    isRefreshing: Boolean = false,
-    importedRecordCount: Int = 0,
-    expectedRecordCount: Int? = null,
-    isImportPartial: Boolean = false,
-    importPhase: HealthImportPhase = HealthImportPhase.IDLE,
-    importError: String? = null,
-    recordCount: Int = 0,
-    totalHistoryDays: Int? = null,
-    onRequestHistoryPermission: () -> Unit = {},
-    onHealthDataRangeChange: (HealthDataRange) -> Unit = {},
 ) {
+    val (settings, onSettingsChange) = LocalAppSettings.current
+    val healthConnect = LocalHealthConnectState.current
+    val healthDataRange = healthConnect.dataRange
+    val recordCount = LocalSleepAnalysis.current.records.size
     val uriHandler = LocalUriHandler.current
     val customDays = (healthDataRange as? HealthDataRange.Custom)?.days
         ?: HealthDataRange.DEFAULT_CUSTOM_DAYS
     val maxCustomDays = maxOf(
         HealthDataRange.MINIMUM_CUSTOM_DAYS,
-        totalHistoryDays ?: customDays,
+        healthConnect.totalHistoryDays ?: customDays,
     )
     var pendingCustomDays by remember(healthDataRange, maxCustomDays) {
         mutableFloatStateOf(customDays.coerceIn(HealthDataRange.MINIMUM_CUSTOM_DAYS, maxCustomDays).toFloat())
@@ -117,7 +108,7 @@ fun SettingsScreen(
                     SegmentedButton(
                         selected = selected,
                         onClick = {
-                            onHealthDataRangeChange(
+                            healthConnect.onDataRangeChange(
                                 option.toRange(pendingCustomDays.roundToInt()),
                             )
                         },
@@ -135,7 +126,7 @@ fun SettingsScreen(
                         value = pendingCustomDays,
                         onValueChange = { pendingCustomDays = it },
                         onValueChangeFinished = {
-                            onHealthDataRangeChange(
+                            healthConnect.onDataRangeChange(
                                 HealthDataRange.custom(pendingCustomDays.roundToInt()),
                             )
                         },
@@ -147,18 +138,18 @@ fun SettingsScreen(
             }
             Text(
                 when {
-                    importError != null -> importError
-                    healthConnectAccess == HealthConnectAccess.PERMISSION_REQUIRED ->
+                    healthConnect.importError != null -> healthConnect.importError
+                    healthConnect.access == HealthConnectAccess.PERMISSION_REQUIRED ->
                         "Permission required"
-                    healthConnectAccess == HealthConnectAccess.UPDATE_REQUIRED ->
+                    healthConnect.access == HealthConnectAccess.UPDATE_REQUIRED ->
                         "Provider update required"
-                    healthConnectAccess == HealthConnectAccess.UNAVAILABLE ->
+                    healthConnect.access == HealthConnectAccess.UNAVAILABLE ->
                         "Unavailable on this device"
-                    isRefreshing -> importStatusText(
-                        importPhase = importPhase,
-                        importedRecordCount = importedRecordCount,
-                        expectedRecordCount = expectedRecordCount,
-                        isImportPartial = isImportPartial,
+                    healthConnect.isRefreshing -> importStatusText(
+                        importPhase = healthConnect.importPhase,
+                        importedRecordCount = healthConnect.importedRecordCount,
+                        expectedRecordCount = healthConnect.expectedRecordCount,
+                        isImportPartial = healthConnect.isImportPartial,
                         visibleRecordCount = recordCount,
                     )
                     else -> "$recordCount sleep records imported"
@@ -167,12 +158,12 @@ fun SettingsScreen(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             if (
-                !hasHistoryPermission &&
-                healthConnectAccess != HealthConnectAccess.UNAVAILABLE &&
-                healthConnectAccess != HealthConnectAccess.UPDATE_REQUIRED
+                !healthConnect.hasHistoryPermission &&
+                healthConnect.access != HealthConnectAccess.UNAVAILABLE &&
+                healthConnect.access != HealthConnectAccess.UPDATE_REQUIRED
             ) {
                 OutlinedButton(
-                    onClick = onRequestHistoryPermission,
+                    onClick = healthConnect.onRequestHistoryPermission,
                     modifier = Modifier.testTag("request_history_permission"),
                     shape = MaterialTheme.shapes.medium
                 ) {
