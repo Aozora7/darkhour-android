@@ -622,6 +622,39 @@ class ActogramLayoutTest {
         assertEquals(0f, targetScroll, 0.001f)
     }
 
+    @Test
+    fun actogramMaxScrollOffsetTracksProposedZoomRowHeight() {
+        val viewportHeight = 600f
+        val axisHeight = 30f
+        val minimumHeight = 240f
+        val realRowCount = 30
+        val oldMaxScroll = calculateActogramMaxScrollOffset(
+            realRowCount = realRowCount,
+            rowHeightPx = 60f,
+            viewportHeightPx = viewportHeight,
+            axisHeightPx = axisHeight,
+            minimumHeightPx = minimumHeight,
+        )
+        val newMaxScroll = calculateActogramMaxScrollOffset(
+            realRowCount = realRowCount,
+            rowHeightPx = 30f,
+            viewportHeightPx = viewportHeight,
+            axisHeightPx = axisHeight,
+            minimumHeightPx = minimumHeight,
+        )
+        val unclampedTarget = calculateZoomAnchoredScroll(
+            anchoredRow = 28f,
+            focalY = 520f,
+            axisHeight = axisHeight,
+            newRowHeight = 30f,
+        )
+
+        assertEquals(1_230f, oldMaxScroll, 0.001f)
+        assertEquals(330f, newMaxScroll, 0.001f)
+        assertTrue(unclampedTarget > newMaxScroll)
+        assertEquals(newMaxScroll, unclampedTarget.coerceIn(0f, newMaxScroll), 0.001f)
+    }
+
     private fun record(date: LocalDate, startHour: Double, durationHours: Double): SleepRecord {
         val dayStart = date.atStartOfDay().toInstant(offset)
         val start = dayStart.plusMillis((startHour * 3_600_000).toLong())

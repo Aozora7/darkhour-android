@@ -139,6 +139,7 @@ fun ActogramCanvas(
             axisHeightPx + rowHeightPx * displayRowCount,
         )
         val maxScrollOffset = (contentHeight - viewportHeight).coerceAtLeast(0f)
+        val minimumHeightPx = with(density) { minimumHeight.toPx() }
         var scrollOffsetPx by remember { mutableFloatStateOf(0f) }
         var userScrolledFromInitialPosition by remember(options.order) { mutableStateOf(false) }
         val currentScrollOffset by rememberUpdatedState(scrollOffsetPx)
@@ -190,11 +191,20 @@ fun ActogramCanvas(
                         currentScroll = { currentScrollOffset },
                         onScrollTargetChange = { target ->
                             userScrolledFromInitialPosition = true
-                            scrollOffsetPx = target.coerceIn(0f, currentMaxScrollOffset)
+                            scrollOffsetPx = target.coerceAtLeast(0f)
                         },
                         density = density.density,
                         axisHeightPx = axisHeightPx,
                         currentRowHeight = { gestureRowHeightDp ?: currentRowHeight },
+                        maxScrollForRowHeight = { rowHeightDp ->
+                            calculateActogramMaxScrollOffset(
+                                realRowCount = layout.rows.size,
+                                rowHeightPx = rowHeightDp * density.density,
+                                viewportHeightPx = viewportHeight,
+                                axisHeightPx = axisHeightPx,
+                                minimumHeightPx = minimumHeightPx,
+                            )
+                        },
                         onGestureRowHeightChange = { gestureRowHeightDp = it },
                         onRowHeightChange = { currentRowHeightChange(it) },
                         onTransformingChange = { currentTransformingChange(it) },
@@ -259,6 +269,7 @@ private suspend fun PointerInputScope.detectActogramTransformGestures(
     density: Float,
     axisHeightPx: Float,
     currentRowHeight: () -> Float,
+    maxScrollForRowHeight: (Float) -> Float,
     onGestureRowHeightChange: (Float) -> Unit,
     onRowHeightChange: (Float) -> Unit,
     onTransformingChange: (Boolean) -> Unit,
@@ -312,7 +323,7 @@ private suspend fun PointerInputScope.detectActogramTransformGestures(
                             focalY = currentFocalY,
                             axisHeight = axisHeightPx,
                             newRowHeight = newRowHeight * density,
-                        )
+                        ).coerceIn(0f, maxScrollForRowHeight(newRowHeight))
 
                         onPendingAnchoredScrollChange(targetScroll)
                         onScrollTargetChange(targetScroll)
@@ -352,6 +363,25 @@ internal fun calculateZoomAnchoredScroll(
 ): Float {
     if (newRowHeight <= 0f) return 0f
     return (axisHeight + anchoredRow.coerceAtLeast(0f) * newRowHeight - focalY).coerceAtLeast(0f)
+}
+
+internal fun calculateActogramMaxScrollOffset(
+    realRowCount: Int,
+    rowHeightPx: Float,
+    viewportHeightPx: Float,
+    axisHeightPx: Float,
+    minimumHeightPx: Float,
+): Float {
+    if (rowHeightPx <= 0f) return 0f
+    val rowsNeededForViewport = ceil(
+        ((viewportHeightPx - axisHeightPx).coerceAtLeast(0f) / rowHeightPx).toDouble(),
+    ).toInt()
+    val displayRowCount = max(realRowCount, rowsNeededForViewport)
+    val contentHeight = max(
+        max(viewportHeightPx, minimumHeightPx),
+        axisHeightPx + rowHeightPx * displayRowCount,
+    )
+    return (contentHeight - viewportHeightPx).coerceAtLeast(0f)
 }
 
 private fun DrawScope.drawActogram(
