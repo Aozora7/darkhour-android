@@ -1,29 +1,28 @@
 # Dark Hour Android
 
 Dark Hour Android is a native Android/Jetpack Compose app for inspecting sleep,
-circadian timing, and schedule alignment from Health Connect data. It adapts
-the analysis behavior of the original Dark Hour web implementation
-([Aozora7/darkhour](https://github.com/Aozora7/darkhour),
-[25h.aozora.one](https://25h.aozora.one)) into an Android-first interface.
+circadian timing, and schedule alignment from Health Connect data. It is an Android native reimlementation of [25h.aozora.one](https://25h.aozora.one)
+([Aozora7/darkhour](https://github.com/Aozora7/darkhour)) that uses Health Connect instead of Google Health API as the source of data, making it usable with more wearable vendors.
+
 
 ## Screenshots
 
 <div align="center">
-  <img src="images/screenshot1.jpg" width="300">
-  <img src="images/screenshot2.jpg" width="300">
+  <img src="images/actogram-screen.webp" width="200">
+  <img src="images/actogram-options.webp" width="200">
+  <img src="images/stats-screen.webp" width="200">
+  <img src="images/schedule-add-entry.webp" width="200">
+  <img src="images/settings-screen.webp" width="200">
 </div>
 
 ## Features
 
-- Health Connect sleep import with a default 30-day range and optional
-  all-history access.
-- Dense actogram with sleep stages, circadian windows, schedule overlays,
-  newest/oldest ordering, 24-hour/tau/custom row widths, and double plot mode.
-- Circadian and periodogram statistics derived from deterministic Kotlin core
-  algorithms.
-- Weekly or dated schedule blocks that render on the actogram.
-- Settings for naps, forecast range, date/time format, and Health Connect
-  import range.
+- Dense actogram that can fit several months of data on one screen
+- Actrogram customization
+- Circadian night estimation from sleep data
+- Extrapolation for circadian night into the future for planning
+- Periodogram for circadian frequency analysis
+- Ability to display weekly schedule or individual events on the actogram
 
 ## Project Structure
 
@@ -56,4 +55,3 @@ Run connected Compose tests:
 ```
 
 Connected tests require APK installation to be allowed on the device.
-
