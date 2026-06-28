@@ -171,6 +171,76 @@ class ActogramLayoutTest {
     }
 
     @Test
+    fun legendRowsRenderAtOlderEndForNewestFirst() {
+        val layout = ActogramLayoutEngine.build(
+            records = listOf(record(LocalDate.parse("2026-06-15"), 23.0, 7.0)),
+            minimumRows = 2,
+        )
+
+        val rows = layout.rowsForDisplay(
+            order = ActogramOrder.NEWEST_FIRST,
+            minimumRows = 6,
+            includeLegend = true,
+        )
+
+        assertEquals(6, rows.size)
+        assertEquals(ActogramRowKind.LEGEND_STAGES, rows[4].kind)
+        assertEquals(ActogramRowKind.LEGEND_OVERLAYS, rows[5].kind)
+    }
+
+    @Test
+    fun legendRowsRenderAtOlderEndForOldestFirst() {
+        val layout = ActogramLayoutEngine.build(
+            records = listOf(record(LocalDate.parse("2026-06-15"), 23.0, 7.0)),
+            minimumRows = 2,
+        )
+
+        val rows = layout.rowsForDisplay(
+            order = ActogramOrder.OLDEST_FIRST,
+            minimumRows = 6,
+            includeLegend = true,
+        )
+
+        assertEquals(6, rows.size)
+        assertEquals(ActogramRowKind.LEGEND_STAGES, rows[0].kind)
+        assertEquals(ActogramRowKind.LEGEND_OVERLAYS, rows[1].kind)
+    }
+
+    @Test
+    fun legendOverlayRowUsesEnabledScheduleLabelsAndColors() {
+        val layout = ActogramLayoutEngine.build(
+            records = listOf(record(LocalDate.parse("2026-06-15"), 23.0, 7.0)),
+            scheduleEntries = listOf(
+                schedule(
+                    label = "Work",
+                    color = 0xFF3FA9F5,
+                    start = LocalTime.of(9, 0),
+                    end = LocalTime.of(17, 0),
+                    days = setOf(DayOfWeek.MONDAY),
+                ),
+                schedule(
+                    label = "Hidden",
+                    color = 0xFFFFC533,
+                    start = LocalTime.of(18, 0),
+                    end = LocalTime.of(19, 0),
+                    days = setOf(DayOfWeek.MONDAY),
+                    enabled = false,
+                ),
+            ),
+            minimumRows = 2,
+        )
+
+        val overlayLegend = layout.rowsForDisplay(
+            order = ActogramOrder.NEWEST_FIRST,
+            minimumRows = 4,
+            includeLegend = true,
+        ).last()
+
+        assertEquals(ActogramRowKind.LEGEND_OVERLAYS, overlayLegend.kind)
+        assertEquals(listOf(ActogramLegendItem("Work", 0xFF3FA9F5)), overlayLegend.legendItems)
+    }
+
+    @Test
     fun tauViewportRowsContinueExactRowDuration() {
         val layout = ActogramLayoutEngine.build(
             records = listOf(record(LocalDate.parse("2026-06-15"), 23.0, 7.0)),
@@ -726,12 +796,16 @@ class ActogramLayoutTest {
         start: LocalTime,
         end: LocalTime,
         days: Set<DayOfWeek>,
+        label: String = "Work",
+        color: Long = DEFAULT_SCHEDULE_COLOR,
+        enabled: Boolean = true,
     ): ScheduleEntry = ScheduleEntry(
         id = start.toSecondOfDay().toLong(),
-        label = "Work",
+        label = label,
         startTime = start,
         endTime = end,
         daysOfWeek = days,
-        color = DEFAULT_SCHEDULE_COLOR,
+        color = color,
+        enabled = enabled,
     )
 }

@@ -1,6 +1,7 @@
 package one.aozora.darkhour.ui.stats
 
 import one.aozora.darkhour.core.model.SleepRecord
+import one.aozora.darkhour.data.HealthDataRange
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -44,6 +45,28 @@ class StatsScreenTest {
         assertNull(metrics.timeInBedHoursPerDay)
         assertNull(metrics.efficiencyPercent)
         assertNull(metrics.cumulativeShiftDays)
+    }
+
+    @Test
+    fun statsScopeSummaryShowsRangeCountsAndNapFilter() {
+        assertEquals(
+            "Health Connect · Last 90 days · 123 records · 92 main sleeps · naps included",
+            statsScopeSummary(
+                dataRange = HealthDataRange.custom(90),
+                includeNaps = true,
+                recordCount = 123,
+                mainSleepsCount = 92,
+            ),
+        )
+        assertEquals(
+            "Health Connect · All history · 1 record · 1 main sleep · naps excluded",
+            statsScopeSummary(
+                dataRange = HealthDataRange.ENTIRE_HISTORY,
+                includeNaps = false,
+                recordCount = 1,
+                mainSleepsCount = 1,
+            ),
+        )
     }
 
     private fun record(

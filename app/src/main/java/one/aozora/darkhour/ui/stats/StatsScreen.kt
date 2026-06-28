@@ -24,6 +24,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import one.aozora.darkhour.core.model.SleepRecord
+import one.aozora.darkhour.data.HealthDataRange
+import one.aozora.darkhour.ui.LocalAppSettings
+import one.aozora.darkhour.ui.LocalHealthConnectState
 import one.aozora.darkhour.ui.LocalSleepAnalysis
 import java.time.Duration
 import kotlin.math.roundToInt
@@ -33,8 +36,16 @@ fun StatsScreen(
     modifier: Modifier = Modifier,
 ) {
     val (records, analysis, periodogram) = LocalSleepAnalysis.current
+    val (settings) = LocalAppSettings.current
+    val healthConnect = LocalHealthConnectState.current
     val mainSleeps = records.filter { it.isMainSleep }
     val metrics = calculateStatsMetrics(records, analysis.globalDailyDrift)
+    val scopeSummary = statsScopeSummary(
+        dataRange = healthConnect.dataRange,
+        includeNaps = settings.includeNaps,
+        recordCount = records.size,
+        mainSleepsCount = mainSleeps.size,
+    )
 
     BoxWithConstraints(modifier = modifier.fillMaxSize()) {
         val isWide = maxWidth >= 600.dp
@@ -51,7 +62,7 @@ fun StatsScreen(
                         .weight(1.2f)
                         .fillMaxHeight()
                 ) {
-                    HeaderText(mainSleeps.size)
+                    HeaderText(scopeSummary)
                     Spacer(Modifier.height(16.dp))
                     PeriodogramChart(
                         result = periodogram,
@@ -111,7 +122,7 @@ fun StatsScreen(
                     .padding(horizontal = 16.dp, vertical = 14.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
-                HeaderText(mainSleeps.size)
+                HeaderText(scopeSummary)
 
                 PeriodogramChart(
                     result = periodogram,
@@ -151,11 +162,11 @@ fun StatsScreen(
 }
 
 @Composable
-private fun HeaderText(mainSleepsCount: Int) {
+private fun HeaderText(scopeSummary: String) {
     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
         Text("Circadian stats", style = MaterialTheme.typography.headlineSmall)
         Text(
-            "Health Connect · $mainSleepsCount main sleeps",
+            scopeSummary,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             style = MaterialTheme.typography.bodySmall,
         )
@@ -199,6 +210,26 @@ private fun signedMinutes(value: Double): String =
 
 private fun signedDays(value: Double): String =
     "${if (value >= 0) "+" else ""}%.1f days".format(value)
+
+internal fun statsScopeSummary(
+    dataRange: HealthDataRange,
+    includeNaps: Boolean,
+    recordCount: Int,
+    mainSleepsCount: Int,
+): String {
+    val rangeLabel = when (dataRange) {
+        HealthDataRange.DefaultPeriod -> "Last 30 days"
+        HealthDataRange.EntireHistory -> "All history"
+        is HealthDataRange.Custom -> "Last ${dataRange.days} days"
+    }
+    val napLabel = if (includeNaps) "naps included" else "naps excluded"
+    val recordsLabel = "$recordCount ${"record".pluralized(recordCount)}"
+    val mainSleepsLabel = "$mainSleepsCount main ${"sleep".pluralized(mainSleepsCount)}"
+    return "Health Connect · $rangeLabel · $recordsLabel · $mainSleepsLabel · $napLabel"
+}
+
+private fun String.pluralized(count: Int): String =
+    if (count == 1) this else "${this}s"
 
 internal data class StatsMetrics(
     val daySpan: Int,

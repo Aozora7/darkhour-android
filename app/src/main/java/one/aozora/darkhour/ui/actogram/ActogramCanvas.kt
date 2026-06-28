@@ -92,8 +92,13 @@ fun ActogramCanvas(
         val rowsNeededForViewport = ceil(
             ((viewportHeight - axisHeightPx).coerceAtLeast(0f) / rowHeightPx).toDouble(),
         ).toInt()
-        val displayRowCount = max(layout.rows.size, rowsNeededForViewport)
-        val displayedRows = layout.rowsForDisplay(options.order, displayRowCount)
+        val legendRowCount = if (layout.hasRealData) 2 else 0
+        val displayRowCount = max(layout.rows.size + legendRowCount, rowsNeededForViewport)
+        val displayedRows = layout.rowsForDisplay(
+            order = options.order,
+            minimumRows = displayRowCount,
+            includeLegend = true,
+        )
         val tauMode = abs(layout.rowHours - 24.0) >= 0.0001
         val displayedLabels = remember(
             displayedRows,
@@ -106,15 +111,20 @@ fun ActogramCanvas(
                 emptyList()
             } else {
                 displayedRows.map { row ->
-                    if (tauMode) {
-                        formatActogramRowLabel(
-                            row.startTime,
-                            layout.zoneOffset,
-                            use24HourTime,
-                            useIsoDateTime,
-                        )
-                    } else {
-                        formatActogramDate(row.date, useIsoDateTime)
+                    when (row.kind) {
+                        ActogramRowKind.LEGEND_STAGES,
+                        ActogramRowKind.LEGEND_OVERLAYS,
+                        -> row.label
+                        ActogramRowKind.DATA -> if (tauMode) {
+                            formatActogramRowLabel(
+                                row.startTime,
+                                layout.zoneOffset,
+                                use24HourTime,
+                                useIsoDateTime,
+                            )
+                        } else {
+                            formatActogramDate(row.date, useIsoDateTime)
+                        }
                     }
                 }
             }
@@ -138,7 +148,7 @@ fun ActogramCanvas(
         }
         val contentHeight = max(
             max(viewportHeight, with(density) { minimumHeight.toPx() }),
-            axisHeightPx + rowHeightPx * displayRowCount,
+            axisHeightPx + rowHeightPx * displayedRows.size,
         )
         val maxScrollOffset = (contentHeight - viewportHeight).coerceAtLeast(0f)
         val minimumHeightPx = with(density) { minimumHeight.toPx() }
@@ -199,7 +209,7 @@ fun ActogramCanvas(
                         axisHeightPx = axisHeightPx,
                         viewportHeightPx = viewportHeight,
                         minimumHeightPx = minimumHeightPx,
-                        realRowCount = layout.rows.size,
+                        realRowCount = displayedRows.size,
                         currentRowHeight = { gestureRowHeightDp ?: currentRowHeight },
                         onGestureRowHeightChange = { gestureRowHeightDp = it },
                         onRowHeightChange = { currentRowHeightChange(it) },
@@ -431,7 +441,7 @@ private fun DrawScope.drawActogram(
                 topLeft = Offset(0f, top),
                 size = Size(size.width, rowHeight),
             )
-            dateColumnBackgroundColor(row.date, currentDate)?.let { color ->
+            if (row.kind == ActogramRowKind.DATA) dateColumnBackgroundColor(row.date, currentDate)?.let { color ->
                 drawRect(
                     color = color,
                     topLeft = Offset(0f, top),
@@ -446,17 +456,34 @@ private fun DrawScope.drawActogram(
             )
 
             if (options.showDateLabels) {
-                val label = if (tauMode) {
-                    formatActogramRowLabel(
-                        row.startTime,
-                        layout.zoneOffset,
-                        use24HourTime,
-                        useIsoDateTime,
-                    )
-                } else {
-                    formatActogramDate(row.date, useIsoDateTime)
+                val label = when (row.kind) {
+                    ActogramRowKind.LEGEND_STAGES,
+                    ActogramRowKind.LEGEND_OVERLAYS,
+                    -> row.label
+                    ActogramRowKind.DATA -> if (tauMode) {
+                        formatActogramRowLabel(
+                            row.startTime,
+                            layout.zoneOffset,
+                            use24HourTime,
+                            useIsoDateTime,
+                        )
+                    } else {
+                        formatActogramDate(row.date, useIsoDateTime)
+                    }
                 }
                 drawDateLabel(label, labelWidth - 6.dp.toPx(), top, rowHeight, tauMode)
+            }
+
+            when (row.kind) {
+                ActogramRowKind.LEGEND_STAGES -> {
+                    drawStagesLegend(labelWidth, top, rowHeight)
+                    return@forEach
+                }
+                ActogramRowKind.LEGEND_OVERLAYS -> {
+                    drawOverlaysLegend(labelWidth, top, rowHeight, row.legendItems)
+                    return@forEach
+                }
+                ActogramRowKind.DATA -> Unit
             }
 
             for (hour in 0..displayedHours.toInt() step 6) {
@@ -675,6 +702,85 @@ private fun DrawScope.drawDateLabel(
     )
 }
 
+private fun DrawScope.drawStagesLegend(
+    labelWidth: Float,
+    top: Float,
+    rowHeight: Float,
+) {
+    drawLegendItems(
+        items = listOf(
+            LegendItem("Deep", SleepDeep),
+            LegendItem("Light", SleepLight),
+            LegendItem("REM", SleepRem),
+            LegendItem("Wake", SleepWake),
+        ),
+        left = labelWidth + 8.dp.toPx(),
+        top = top,
+        rowHeight = rowHeight,
+    )
+}
+
+private fun DrawScope.drawOverlaysLegend(
+    labelWidth: Float,
+    top: Float,
+    rowHeight: Float,
+    scheduleItems: List<ActogramLegendItem>,
+) {
+    drawLegendItems(
+        items = listOf(
+            LegendItem("Circadian", CircadianObserved),
+            LegendItem("Forecast", CircadianForecast),
+        ) + scheduleItems.map { item ->
+            LegendItem(item.label, Color(item.color))
+        },
+        left = labelWidth + 8.dp.toPx(),
+        top = top,
+        rowHeight = rowHeight,
+    )
+}
+
+private data class LegendItem(
+    val label: String,
+    val color: Color,
+)
+
+private fun DrawScope.drawLegendItems(
+    items: List<LegendItem>,
+    left: Float,
+    top: Float,
+    rowHeight: Float,
+) {
+    val swatchSize = (rowHeight * 0.42f).coerceIn(5.dp.toPx(), 10.dp.toPx())
+    val textSize = (rowHeight * 0.45f).coerceIn(7.dp.toPx(), 10.dp.toPx())
+    val gap = 6.dp.toPx()
+    val itemGap = 12.dp.toPx()
+    val centerY = top + rowHeight / 2f
+    val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = android.graphics.Color.rgb(190, 200, 205)
+        this.textSize = textSize
+        textAlign = Paint.Align.LEFT
+    }
+    var x = left
+    val maxX = size.width - 10.dp.toPx()
+    items.forEach { item ->
+        val textWidth = paint.measureText(item.label)
+        val itemWidth = swatchSize + gap + textWidth
+        if (x + itemWidth > maxX) return
+        drawRect(
+            color = item.color,
+            topLeft = Offset(x, centerY - swatchSize / 2f),
+            size = Size(swatchSize, swatchSize),
+        )
+        drawContext.canvas.nativeCanvas.drawText(
+            item.label,
+            x + swatchSize + gap,
+            centerY - (paint.ascent() + paint.descent()) / 2f,
+            paint,
+        )
+        x += itemWidth + itemGap
+    }
+}
+
 private fun DrawScope.drawSleep(
     sleep: ActogramSleepBlock,
     shift: Double,
@@ -748,6 +854,7 @@ internal fun hitTestActogram(
 
     val rowIndex = floor((contentY - axisHeight) / rowHeight).toInt()
     if (rowIndex !in rows.indices) return null
+    if (rows[rowIndex].kind != ActogramRowKind.DATA) return null
 
     val displayedHours = rowHours * if (options.doublePlot) 2.0 else 1.0
     val plottedHour = ((position.x - labelWidth) / plotWidth) * displayedHours

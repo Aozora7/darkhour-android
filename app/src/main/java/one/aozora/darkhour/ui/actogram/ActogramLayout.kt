@@ -50,6 +50,11 @@ data class ActogramScheduleBlock(
     val selection: ActogramSelection.Schedule,
 )
 
+data class ActogramLegendItem(
+    val label: String,
+    val color: Long,
+)
+
 sealed interface ActogramSelection {
     data class Sleep(
         val logId: Long,
@@ -86,6 +91,8 @@ data class ActogramRow(
     val sleeps: List<ActogramSleepBlock>,
     val overlays: List<ActogramOverlayBlock>,
     val schedules: List<ActogramScheduleBlock>,
+    val kind: ActogramRowKind = ActogramRowKind.DATA,
+    val legendItems: List<ActogramLegendItem> = emptyList(),
 )
 
 data class ActogramLayout(
@@ -95,15 +102,32 @@ data class ActogramLayout(
     val zoneOffset: ZoneOffset,
 )
 
+enum class ActogramRowKind {
+    DATA,
+    LEGEND_STAGES,
+    LEGEND_OVERLAYS,
+}
+
 internal fun ActogramLayout.rowsForDisplay(
     order: ActogramOrder,
     minimumRows: Int,
+    includeLegend: Boolean = false,
 ): List<ActogramRow> {
-    if (rows.isEmpty() || minimumRows <= rows.size) {
-        return if (order == ActogramOrder.NEWEST_FIRST) rows.asReversed() else rows
+    val legendRows = if (includeLegend && hasRealData && rows.isNotEmpty()) {
+        legendRows(scheduleLegendItems())
+    } else {
+        emptyList()
+    }
+    val minimumDataRows = (minimumRows - legendRows.size).coerceAtLeast(rows.size)
+    if (rows.isEmpty() || minimumDataRows <= rows.size) {
+        val orderedRows = if (order == ActogramOrder.NEWEST_FIRST) rows.asReversed() else rows
+        return when (order) {
+            ActogramOrder.NEWEST_FIRST -> orderedRows + legendRows
+            ActogramOrder.OLDEST_FIRST -> legendRows + orderedRows
+        }
     }
 
-    val missingRows = minimumRows - rows.size
+    val missingRows = minimumDataRows - rows.size
     val rowDurationMs = (rowHours * 3_600_000.0).roundToLong()
     val fillerRows = when (order) {
         ActogramOrder.NEWEST_FIRST -> {
@@ -121,8 +145,59 @@ internal fun ActogramLayout.rowsForDisplay(
         }
     }
     val orderedRows = if (order == ActogramOrder.NEWEST_FIRST) rows.asReversed() else rows
-    return orderedRows + fillerRows
+    return when (order) {
+        ActogramOrder.NEWEST_FIRST -> orderedRows + fillerRows + legendRows
+        ActogramOrder.OLDEST_FIRST -> legendRows + orderedRows + fillerRows
+    }
 }
+
+private fun ActogramLayout.legendRows(scheduleItems: List<ActogramLegendItem>): List<ActogramRow> {
+    val rowDurationMs = (rowHours * 3_600_000.0).roundToLong()
+    return listOf(
+        legendRow(
+            startTime = rows.first().startTime.minusMillis(rowDurationMs * 2),
+            label = "Stages",
+            kind = ActogramRowKind.LEGEND_STAGES,
+        ),
+        legendRow(
+            startTime = rows.first().startTime.minusMillis(rowDurationMs),
+            label = "Overlays",
+            kind = ActogramRowKind.LEGEND_OVERLAYS,
+            legendItems = scheduleItems,
+        ),
+    )
+}
+
+private fun ActogramLayout.legendRow(
+    startTime: Instant,
+    label: String,
+    kind: ActogramRowKind,
+    legendItems: List<ActogramLegendItem> = emptyList(),
+): ActogramRow {
+    val localStart = startTime.atOffset(zoneOffset)
+    return ActogramRow(
+        date = localStart.toLocalDate(),
+        label = label,
+        startTime = startTime,
+        sleeps = emptyList(),
+        overlays = emptyList(),
+        schedules = emptyList(),
+        kind = kind,
+        legendItems = legendItems,
+    )
+}
+
+private fun ActogramLayout.scheduleLegendItems(): List<ActogramLegendItem> =
+    rows.asSequence()
+        .flatMap { it.schedules.asSequence() }
+        .map { schedule ->
+            ActogramLegendItem(
+                label = schedule.selection.entry.label.ifBlank { "Schedule" },
+                color = schedule.color,
+            )
+        }
+        .distinctBy { it.label to it.color }
+        .toList()
 
 private fun ActogramLayout.emptyRow(startTime: Instant): ActogramRow {
     val localStart = startTime.atOffset(zoneOffset)
