@@ -164,6 +164,26 @@ object ActogramLayoutEngine {
         }
     }
 
+    fun withScheduleEntries(
+        layout: ActogramLayout,
+        scheduleEntries: List<ScheduleEntry>,
+    ): ActogramLayout {
+        if (layout.rows.isEmpty()) return layout
+        val rowDurationMs = (layout.rowHours * 3_600_000.0).roundToLong()
+        val rows = layout.rows.mapIndexed { index, row ->
+            val rowEnd = layout.rows.getOrNull(index + 1)?.startTime
+                ?: row.startTime.plusMillis(rowDurationMs)
+            row.copy(
+                schedules = scheduleEntries.toScheduleBlocks(
+                    rowStart = row.startTime,
+                    rowEnd = rowEnd,
+                    zoneOffset = layout.zoneOffset,
+                ),
+            )
+        }
+        return layout.copy(rows = rows)
+    }
+
     private fun buildCalendarRows(
         records: List<SleepRecord>,
         circadianDays: List<CircadianDay>,

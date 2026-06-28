@@ -128,13 +128,26 @@ fun DarkHourApp(
         ActogramTimeScale.CIRCADIAN_TAU -> analysis.globalTau
         ActogramTimeScale.CUSTOM -> options.customHours.toDouble()
     }
-    val layout = remember(filteredRecords, analysis.days, scheduleEntries, rowHours) {
+    val baseLayout = remember(filteredRecords, analysis.days, rowHours) {
         ActogramLayoutEngine.build(
             records = filteredRecords,
             circadianDays = analysis.days,
-            scheduleEntries = scheduleEntries,
             rowHours = rowHours,
         )
+    }
+    val layout = remember(baseLayout, filteredRecords, analysis.days, scheduleEntries, rowHours) {
+        if (scheduleEntries.isEmpty()) {
+            baseLayout
+        } else if (scheduleEntries.any { it.date != null }) {
+            ActogramLayoutEngine.build(
+                records = filteredRecords,
+                circadianDays = analysis.days,
+                scheduleEntries = scheduleEntries,
+                rowHours = rowHours,
+            )
+        } else {
+            ActogramLayoutEngine.withScheduleEntries(baseLayout, scheduleEntries)
+        }
     }
     LaunchedEffect(options) {
         delay(300.milliseconds)

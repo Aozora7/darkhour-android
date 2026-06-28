@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -25,6 +26,7 @@ import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material3.AssistChip
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
@@ -74,7 +76,9 @@ fun ScheduleScreen(
         onEntriesChange,
         onEditConsumed,
     ) = LocalScheduleState.current
+    val context = LocalContext.current
     val locale = LocalLocale.current.platformLocale
+    val use24HourTime = android.text.format.DateFormat.is24HourFormat(context)
     var editingEntry by remember { mutableStateOf<ScheduleEntry?>(null) }
     var addingEntry by remember { mutableStateOf(false) }
 
@@ -114,6 +118,7 @@ fun ScheduleScreen(
                         ScheduleRow(
                             entry = entry,
                             locale = locale,
+                            use24HourTime = use24HourTime,
                             onToggle = { enabled ->
                                 onEntriesChange(entries.map { if (it.id == entry.id) it.copy(enabled = enabled) else it })
                             },
@@ -185,6 +190,7 @@ private fun EmptySchedule() {
 private fun ScheduleRow(
     entry: ScheduleEntry,
     locale: java.util.Locale,
+    use24HourTime: Boolean,
     onToggle: (Boolean) -> Unit,
     onEdit: () -> Unit,
 ) {
@@ -209,7 +215,7 @@ private fun ScheduleRow(
             Spacer(Modifier.width(14.dp))
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(
-                    "${formatTime(entry.startTime)} - ${formatTime(entry.endTime)}",
+                    "${formatTime(entry.startTime, use24HourTime)} - ${formatTime(entry.endTime, use24HourTime)}",
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.SemiBold,
                 )
@@ -250,7 +256,9 @@ private fun ScheduleEntrySheet(
     var days by remember(entry) { mutableStateOf(entry?.daysOfWeek ?: emptySet()) }
     var date by remember(entry) { mutableStateOf(entry?.date) }
     var color by remember(entry) { mutableLongStateOf(entry?.color ?: DEFAULT_SCHEDULE_COLOR) }
+    var confirmDelete by remember(entry) { mutableStateOf(false) }
     val canSave = days.isNotEmpty() || date != null
+    val use24HourTime = android.text.format.DateFormat.is24HourFormat(context)
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -269,10 +277,10 @@ private fun ScheduleEntrySheet(
                 style = MaterialTheme.typography.titleLarge,
             )
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                TimeButton("Start", startTime, Modifier.weight(1f)) {
+                TimeButton("Start", startTime, use24HourTime, Modifier.weight(1f)) {
                     showTimePicker(context, startTime) { startTime = it }
                 }
-                TimeButton("End", endTime, Modifier.weight(1f)) {
+                TimeButton("End", endTime, use24HourTime, Modifier.weight(1f)) {
                     showTimePicker(context, endTime) { endTime = it }
                 }
             }
@@ -286,6 +294,29 @@ private fun ScheduleEntrySheet(
 
             HorizontalDivider()
             Text("Repeat", style = MaterialTheme.typography.titleSmall)
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+            ) {
+                RepeatPresetChip("Weekdays") {
+                    date = null
+                    days = Weekdays
+                }
+                RepeatPresetChip("Weekend") {
+                    date = null
+                    days = Weekend
+                }
+                RepeatPresetChip("Every day") {
+                    date = null
+                    days = EveryDay
+                }
+                RepeatPresetChip("Clear") {
+                    date = null
+                    days = emptySet()
+                }
+            }
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
                 DayOfWeek.entries.forEach { day ->
                     val selected = day in days
@@ -347,7 +378,7 @@ private fun ScheduleEntrySheet(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 if (onDelete != null) {
-                    TextButton(onClick = onDelete) {
+                    TextButton(onClick = { confirmDelete = true }) {
                         Icon(Icons.Outlined.Delete, contentDescription = null)
                         Spacer(Modifier.width(6.dp))
                         Text("Delete")
@@ -382,12 +413,47 @@ private fun ScheduleEntrySheet(
             }
         }
     }
+
+    if (confirmDelete && onDelete != null) {
+        AlertDialog(
+            onDismissRequest = { confirmDelete = false },
+            title = { Text("Delete schedule?") },
+            text = { Text("This schedule entry will be removed from the actogram.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        confirmDelete = false
+                        onDelete()
+                    },
+                ) {
+                    Text("Delete")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmDelete = false }) {
+                    Text("Cancel")
+                }
+            },
+        )
+    }
+}
+
+@Composable
+private fun RepeatPresetChip(
+    label: String,
+    onClick: () -> Unit,
+) {
+    AssistChip(
+        onClick = onClick,
+        label = { Text(label) },
+    )
 }
 
 @Composable
 private fun TimeButton(
     label: String,
     time: LocalTime,
+    use24HourTime: Boolean,
     modifier: Modifier = Modifier,
     onClick: () -> Unit,
 ) {
@@ -399,7 +465,7 @@ private fun TimeButton(
     ) {
         Column(Modifier.padding(14.dp)) {
             Text(label, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text(formatTime(time), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+            Text(formatTime(time, use24HourTime), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
         }
     }
 }
@@ -444,11 +510,23 @@ private fun ScheduleEntry.recurrenceLabel(locale: java.util.Locale): String {
     return ordered.joinToString(", ") { it.getDisplayName(TextStyle.SHORT, locale) }
 }
 
-private fun formatTime(time: LocalTime): String =
-    time.format(DateTimeFormatter.ofPattern("HH:mm"))
+private fun formatTime(time: LocalTime, use24HourTime: Boolean): String =
+    time.format(DateTimeFormatter.ofPattern(if (use24HourTime) "HH:mm" else "h:mm a"))
 
 private fun dateFormatter(locale: java.util.Locale): DateTimeFormatter =
     DateTimeFormatter.ofPattern("MMM d, yyyy", locale)
+
+private val Weekdays = setOf(
+    DayOfWeek.MONDAY,
+    DayOfWeek.TUESDAY,
+    DayOfWeek.WEDNESDAY,
+    DayOfWeek.THURSDAY,
+    DayOfWeek.FRIDAY,
+)
+
+private val Weekend = setOf(DayOfWeek.SATURDAY, DayOfWeek.SUNDAY)
+
+private val EveryDay = DayOfWeek.entries.toSet()
 
 private val ScheduleColors = listOf(
     DEFAULT_SCHEDULE_COLOR,

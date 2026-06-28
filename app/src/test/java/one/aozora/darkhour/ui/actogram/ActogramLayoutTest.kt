@@ -326,6 +326,34 @@ class ActogramLayoutTest {
     }
 
     @Test
+    fun weeklyScheduleCanBeAppliedWithoutRebuildingSleepLayout() {
+        val date = LocalDate.parse("2026-06-15")
+        val baseLayout = ActogramLayoutEngine.build(
+            records = listOf(record(date, 23.0, 7.0)),
+            minimumRows = 2,
+        )
+        val layout = ActogramLayoutEngine.withScheduleEntries(
+            layout = baseLayout,
+            scheduleEntries = listOf(
+                schedule(
+                    start = LocalTime.of(22, 0),
+                    end = LocalTime.of(2, 0),
+                    days = setOf(DayOfWeek.MONDAY),
+                ),
+            ),
+        )
+
+        val first = layout.rows.first { it.date == date }.schedules.single()
+        val second = layout.rows.first { it.date == date.plusDays(1) }.schedules.single()
+
+        assertEquals(baseLayout.rows.sumOf { it.sleeps.size }, layout.rows.sumOf { it.sleeps.size })
+        assertEquals(22.0, first.startHour, 0.001)
+        assertEquals(24.0, first.endHour, 0.001)
+        assertEquals(0.0, second.startHour, 0.001)
+        assertEquals(2.0, second.endHour, 0.001)
+    }
+
+    @Test
     fun scheduleRespectsCustomRowWidth() {
         val date = LocalDate.parse("2026-06-15")
         val layout = ActogramLayoutEngine.build(
