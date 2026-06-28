@@ -20,6 +20,7 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -140,8 +141,8 @@ fun ActogramCanvas(
         )
         val maxScrollOffset = (contentHeight - viewportHeight).coerceAtLeast(0f)
         val minimumHeightPx = with(density) { minimumHeight.toPx() }
-        var scrollOffsetPx by remember { mutableFloatStateOf(0f) }
-        var userScrolledFromInitialPosition by remember(options.order) { mutableStateOf(false) }
+        var scrollOffsetPx by rememberSaveable { mutableFloatStateOf(0f) }
+        var userScrolledFromInitialPosition by rememberSaveable(options.order) { mutableStateOf(false) }
         val currentScrollOffset by rememberUpdatedState(scrollOffsetPx)
         val currentMaxScrollOffset by rememberUpdatedState(maxScrollOffset)
         val scrollableState = rememberScrollableState { delta ->
