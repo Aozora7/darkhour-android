@@ -47,6 +47,7 @@ data class AppSettings(
     val includeNaps: Boolean = true,
     val forecastDays: Int = 2,
     val useIsoDateTime: Boolean = false,
+    val historyAccessCalloutDismissed: Boolean = false,
 )
 
 @Immutable

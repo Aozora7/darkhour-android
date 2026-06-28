@@ -27,6 +27,10 @@ class AppSettingsStore(context: Context) {
             putBoolean(INCLUDE_NAPS_KEY, settings.includeNaps)
                 .putInt(FORECAST_DAYS_KEY, settings.forecastDays.coerceIn(0, 30))
                 .putBoolean(USE_ISO_DATE_TIME_KEY, settings.useIsoDateTime)
+                .putBoolean(
+                    HISTORY_ACCESS_CALLOUT_DISMISSED_KEY,
+                    settings.historyAccessCalloutDismissed,
+                )
         }
     }
 
@@ -80,6 +84,7 @@ class AppSettingsStore(context: Context) {
 private const val INCLUDE_NAPS_KEY = "include_naps"
 private const val FORECAST_DAYS_KEY = "forecast_days"
 private const val USE_ISO_DATE_TIME_KEY = "use_iso_date_time"
+private const val HISTORY_ACCESS_CALLOUT_DISMISSED_KEY = "history_access_callout_dismissed"
 private const val ROW_HEIGHT_DP_KEY = "actogram_row_height_dp"
 private const val DOUBLE_PLOT_KEY = "actogram_double_plot"
 private const val SHOW_DATE_LABELS_KEY = "actogram_show_date_labels"
@@ -102,6 +107,10 @@ private fun SharedPreferences.readAppSettings(): AppSettings {
         includeNaps = getBoolean(INCLUDE_NAPS_KEY, defaults.includeNaps),
         forecastDays = getInt(FORECAST_DAYS_KEY, defaults.forecastDays).coerceIn(0, 30),
         useIsoDateTime = getBoolean(USE_ISO_DATE_TIME_KEY, defaults.useIsoDateTime),
+        historyAccessCalloutDismissed = getBoolean(
+            HISTORY_ACCESS_CALLOUT_DISMISSED_KEY,
+            defaults.historyAccessCalloutDismissed,
+        ),
     )
 }
 

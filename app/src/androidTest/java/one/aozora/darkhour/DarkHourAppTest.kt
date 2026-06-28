@@ -22,6 +22,7 @@ import androidx.compose.ui.test.pinch
 import androidx.compose.ui.test.swipe
 import one.aozora.darkhour.ui.DarkHourApp
 import one.aozora.darkhour.ui.DemoData
+import one.aozora.darkhour.ui.AppSettings
 import one.aozora.darkhour.ui.theme.DarkHourTheme
 import one.aozora.darkhour.data.HealthConnectAccess
 import one.aozora.darkhour.data.HealthDataRange
@@ -199,6 +200,73 @@ class DarkHourAppTest {
 
         composeRule.runOnIdle {
             assertTrue(requested)
+        }
+    }
+
+    @Test
+    fun historyPermissionCalloutSwitchesToAllHistoryFromActogram() {
+        var selectedRange by mutableStateOf(HealthDataRange.DEFAULT_PERIOD)
+        composeRule.setContent {
+            DarkHourTheme {
+                DarkHourApp(
+                    records = DemoData.records,
+                    healthDataRange = selectedRange,
+                    hasHistoryPermission = false,
+                    onHealthDataRangeChange = { selectedRange = it },
+                )
+            }
+        }
+
+        composeRule.onNodeWithTag("actogram_history_callout").assertIsDisplayed()
+        composeRule.onNodeWithText("Showing last 30 days").assertIsDisplayed()
+        composeRule.onNodeWithTag("actogram_request_history_permission").performClick()
+
+        composeRule.runOnIdle {
+            assertTrue(selectedRange == HealthDataRange.ENTIRE_HISTORY)
+        }
+    }
+
+    @Test
+    fun historyPermissionCalloutRequestsPermissionWhenAllHistoryAlreadySelected() {
+        var requested = false
+        composeRule.setContent {
+            DarkHourTheme {
+                DarkHourApp(
+                    records = DemoData.records,
+                    healthDataRange = HealthDataRange.ENTIRE_HISTORY,
+                    hasHistoryPermission = false,
+                    onRequestHistoryPermission = { requested = true },
+                )
+            }
+        }
+
+        composeRule.onNodeWithTag("actogram_request_history_permission").performClick()
+
+        composeRule.runOnIdle {
+            assertTrue(requested)
+        }
+    }
+
+    @Test
+    fun historyPermissionCalloutCanBeDismissed() {
+        var settings by mutableStateOf(AppSettings())
+        composeRule.setContent {
+            DarkHourTheme {
+                DarkHourApp(
+                    records = DemoData.records,
+                    initialSettings = settings,
+                    onAppSettingsChange = { settings = it },
+                    hasHistoryPermission = false,
+                )
+            }
+        }
+
+        composeRule.onNodeWithTag("actogram_history_callout").assertIsDisplayed()
+        composeRule.onNodeWithTag("dismiss_history_callout").performClick()
+
+        composeRule.onAllNodesWithTag("actogram_history_callout").assertCountEquals(0)
+        composeRule.runOnIdle {
+            assertTrue(settings.historyAccessCalloutDismissed)
         }
     }
 
