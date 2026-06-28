@@ -5,6 +5,14 @@ plugins {
     alias(libs.plugins.kotlin.compose)
 }
 
+val requestedTaskNames = gradle.startParameter.taskNames
+fun requestedTask(taskName: String): Boolean =
+    requestedTaskNames.any { it == taskName || it == ":app:$taskName" }
+
+val gestureTestRequested = requestedTask("gestureTest")
+val connectedGestureTestRequested = requestedTask("connectedGestureAndroidTest")
+val connectedGestureResultsDir = layout.buildDirectory.dir("outputs/androidTest-results/connected/debug")
+
 val keystorePropertiesFile = rootProject.file("keystore.properties")
 val keystoreProperties = Properties().apply {
     if (keystorePropertiesFile.isFile) {
@@ -37,6 +45,11 @@ android {
         versionName = "1.0.8"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        if (connectedGestureTestRequested) {
+            testInstrumentationRunnerArguments["class"] =
+                "one.aozora.darkhour.ui.actogram.ActogramGestureInstrumentedTest"
+            testInstrumentationRunnerArguments["gestureFrames"] = "true"
+        }
     }
 
     buildTypes {
@@ -88,4 +101,59 @@ dependencies {
     androidTestImplementation(libs.androidx.junit)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
     debugImplementation(libs.androidx.compose.ui.tooling)
+}
+
+tasks.register("gestureTest") {
+    group = "verification"
+    description = "Runs JVM actogram gesture tests and prints per-frame diagnostic tables."
+    dependsOn("testDebugUnitTest")
+}
+
+tasks.register("connectedGestureAndroidTest") {
+    group = "verification"
+    description = "Runs connected actogram gesture tests and enables per-frame diagnostics."
+    dependsOn("connectedDebugAndroidTest")
+    val resultsDir = connectedGestureResultsDir
+    doLast {
+        val resultDir = resultsDir.get().asFile
+        val logFiles = if (resultDir.isDirectory) {
+            resultDir.walkTopDown()
+                .filter { it.isFile }
+                .filter {
+                    it.name.startsWith("logcat-one.aozora.darkhour.ui.actogram.ActogramGestureInstrumentedTest-") &&
+                        it.extension == "txt"
+                }
+                .sortedBy { it.name }
+                .toList()
+        } else {
+            emptyList()
+        }
+        if (logFiles.isEmpty()) {
+            println("No connected gesture logcat files found under ${resultDir.absolutePath}")
+        }
+        logFiles.forEach { logFile ->
+            val gestureLines = logFile.readLines()
+                .filter { it.contains("GestureFrames") }
+                .map { it.substringAfter("GestureFrames:").trim() }
+            if (gestureLines.isNotEmpty()) {
+                println()
+                println("Connected gesture diagnostics from ${logFile.name}:")
+                gestureLines.forEach(::println)
+            }
+        }
+    }
+}
+
+tasks.withType<Test>().configureEach {
+    if (gestureTestRequested && name == "testDebugUnitTest") {
+        filter {
+            includeTestsMatching("one.aozora.darkhour.ui.actogram.ActogramGesture*")
+        }
+        systemProperty("darkhour.gestureFrames", "true")
+        outputs.upToDateWhen { false }
+        testLogging {
+            showStandardStreams = true
+            events("passed", "failed", "standardOut", "standardError")
+        }
+    }
 }

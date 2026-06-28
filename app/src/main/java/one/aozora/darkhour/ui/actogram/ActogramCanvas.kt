@@ -59,6 +59,7 @@ import kotlin.math.max
 
 @Composable
 fun ActogramCanvas(
+    modifier: Modifier = Modifier,
     layout: ActogramLayout,
     options: ActogramDisplayOptions,
     useIsoDateTime: Boolean,
@@ -66,7 +67,7 @@ fun ActogramCanvas(
     onSelectionChange: (ActogramSelection?) -> Unit,
     onRowHeightChange: (Float) -> Unit,
     onTransformingChange: (Boolean) -> Unit,
-    modifier: Modifier = Modifier,
+    onGestureFrame: ((ActogramGestureFrame) -> Unit)? = null,
 ) {
     val density = LocalDensity.current
     val use24HourTime = useIsoDateTime || android.text.format.DateFormat.is24HourFormat(LocalContext.current)
@@ -196,16 +197,10 @@ fun ActogramCanvas(
                         },
                         density = density.density,
                         axisHeightPx = axisHeightPx,
+                        viewportHeightPx = viewportHeight,
+                        minimumHeightPx = minimumHeightPx,
+                        realRowCount = layout.rows.size,
                         currentRowHeight = { gestureRowHeightDp ?: currentRowHeight },
-                        maxScrollForRowHeight = { rowHeightDp ->
-                            calculateActogramMaxScrollOffset(
-                                realRowCount = layout.rows.size,
-                                rowHeightPx = rowHeightDp * density.density,
-                                viewportHeightPx = viewportHeight,
-                                axisHeightPx = axisHeightPx,
-                                minimumHeightPx = minimumHeightPx,
-                            )
-                        },
                         onGestureRowHeightChange = { gestureRowHeightDp = it },
                         onRowHeightChange = { currentRowHeightChange(it) },
                         onTransformingChange = { currentTransformingChange(it) },
@@ -213,6 +208,7 @@ fun ActogramCanvas(
                             isTransforming = it
                         },
                         onPendingAnchoredScrollChange = { pendingAnchoredScroll = it },
+                        onGestureFrame = onGestureFrame,
                     )
                 }
                 .scrollable(
@@ -269,26 +265,31 @@ private suspend fun PointerInputScope.detectActogramTransformGestures(
     onScrollTargetChange: (Float) -> Unit,
     density: Float,
     axisHeightPx: Float,
+    viewportHeightPx: Float,
+    minimumHeightPx: Float,
+    realRowCount: Int,
     currentRowHeight: () -> Float,
-    maxScrollForRowHeight: (Float) -> Float,
     onGestureRowHeightChange: (Float) -> Unit,
     onRowHeightChange: (Float) -> Unit,
     onTransformingChange: (Boolean) -> Unit,
     onTransformingStateChange: (Boolean) -> Unit,
     onPendingAnchoredScrollChange: (Float) -> Unit,
+    onGestureFrame: ((ActogramGestureFrame) -> Unit)?,
 ) {
     awaitEachGesture {
         var gestureTransforming = false
-        var gestureStartRowHeight: Float? = null
-        var gestureZoom = 1f
-        var anchoredRow: Float? = null
         var readyForZoom = false
-        var currentFocalY: Float? = null
         var previousPointerCount = 0
 
-        // Track state synchronously to bypass Compose recomposition lag
-        var internalScroll = currentScroll()
-        var internalRowHeight = currentRowHeight()
+        val tracker = ActogramGestureTracker(
+            initialScrollPx = currentScroll(),
+            initialRowHeightDp = currentRowHeight(),
+            density = density,
+            axisHeightPx = axisHeightPx,
+            viewportHeightPx = viewportHeightPx,
+            minimumHeightPx = minimumHeightPx,
+            realRowCount = realRowCount,
+        )
 
         try {
             do {
@@ -301,8 +302,7 @@ private suspend fun PointerInputScope.detectActogramTransformGestures(
                         onTransformingStateChange(true)
                         onTransformingChange(true)
                         // Sync with true state right as the gesture starts
-                        internalScroll = currentScroll()
-                        internalRowHeight = currentRowHeight()
+                        tracker.sync(currentScroll(), currentRowHeight())
                     }
 
                     val zoom = event.calculateZoom()
@@ -310,48 +310,41 @@ private suspend fun PointerInputScope.detectActogramTransformGestures(
 
                     if (!readyForZoom || pressed != previousPointerCount) {
                         readyForZoom = true
-                        currentFocalY = event.calculateCentroid().y
-                        gestureStartRowHeight = internalRowHeight // FIX: Use synchronous state
-                        gestureZoom = 1f
-                        anchoredRow = calculateZoomAnchorRow(
-                            currentScroll = internalScroll, // FIX: Use synchronous state
-                            focalY = currentFocalY!!,
-                            axisHeight = axisHeightPx,
-                            rowHeight = gestureStartRowHeight!! * density,
+                        val update = tracker.onTransformFrame(
+                            pointerCount = pressed,
+                            focalY = event.calculateCentroid().y,
+                            zoomDelta = zoom,
+                            panY = pan.y,
                         )
+                        onGestureFrame?.invoke(update.frame)
 
                         event.changes.forEach { it.consume() }
                         previousPointerCount = pressed
                         continue
                     }
 
-                    currentFocalY = currentFocalY!! + pan.y
                     if (zoom != 1f || pan.y != 0f) {
-                        gestureZoom *= zoom
-                        val newRowHeight = (gestureStartRowHeight!! * gestureZoom).coerceIn(12f, 60f)
-                        val targetScroll = calculateZoomAnchoredScroll(
-                            anchoredRow = anchoredRow!!,
-                            focalY = currentFocalY!!,
-                            axisHeight = axisHeightPx,
-                            newRowHeight = newRowHeight * density,
-                        ).coerceIn(0f, maxScrollForRowHeight(newRowHeight))
+                        val update = tracker.onTransformFrame(
+                            pointerCount = pressed,
+                            focalY = event.calculateCentroid().y,
+                            zoomDelta = zoom,
+                            panY = pan.y,
+                        )
+                        val frame = update.frame
 
-                        val previousInternalHeight = internalRowHeight
+                        onGestureFrame?.invoke(frame)
+                        onPendingAnchoredScrollChange(frame.scrollOffsetPx)
+                        onScrollTargetChange(frame.scrollOffsetPx)
 
-                        internalRowHeight = newRowHeight
-                        internalScroll = targetScroll
-
-                        onPendingAnchoredScrollChange(targetScroll)
-                        onScrollTargetChange(targetScroll)
-
-                        if (newRowHeight != previousInternalHeight) {
-                            onGestureRowHeightChange(newRowHeight)
-                            onRowHeightChange(newRowHeight)
+                        if (frame.updatesRowHeight) {
+                            onGestureRowHeightChange(frame.rowHeightDp)
+                            onRowHeightChange(frame.rowHeightDp)
                         }
                     }
                     event.changes.forEach { it.consume() }
                 } else if (gestureTransforming) {
                     readyForZoom = false
+                    tracker.releasePointers()
                     event.changes.forEach { it.consume() }
                 }
 
