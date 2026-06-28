@@ -284,7 +284,11 @@ private suspend fun PointerInputScope.detectActogramTransformGestures(
         var anchoredRow: Float? = null
         var readyForZoom = false
         var currentFocalY: Float? = null
-        var previousPointerCount = 0 // NEW: Track pointer count
+        var previousPointerCount = 0
+
+        // Track state synchronously to bypass Compose recomposition lag
+        var internalScroll = currentScroll()
+        var internalRowHeight = currentRowHeight()
 
         try {
             do {
@@ -296,6 +300,9 @@ private suspend fun PointerInputScope.detectActogramTransformGestures(
                         gestureTransforming = true
                         onTransformingStateChange(true)
                         onTransformingChange(true)
+                        // Sync with true state right as the gesture starts
+                        internalScroll = currentScroll()
+                        internalRowHeight = currentRowHeight()
                     }
 
                     val zoom = event.calculateZoom()
@@ -304,21 +311,20 @@ private suspend fun PointerInputScope.detectActogramTransformGestures(
                     if (!readyForZoom || pressed != previousPointerCount) {
                         readyForZoom = true
                         currentFocalY = event.calculateCentroid().y
-                        gestureStartRowHeight = currentRowHeight()
+                        gestureStartRowHeight = internalRowHeight // FIX: Use synchronous state
                         gestureZoom = 1f
                         anchoredRow = calculateZoomAnchorRow(
-                            currentScroll = currentScroll(),
+                            currentScroll = internalScroll, // FIX: Use synchronous state
                             focalY = currentFocalY!!,
                             axisHeight = axisHeightPx,
                             rowHeight = gestureStartRowHeight!! * density,
                         )
 
                         event.changes.forEach { it.consume() }
-                        previousPointerCount = pressed // UPDATE: Sync pointer count
+                        previousPointerCount = pressed
                         continue
                     }
 
-                    // ... [zoom logic remains exactly the same here] ...
                     currentFocalY = currentFocalY!! + pan.y
                     if (zoom != 1f || pan.y != 0f) {
                         gestureZoom *= zoom
@@ -330,10 +336,15 @@ private suspend fun PointerInputScope.detectActogramTransformGestures(
                             newRowHeight = newRowHeight * density,
                         ).coerceIn(0f, maxScrollForRowHeight(newRowHeight))
 
+                        val previousInternalHeight = internalRowHeight
+
+                        internalRowHeight = newRowHeight
+                        internalScroll = targetScroll
+
                         onPendingAnchoredScrollChange(targetScroll)
                         onScrollTargetChange(targetScroll)
 
-                        if (newRowHeight != currentRowHeight()) {
+                        if (newRowHeight != previousInternalHeight) {
                             onGestureRowHeightChange(newRowHeight)
                             onRowHeightChange(newRowHeight)
                         }
