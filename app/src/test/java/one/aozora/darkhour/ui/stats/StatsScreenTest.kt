@@ -1,8 +1,11 @@
 package one.aozora.darkhour.ui.stats
 
+import one.aozora.darkhour.core.circadian.CircadianConfidence
+import one.aozora.darkhour.core.circadian.CircadianDay
 import one.aozora.darkhour.core.model.SleepRecord
 import one.aozora.darkhour.data.HealthDataRange
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
 import java.time.Instant
@@ -67,6 +70,66 @@ class StatsScreenTest {
                 mainSleepsCount = 1,
             ),
         )
+        assertEquals(
+            "Health Connect · All available data · 200 records · 150 main sleeps · naps excluded",
+            statsScopeSummary(
+                dataScope = StatsDataScope.AllAvailable,
+                dataRange = HealthDataRange.custom(90),
+                includeNaps = false,
+                recordCount = 200,
+                mainSleepsCount = 150,
+            ),
+        )
+    }
+
+    @Test
+    fun calculatesYearlyTauSeriesByDayOfYear() {
+        val series = calculateYearlyTauSeries(
+            days = listOf(
+                circadianDay("2026-06-01", tau = 24.8, weight = 1.0, hasAnchor = true),
+                circadianDay("2025-12-31", tau = 24.4, weight = 0.8, hasAnchor = true),
+                circadianDay("2025-01-02", tau = 24.2, weight = 1.0, hasAnchor = true),
+                circadianDay("2026-06-02", tau = 24.9, weight = 0.5, hasAnchor = false),
+                circadianDay("2026-06-03", tau = 27.0, weight = 1.0, hasAnchor = true, isGap = true),
+                circadianDay("2026-06-04", tau = 27.0, weight = 1.0, hasAnchor = true, isForecast = true),
+                circadianDay("2026-06-05", tau = 27.0, weight = 0.0, hasAnchor = true),
+            ),
+        )
+
+        assertEquals(listOf(2025, 2026), series.map { it.year })
+        assertEquals(listOf(2, 365), series[0].points.map { it.dayOfYear })
+        assertEquals(listOf(24.2, 24.4), series[0].points.map { it.tauHours })
+        assertEquals(listOf(152, 153), series[1].points.map { it.dayOfYear })
+        assertEquals(listOf(24.8, 24.9), series[1].points.map { it.tauHours })
+        assertEquals(listOf(1.0, 0.5), series[1].points.map { it.confidence })
+    }
+
+    @Test
+    fun tauAxisRangeUsesDataBoundsWithoutForcingTwentyFourHours() {
+        val range = tauAxisRange(listOf(24.82, 24.91, 25.03))
+
+        assertEquals(24.7, range.min, 0.0001)
+        assertEquals(25.2, range.max, 0.0001)
+    }
+
+    @Test
+    fun astronomicalSeasonBandsCoverApproximateYearBoundaries() {
+        val bands = astronomicalSeasonBands()
+
+        assertEquals(1, bands.first().startDay)
+        assertEquals(366, bands.last().endDay)
+        assertEquals(listOf(79, 172, 265, 355), bands.dropLast(1).map { it.endDay })
+    }
+
+    @Test
+    fun yearGradientColorsSeparateDistantYears() {
+        val first = yearGradientColor(year = 2020, minYear = 2020, maxYear = 2024)
+        val middle = yearGradientColor(year = 2022, minYear = 2020, maxYear = 2024)
+        val last = yearGradientColor(year = 2024, minYear = 2020, maxYear = 2024)
+
+        assertNotEquals(first, middle)
+        assertNotEquals(first, last)
+        assertNotEquals(middle, last)
     }
 
     private fun record(
@@ -86,4 +149,36 @@ class StatsScreenTest {
         minutesAwake = (durationHours * 60).toInt() - minutesAsleep,
         isMainSleep = true,
     )
+
+    private fun circadianDay(
+        date: String,
+        tau: Double,
+        weight: Double,
+        hasAnchor: Boolean,
+        isGap: Boolean = false,
+        isForecast: Boolean = false,
+    ): CircadianDay {
+        val localDate = LocalDate.parse(date)
+        return CircadianDay(
+            date = localDate,
+            nightStartHour = 22.0,
+            nightEndHour = 6.0,
+            confidenceScore = weight,
+            confidence = CircadianConfidence.HIGH,
+            localTau = tau,
+            localDrift = tau - 24.0,
+            anchorSleep = if (hasAnchor) {
+                record(
+                    start = "${date}T22:00:00Z",
+                    end = localDate.plusDays(1).toString() + "T06:00:00Z",
+                    durationHours = 8.0,
+                    minutesAsleep = 420,
+                )
+            } else {
+                null
+            },
+            isForecast = isForecast,
+            isGap = isGap,
+        )
+    }
 }

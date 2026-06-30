@@ -62,12 +62,15 @@ class MainActivity : ComponentActivity() {
                     healthConnectAccess = healthConnectAccess,
                     healthDataRange = healthState.dataRange,
                     hasHistoryPermission = BuildConfig.USE_DEMO_DATA || healthState.hasHistoryPermission,
+                    statsAllRecords = if (BuildConfig.USE_DEMO_DATA) DemoData.records else healthState.statsAllRecords,
                     isRefreshing = !BuildConfig.USE_DEMO_DATA && healthState.isRefreshing,
+                    isStatsAllDataRefreshing = !BuildConfig.USE_DEMO_DATA && healthState.isStatsAllDataRefreshing,
                     importedRecordCount = healthState.importedRecordCount,
                     expectedRecordCount = healthState.expectedRecordCount,
                     isImportPartial = healthState.isImportPartial,
                     importPhase = healthState.importPhase,
                     importError = if (BuildConfig.USE_DEMO_DATA) null else healthState.errorMessage,
+                    statsAllDataError = if (BuildConfig.USE_DEMO_DATA) null else healthState.statsAllDataErrorMessage,
                     totalHistoryDays = healthState.totalHistoryDays,
                     onRequestHealthPermissions = {
                         if (!BuildConfig.USE_DEMO_DATA) {
@@ -79,6 +82,11 @@ class MainActivity : ComponentActivity() {
                             requestHealthPermissions.launch(
                                 healthConnect.requiredPermissions(HealthDataRange.ENTIRE_HISTORY),
                             )
+                        }
+                    },
+                    onRequestStatsAllData = {
+                        if (!BuildConfig.USE_DEMO_DATA) {
+                            healthConnect.refreshStatsAllData()
                         }
                     },
                     onHealthDataRangeChange = { range ->

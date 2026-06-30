@@ -204,6 +204,102 @@ class DarkHourAppTest {
     }
 
     @Test
+    fun statsCanSwitchBetweenSelectedPeriodAndAllData() {
+        composeRule.setContent {
+            DarkHourTheme {
+                DarkHourApp(
+                    records = DemoData.records.take(8),
+                    statsAllRecords = DemoData.records,
+                    healthDataRange = HealthDataRange.custom(90),
+                )
+            }
+        }
+
+        composeRule.onNodeWithTag("destination_stats").performClick()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("stats_scope_selected").assertIsSelected()
+        composeRule.onNodeWithText("Health Connect · Last 90 days", substring = true).assertIsDisplayed()
+
+        composeRule.onNodeWithTag("stats_scope_all").performClick()
+
+        composeRule.onNodeWithTag("stats_scope_all").assertIsSelected()
+        composeRule.onNodeWithText("Health Connect · All available data", substring = true).assertIsDisplayed()
+        composeRule.onNodeWithTag("tau_year_chart").assertIsDisplayed()
+    }
+
+    @Test
+    fun statsScopeToggleIsHiddenWhenAllHistoryIsSelected() {
+        composeRule.setContent {
+            DarkHourTheme {
+                DarkHourApp(
+                    records = DemoData.records,
+                    statsAllRecords = DemoData.records,
+                    healthDataRange = HealthDataRange.ENTIRE_HISTORY,
+                )
+            }
+        }
+
+        composeRule.onNodeWithTag("destination_stats").performClick()
+        composeRule.waitForIdle()
+
+        composeRule.onAllNodesWithTag("stats_scope_selected").assertCountEquals(0)
+        composeRule.onAllNodesWithTag("stats_scope_all").assertCountEquals(0)
+        composeRule.onNodeWithText("Health Connect · All history", substring = true).assertIsDisplayed()
+    }
+
+    @Test
+    fun statsAllDataUsesCacheWhenSwitchingBack() {
+        var allDataRequests = 0
+        composeRule.setContent {
+            DarkHourTheme {
+                DarkHourApp(
+                    records = DemoData.records.take(8),
+                    statsAllRecords = DemoData.records,
+                    healthDataRange = HealthDataRange.custom(90),
+                    onRequestStatsAllData = { allDataRequests++ },
+                )
+            }
+        }
+
+        composeRule.onNodeWithTag("destination_stats").performClick()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("stats_scope_all").performClick()
+        composeRule.onNodeWithTag("stats_scope_selected").performClick()
+        composeRule.onNodeWithTag("stats_scope_all").performClick()
+
+        composeRule.runOnIdle {
+            assertTrue(allDataRequests == 0)
+        }
+    }
+
+    @Test
+    fun statsAllDataRequestsHistoryPermissionWithoutChangingRange() {
+        var requested = false
+        var selectedRange by mutableStateOf(HealthDataRange.DEFAULT_PERIOD)
+        composeRule.setContent {
+            DarkHourTheme {
+                DarkHourApp(
+                    records = DemoData.records,
+                    statsAllRecords = null,
+                    healthDataRange = selectedRange,
+                    hasHistoryPermission = false,
+                    onRequestHistoryPermission = { requested = true },
+                    onHealthDataRangeChange = { selectedRange = it },
+                )
+            }
+        }
+
+        composeRule.onNodeWithTag("destination_stats").performClick()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("stats_scope_all").performClick()
+
+        composeRule.runOnIdle {
+            assertTrue(requested)
+            assertTrue(selectedRange == HealthDataRange.DEFAULT_PERIOD)
+        }
+    }
+
+    @Test
     fun historyPermissionCalloutSwitchesToAllHistoryFromActogram() {
         var selectedRange by mutableStateOf(HealthDataRange.DEFAULT_PERIOD)
         composeRule.setContent {

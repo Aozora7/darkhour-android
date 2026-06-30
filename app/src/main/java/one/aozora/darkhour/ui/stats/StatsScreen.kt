@@ -17,13 +17,24 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
+import one.aozora.darkhour.core.circadian.CircadianAnalyzer
+import one.aozora.darkhour.core.circadian.CircadianDay
 import one.aozora.darkhour.core.model.SleepRecord
+import one.aozora.darkhour.core.periodogram.buildPeriodogramAnchors
+import one.aozora.darkhour.core.periodogram.computePeriodogram
 import one.aozora.darkhour.data.HealthDataRange
 import one.aozora.darkhour.ui.LocalAppSettings
 import one.aozora.darkhour.ui.LocalHealthConnectState
@@ -35,17 +46,97 @@ import kotlin.math.roundToInt
 fun StatsScreen(
     modifier: Modifier = Modifier,
 ) {
-    val (records, analysis, periodogram) = LocalSleepAnalysis.current
+    val selectedAnalysis = LocalSleepAnalysis.current
     val (settings) = LocalAppSettings.current
     val healthConnect = LocalHealthConnectState.current
+    var dataScope by rememberSaveable { mutableStateOf(StatsDataScope.SelectedPeriod) }
+    val statsAllRecords = healthConnect.statsAllRecords
+    val showDataScopeToggle = healthConnect.dataRange != HealthDataRange.ENTIRE_HISTORY
+    LaunchedEffect(showDataScopeToggle) {
+        if (!showDataScopeToggle) {
+            dataScope = StatsDataScope.SelectedPeriod
+        }
+    }
+    LaunchedEffect(
+        dataScope,
+        showDataScopeToggle,
+        healthConnect.hasHistoryPermission,
+        statsAllRecords,
+        healthConnect.isStatsAllDataRefreshing,
+    ) {
+        if (
+            showDataScopeToggle &&
+            dataScope == StatsDataScope.AllAvailable &&
+            healthConnect.hasHistoryPermission &&
+            statsAllRecords == null &&
+            !healthConnect.isStatsAllDataRefreshing
+        ) {
+            healthConnect.onRequestStatsAllData()
+        }
+    }
+
+    val allDataRecords = remember(statsAllRecords, settings.includeNaps) {
+        statsAllRecords
+            ?.let { records -> if (settings.includeNaps) records else records.filter { it.isMainSleep } }
+    }
+    val allDataAnalysis = remember(allDataRecords, settings.forecastDays) {
+        CircadianAnalyzer.analyze(allDataRecords.orEmpty(), extraDays = settings.forecastDays)
+    }
+    val allDataPeriodogram = remember(allDataRecords) {
+        computePeriodogram(buildPeriodogramAnchors(allDataRecords.orEmpty()))
+    }
+    val records = when (dataScope) {
+        StatsDataScope.SelectedPeriod -> selectedAnalysis.records
+        StatsDataScope.AllAvailable -> allDataRecords.orEmpty()
+    }
+    val analysis = when (dataScope) {
+        StatsDataScope.SelectedPeriod -> selectedAnalysis.analysis
+        StatsDataScope.AllAvailable -> allDataAnalysis
+    }
+    val periodogram = when (dataScope) {
+        StatsDataScope.SelectedPeriod -> selectedAnalysis.periodogram
+        StatsDataScope.AllAvailable -> allDataPeriodogram
+    }
+    val showAllDataStats = dataScope == StatsDataScope.AllAvailable || !showDataScopeToggle
+    val yearlyTauSeries = remember(analysis.days, showAllDataStats) {
+        if (showAllDataStats) {
+            calculateYearlyTauSeries(analysis.days)
+        } else {
+            emptyList()
+        }
+    }
     val mainSleeps = records.filter { it.isMainSleep }
     val metrics = calculateStatsMetrics(records, analysis.globalDailyDrift)
     val scopeSummary = statsScopeSummary(
+        dataScope = dataScope,
         dataRange = healthConnect.dataRange,
         includeNaps = settings.includeNaps,
         recordCount = records.size,
         mainSleepsCount = mainSleeps.size,
     )
+    val statusMessage = when {
+        dataScope == StatsDataScope.AllAvailable && !healthConnect.hasHistoryPermission ->
+            "Health history permission is needed for all available data."
+        dataScope == StatsDataScope.AllAvailable && healthConnect.isStatsAllDataRefreshing ->
+            "Loading all available data..."
+        dataScope == StatsDataScope.AllAvailable && healthConnect.statsAllDataError != null ->
+            healthConnect.statsAllDataError
+        else -> null
+    }
+    fun selectDataScope(scope: StatsDataScope) {
+        dataScope = scope
+        if (scope == StatsDataScope.AllAvailable) {
+            if (
+                healthConnect.hasHistoryPermission &&
+                statsAllRecords == null &&
+                !healthConnect.isStatsAllDataRefreshing
+            ) {
+                healthConnect.onRequestStatsAllData()
+            } else if (!healthConnect.hasHistoryPermission) {
+                healthConnect.onRequestHistoryPermission()
+            }
+        }
+    }
 
     BoxWithConstraints(modifier = modifier.fillMaxSize()) {
         val isWide = maxWidth >= 600.dp
@@ -62,7 +153,13 @@ fun StatsScreen(
                         .weight(1.2f)
                         .fillMaxHeight()
                 ) {
-                    HeaderText(scopeSummary)
+                    HeaderText(
+                        scopeSummary = scopeSummary,
+                        dataScope = dataScope,
+                        showDataScopeToggle = showDataScopeToggle,
+                        statusMessage = statusMessage,
+                        onDataScopeChange = ::selectDataScope,
+                    )
                     Spacer(Modifier.height(16.dp))
                     PeriodogramChart(
                         result = periodogram,
@@ -70,6 +167,13 @@ fun StatsScreen(
                             .fillMaxWidth()
                             .weight(1f)
                     )
+                    if (showAllDataStats) {
+                        Spacer(Modifier.height(16.dp))
+                        YearlyTauSection(
+                            series = yearlyTauSeries,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
                 }
 
                 Column(
@@ -122,7 +226,13 @@ fun StatsScreen(
                     .padding(horizontal = 16.dp, vertical = 14.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
-                HeaderText(scopeSummary)
+                HeaderText(
+                    scopeSummary = scopeSummary,
+                    dataScope = dataScope,
+                    showDataScopeToggle = showDataScopeToggle,
+                    statusMessage = statusMessage,
+                    onDataScopeChange = ::selectDataScope,
+                )
 
                 PeriodogramChart(
                     result = periodogram,
@@ -131,6 +241,12 @@ fun StatsScreen(
                         .heightIn(min = 180.dp, max = 260.dp)
                         .aspectRatio(1.75f),
                 )
+                if (showAllDataStats) {
+                    YearlyTauSection(
+                        series = yearlyTauSeries,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
 
                 MetricRow(
                     left = Metric("Tau", "%.2f h".format(analysis.globalTau), signedMinutes(analysis.globalDailyDrift * 60.0)),
@@ -162,18 +278,69 @@ fun StatsScreen(
 }
 
 @Composable
-private fun HeaderText(scopeSummary: String) {
-    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+private fun HeaderText(
+    scopeSummary: String,
+    dataScope: StatsDataScope,
+    showDataScopeToggle: Boolean,
+    statusMessage: String?,
+    onDataScopeChange: (StatsDataScope) -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text("Circadian stats", style = MaterialTheme.typography.headlineSmall)
         Text(
             scopeSummary,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             style = MaterialTheme.typography.bodySmall,
         )
+        if (showDataScopeToggle) {
+            StatsScopeToggle(
+                selectedScope = dataScope,
+                onSelected = onDataScopeChange,
+            )
+        }
+        if (statusMessage != null) {
+            Text(
+                statusMessage,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
+    }
+}
+
+@Composable
+private fun StatsScopeToggle(
+    selectedScope: StatsDataScope,
+    onSelected: (StatsDataScope) -> Unit,
+) {
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        StatsDataScope.entries.forEach { scope ->
+            FilterChip(
+                selected = selectedScope == scope,
+                onClick = { onSelected(scope) },
+                label = { Text(scope.label) },
+                modifier = Modifier.testTag(scope.testTag),
+            )
+        }
     }
 }
 
 private data class Metric(val label: String, val value: String, val detail: String)
+
+@Composable
+private fun YearlyTauSection(
+    series: List<YearlyTauSeries>,
+    modifier: Modifier = Modifier,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        TauYearChart(
+            series = series,
+            modifier = modifier
+                .height(260.dp)
+                .testTag("tau_year_chart"),
+        )
+    }
+}
 
 @Composable
 private fun MetricRow(left: Metric, right: Metric) {
@@ -212,6 +379,7 @@ private fun signedDays(value: Double): String =
     "${if (value >= 0) "+" else ""}%.1f days".format(value)
 
 internal fun statsScopeSummary(
+    dataScope: StatsDataScope = StatsDataScope.SelectedPeriod,
     dataRange: HealthDataRange,
     includeNaps: Boolean,
     recordCount: Int,
@@ -222,11 +390,60 @@ internal fun statsScopeSummary(
         HealthDataRange.EntireHistory -> "All history"
         is HealthDataRange.Custom -> "Last ${dataRange.days} days"
     }
+    val scopeLabel = when (dataScope) {
+        StatsDataScope.SelectedPeriod -> rangeLabel
+        StatsDataScope.AllAvailable -> "All available data"
+    }
     val napLabel = if (includeNaps) "naps included" else "naps excluded"
     val recordsLabel = "$recordCount ${"record".pluralized(recordCount)}"
     val mainSleepsLabel = "$mainSleepsCount main ${"sleep".pluralized(mainSleepsCount)}"
-    return "Health Connect · $rangeLabel · $recordsLabel · $mainSleepsLabel · $napLabel"
+    return "Health Connect · $scopeLabel · $recordsLabel · $mainSleepsLabel · $napLabel"
 }
+
+internal enum class StatsDataScope(
+    val label: String,
+    val testTag: String,
+) {
+    SelectedPeriod("Selected period", "stats_scope_selected"),
+    AllAvailable("All data", "stats_scope_all"),
+}
+
+internal data class YearlyTauPoint(
+    val dayOfYear: Int,
+    val tauHours: Double,
+    val confidence: Double,
+)
+
+internal data class YearlyTauSeries(
+    val year: Int,
+    val points: List<YearlyTauPoint>,
+)
+
+internal fun calculateYearlyTauSeries(
+    days: List<CircadianDay>,
+): List<YearlyTauSeries> =
+    days
+        .filter {
+            !it.isForecast &&
+                !it.isGap &&
+                it.confidenceScore > 0.0
+        }
+        .groupBy { it.date.year }
+        .toSortedMap()
+        .map { (year, yearDays) ->
+            YearlyTauSeries(
+                year = year,
+                points = yearDays
+                    .sortedBy { it.date }
+                    .map {
+                        YearlyTauPoint(
+                            dayOfYear = it.date.dayOfYear,
+                            tauHours = it.localTau,
+                            confidence = it.confidenceScore,
+                        )
+                    },
+            )
+        }
 
 private fun String.pluralized(count: Int): String =
     if (count == 1) this else "${this}s"

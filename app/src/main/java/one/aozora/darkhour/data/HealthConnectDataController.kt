@@ -59,16 +59,19 @@ enum class HealthImportPhase {
 
 data class HealthConnectUiState(
     val records: List<SleepRecord> = emptyList(),
+    val statsAllRecords: List<SleepRecord>? = null,
     val access: HealthConnectAccess = HealthConnectAccess.UNAVAILABLE,
     val dataRange: HealthDataRange = HealthDataRange.DEFAULT_PERIOD,
     val totalHistoryDays: Int? = null,
     val hasHistoryPermission: Boolean = false,
     val isRefreshing: Boolean = false,
+    val isStatsAllDataRefreshing: Boolean = false,
     val importedRecordCount: Int = 0,
     val expectedRecordCount: Int? = null,
     val isImportPartial: Boolean = false,
     val importPhase: HealthImportPhase = HealthImportPhase.IDLE,
     val errorMessage: String? = null,
+    val statsAllDataErrorMessage: String? = null,
 )
 
 class HealthConnectDataController(
@@ -82,6 +85,7 @@ class HealthConnectDataController(
     private val zoneId = ZoneId.systemDefault()
     private var recentImportDuration = initialImportDuration.coerceAtLeast(Duration.ofDays(1))
     private var refreshJob: Job? = null
+    private var statsAllDataRefreshJob: Job? = null
     private val mutableState = MutableStateFlow(
         HealthConnectUiState(dataRange = initialDataRange),
     )
@@ -143,6 +147,32 @@ class HealthConnectDataController(
                 mutableState.value = state.value.copy(
                     isRefreshing = false,
                     errorMessage = failure.message ?: "Health Connect refresh failed",
+                )
+            }
+        }
+    }
+
+    fun refreshStatsAllData() {
+        statsAllDataRefreshJob?.cancel()
+        statsAllDataRefreshJob = scope.launch {
+            try {
+                when (HealthConnectClient.getSdkStatus(applicationContext)) {
+                    HealthConnectClient.SDK_UNAVAILABLE,
+                    HealthConnectClient.SDK_UNAVAILABLE_PROVIDER_UPDATE_REQUIRED -> {
+                        mutableState.value = state.value.copy(
+                            statsAllRecords = null,
+                            isStatsAllDataRefreshing = false,
+                            statsAllDataErrorMessage = null,
+                        )
+                    }
+                    HealthConnectClient.SDK_AVAILABLE -> refreshStatsAllDataAvailableClient()
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (failure: Exception) {
+                mutableState.value = state.value.copy(
+                    isStatsAllDataRefreshing = false,
+                    statsAllDataErrorMessage = failure.message ?: "Stats import failed",
                 )
             }
         }
@@ -213,6 +243,51 @@ class HealthConnectDataController(
                 isImportPartial = false,
                 importPhase = HealthImportPhase.IDLE,
                 errorMessage = failure.message ?: "Health Connect import failed",
+            )
+        }
+    }
+
+    private suspend fun refreshStatsAllDataAvailableClient() {
+        val client = HealthConnectClient.getOrCreate(applicationContext)
+        val granted = client.permissionController.getGrantedPermissions()
+        if (!granted.containsAll(requiredPermissions(HealthDataRange.ENTIRE_HISTORY))) {
+            mutableState.value = state.value.copy(
+                statsAllRecords = null,
+                hasHistoryPermission = HealthPermission.PERMISSION_READ_HEALTH_DATA_HISTORY in granted,
+                isStatsAllDataRefreshing = false,
+                statsAllDataErrorMessage = null,
+            )
+            return
+        }
+
+        mutableState.value = state.value.copy(
+            hasHistoryPermission = true,
+            isStatsAllDataRefreshing = true,
+            statsAllDataErrorMessage = null,
+        )
+        try {
+            val imported = withContext(Dispatchers.IO) {
+                client.readSleepRecords(
+                    range = HealthDataRange.ENTIRE_HISTORY,
+                    now = clock.instant(),
+                    zoneId = zoneId,
+                    initialImportDuration = recentImportDuration,
+                    readTotalHistoryDays = true,
+                )
+            }
+            mutableState.value = state.value.copy(
+                statsAllRecords = imported.records.map(ImportedSleepRecord::record).sortedBy(SleepRecord::startTime),
+                totalHistoryDays = imported.totalHistoryDays ?: state.value.totalHistoryDays,
+                hasHistoryPermission = true,
+                isStatsAllDataRefreshing = false,
+                statsAllDataErrorMessage = null,
+            )
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (failure: Exception) {
+            mutableState.value = state.value.copy(
+                isStatsAllDataRefreshing = false,
+                statsAllDataErrorMessage = failure.message ?: "Stats import failed",
             )
         }
     }
