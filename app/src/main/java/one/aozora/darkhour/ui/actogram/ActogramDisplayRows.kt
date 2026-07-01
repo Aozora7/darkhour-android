@@ -95,6 +95,9 @@ internal fun ActogramDisplayRow.label(
 private fun List<ActogramRow>.toDisplayRows(): List<ActogramDisplayRow.Data> =
     map { ActogramDisplayRow.Data(it) }
 
+internal fun ActogramDisplayRow?.dataRowOrNull(): ActogramRow? =
+    (this as? ActogramDisplayRow.Data)?.row
+
 private fun ActogramLayout.legendRows(scheduleItems: List<ActogramLegendItem>): List<ActogramDisplayRow.Legend> {
     val rowDurationMs = (rowHours * 3_600_000.0).roundToLong()
     return listOf(
