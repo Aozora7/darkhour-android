@@ -10,7 +10,10 @@ import one.aozora.darkhour.core.periodogram.PeriodogramResult
 import one.aozora.darkhour.data.HealthConnectAccess
 import one.aozora.darkhour.data.HealthDataRange
 import one.aozora.darkhour.data.HealthImportPhase
+import one.aozora.darkhour.ui.actogram.ActogramDisplayOptions
 import one.aozora.darkhour.ui.actogram.ActogramLayout
+import one.aozora.darkhour.ui.schedule.ScheduleEntry
+import one.aozora.darkhour.ui.settings.AppSettings
 
 @Immutable
 data class SleepAnalysisState(

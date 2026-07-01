@@ -57,9 +57,7 @@ import androidx.compose.ui.platform.LocalLocale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import one.aozora.darkhour.ui.DEFAULT_SCHEDULE_COLOR
 import one.aozora.darkhour.ui.LocalScheduleState
-import one.aozora.darkhour.ui.ScheduleEntry
 import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.LocalTime

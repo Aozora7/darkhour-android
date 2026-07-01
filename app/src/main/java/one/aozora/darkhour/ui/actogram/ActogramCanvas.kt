@@ -38,9 +38,6 @@ import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import one.aozora.darkhour.core.model.SleepStageLevel
-import one.aozora.darkhour.ui.ActogramColorMode
-import one.aozora.darkhour.ui.ActogramDisplayOptions
-import one.aozora.darkhour.ui.ActogramOrder
 import one.aozora.darkhour.ui.theme.ChartSelection
 import one.aozora.darkhour.ui.theme.ChartSleepSolid
 import one.aozora.darkhour.ui.theme.ChartTeal

@@ -62,14 +62,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import one.aozora.darkhour.data.HealthConnectAccess
 import one.aozora.darkhour.data.HealthDataRange
-import one.aozora.darkhour.ui.ActogramColorMode
-import one.aozora.darkhour.ui.ActogramDisplayOptions
-import one.aozora.darkhour.ui.ActogramOrder
-import one.aozora.darkhour.ui.ActogramTimeScale
 import one.aozora.darkhour.ui.LocalActogramDisplay
 import one.aozora.darkhour.ui.LocalAppSettings
 import one.aozora.darkhour.ui.LocalHealthConnectState
 import one.aozora.darkhour.ui.LocalScheduleState
+import one.aozora.darkhour.ui.schedule.ScheduleEntry
 import one.aozora.darkhour.ui.theme.CircadianForecast
 import one.aozora.darkhour.ui.theme.CircadianObserved
 import one.aozora.darkhour.ui.theme.SleepDeep
@@ -617,7 +614,7 @@ private fun formatDuration(start: Instant, end: Instant): String {
     return "${"%.1f".format(Locale.getDefault(), hours)} hrs"
 }
 
-private fun one.aozora.darkhour.ui.ScheduleEntry.recurrenceSummary(useIsoDateTime: Boolean): String {
+private fun ScheduleEntry.recurrenceSummary(useIsoDateTime: Boolean): String {
     date?.let { return formatActogramDate(it, useIsoDateTime) }
     val ordered = DayOfWeek.entries.filter { it in daysOfWeek }
     if (ordered.size == 7) return "Every day"

@@ -22,8 +22,8 @@ import androidx.compose.ui.test.pinch
 import androidx.compose.ui.test.swipe
 import one.aozora.darkhour.ui.DarkHourApp
 import one.aozora.darkhour.ui.DemoData
-import one.aozora.darkhour.ui.AppSettings
 import one.aozora.darkhour.ui.theme.DarkHourTheme
+import one.aozora.darkhour.ui.settings.AppSettings
 import one.aozora.darkhour.data.HealthConnectAccess
 import one.aozora.darkhour.data.HealthDataRange
 import org.junit.Assert.assertTrue

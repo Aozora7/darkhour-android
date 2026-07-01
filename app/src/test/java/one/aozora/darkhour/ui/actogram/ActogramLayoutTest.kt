@@ -6,10 +6,8 @@ import one.aozora.darkhour.core.circadian.CircadianDay
 import one.aozora.darkhour.core.model.SleepRecord
 import one.aozora.darkhour.core.model.SleepStageInterval
 import one.aozora.darkhour.core.model.SleepStageLevel
-import one.aozora.darkhour.ui.ActogramOrder
-import one.aozora.darkhour.ui.ActogramDisplayOptions
-import one.aozora.darkhour.ui.DEFAULT_SCHEDULE_COLOR
-import one.aozora.darkhour.ui.ScheduleEntry
+import one.aozora.darkhour.ui.schedule.DEFAULT_SCHEDULE_COLOR
+import one.aozora.darkhour.ui.schedule.ScheduleEntry
 import java.time.DayOfWeek
 import java.time.Duration
 import java.time.LocalDate

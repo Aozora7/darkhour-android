@@ -1,12 +1,15 @@
-package one.aozora.darkhour.ui
+package one.aozora.darkhour.data.settings
 
 import android.content.Context
 import android.content.SharedPreferences
+import androidx.core.content.edit
+import one.aozora.darkhour.data.HealthDataRange
+import one.aozora.darkhour.ui.actogram.ActogramDisplayOptions
+import one.aozora.darkhour.ui.schedule.ScheduleEntry
+import one.aozora.darkhour.ui.settings.AppSettings
 import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.LocalTime
-import androidx.core.content.edit
-import one.aozora.darkhour.data.HealthDataRange
 
 class AppSettingsStore(context: Context) {
     private val preferences = context.applicationContext.getSharedPreferences(

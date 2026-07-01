@@ -10,11 +10,11 @@ import androidx.compose.runtime.remember
 import androidx.lifecycle.lifecycleScope
 import one.aozora.darkhour.data.HealthConnectDataController
 import one.aozora.darkhour.data.HealthDataRange
-import one.aozora.darkhour.ui.AppSettingsStore
-import one.aozora.darkhour.ui.ActogramDisplayOptions
-import one.aozora.darkhour.ui.ActogramTimeScale
+import one.aozora.darkhour.data.settings.AppSettingsStore
 import one.aozora.darkhour.ui.DarkHourApp
 import one.aozora.darkhour.ui.DemoData
+import one.aozora.darkhour.ui.actogram.ActogramDisplayOptions
+import one.aozora.darkhour.ui.actogram.ActogramTimeScale
 import one.aozora.darkhour.ui.theme.DarkHourTheme
 import java.time.Duration
 import kotlin.math.ceil

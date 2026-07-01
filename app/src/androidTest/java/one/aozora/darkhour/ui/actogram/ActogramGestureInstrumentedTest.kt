@@ -19,8 +19,8 @@ import one.aozora.darkhour.core.model.SleepRecord
 import one.aozora.darkhour.core.model.SleepStageInterval
 import one.aozora.darkhour.core.model.SleepStageLevel
 import one.aozora.darkhour.core.model.SleepStages
-import one.aozora.darkhour.ui.ActogramDisplayOptions
-import one.aozora.darkhour.ui.ActogramOrder
+import one.aozora.darkhour.ui.actogram.ActogramDisplayOptions
+import one.aozora.darkhour.ui.actogram.ActogramOrder
 import one.aozora.darkhour.ui.theme.DarkHourTheme
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue

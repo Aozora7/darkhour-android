@@ -4,14 +4,13 @@ import one.aozora.darkhour.core.circadian.CircadianDay
 import one.aozora.darkhour.core.model.SleepRecord
 import one.aozora.darkhour.core.model.SleepStageLevel
 import one.aozora.darkhour.core.model.SleepStages
-import one.aozora.darkhour.ui.ScheduleEntry
+import one.aozora.darkhour.ui.schedule.ScheduleEntry
 import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
-import one.aozora.darkhour.ui.ActogramOrder
 import kotlin.math.ceil
 import kotlin.math.floor
 import kotlin.math.max
