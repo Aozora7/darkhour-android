@@ -326,6 +326,28 @@ class ActogramLayoutTest {
     }
 
     @Test
+    fun overlappingCircadianOverlaysAreTrimmedWithinCalendarRow() {
+        val date = LocalDate.parse("2026-06-15")
+        val sleep = record(date, 22.0, 7.0)
+        val layout = ActogramLayoutEngine.build(
+            records = listOf(sleep),
+            circadianDays = listOf(
+                circadian(date, sleep, 20.0, 2.0),
+                circadian(date.plusDays(1), sleep, -1.0, 4.0),
+            ),
+            minimumRows = 2,
+        )
+
+        val nextRowOverlays = layout.rows.first { it.date == date.plusDays(1) }.overlays
+
+        assertEquals(2, nextRowOverlays.size)
+        assertEquals(0.0, nextRowOverlays[0].startHour, 0.001)
+        assertEquals(2.0, nextRowOverlays[0].endHour, 0.001)
+        assertEquals(2.0, nextRowOverlays[1].startHour, 0.001)
+        assertEquals(4.0, nextRowOverlays[1].endHour, 0.001)
+    }
+
+    @Test
     fun doublePlotBoundaryHitTestingKeepsWrappedCircadianSelection() {
         val date = LocalDate.parse("2026-06-15")
         val sleep = record(date, 22.0, 7.0)

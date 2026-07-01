@@ -55,21 +55,26 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import android.util.Log
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import one.aozora.darkhour.BuildConfig
 import kotlin.math.roundToInt
 import one.aozora.darkhour.data.HealthConnectAccess
 import one.aozora.darkhour.data.HealthDataRange
 import one.aozora.darkhour.data.HealthImportPhase
 import one.aozora.darkhour.core.circadian.CircadianAnalyzer
+import one.aozora.darkhour.core.circadian.CircadianDay
 import one.aozora.darkhour.core.model.SleepRecord
 import one.aozora.darkhour.core.periodogram.buildPeriodogramAnchors
 import one.aozora.darkhour.core.periodogram.computePeriodogram
+import one.aozora.darkhour.ui.actogram.ActogramLayout
 import one.aozora.darkhour.ui.actogram.ActogramLayoutEngine
 import one.aozora.darkhour.ui.actogram.ActogramScreen
 import one.aozora.darkhour.ui.schedule.ScheduleScreen
 import one.aozora.darkhour.ui.settings.SettingsScreen
 import one.aozora.darkhour.ui.stats.StatsScreen
+import java.time.LocalDate
 import kotlin.time.Duration.Companion.milliseconds
 
 private data class DestinationItem(
@@ -152,6 +157,9 @@ fun DarkHourApp(
         } else {
             ActogramLayoutEngine.withScheduleEntries(baseLayout, scheduleEntries)
         }
+    }
+    LaunchedEffect(analysis.days, layout) {
+        logCircadianDebugDiagnostics(analysis.days, layout)
     }
     LaunchedEffect(options) {
         delay(300.milliseconds)
@@ -450,3 +458,65 @@ private fun AppNavigationRail(
         }
     }
 }
+
+private data class CircadianDebugWindow(
+    val rowDate: LocalDate,
+    val sourceDate: LocalDate,
+    val startHour: Double,
+    val endHour: Double,
+    val isForecast: Boolean,
+    val confidence: Double,
+)
+
+private fun logCircadianDebugDiagnostics(
+    days: List<CircadianDay>,
+    layout: ActogramLayout,
+) {
+    if (!BuildConfig.DEBUG || days.isEmpty()) return
+
+    val duplicateDates = days
+        .filterNot { it.isGap }
+        .groupBy { it.date }
+        .filterValues { it.size > 1 }
+    if (duplicateDates.isNotEmpty()) {
+        Log.w(
+            CircadianDebugTag,
+            "duplicate circadian source dates: " + duplicateDates.entries.joinToString { (date, entries) ->
+                "$date=${entries.size}"
+            },
+        )
+    }
+
+    val overlaps = layout.rows.flatMap { row ->
+        val windows = row.overlays.map { overlay ->
+            CircadianDebugWindow(
+                rowDate = row.date,
+                sourceDate = overlay.selection.date,
+                startHour = overlay.startHour,
+                endHour = overlay.endHour,
+                isForecast = overlay.isForecast,
+                confidence = overlay.confidence,
+            )
+        }.sortedBy { it.startHour }
+
+        windows.zipWithNext().filter { (previous, current) ->
+            current.startHour < previous.endHour
+        }
+    }
+    if (overlaps.isNotEmpty()) {
+        Log.w(
+            CircadianDebugTag,
+            "overlapping circadian windows: " + overlaps.joinToString { (previous, current) ->
+                "row ${previous.rowDate}: ${previous.sourceDate}${previous.forecastMarker()} " +
+                    "${"%.2f".format(previous.startHour)}..${"%.2f".format(previous.endHour)} overlaps " +
+                    "${current.sourceDate}${current.forecastMarker()} " +
+                    "${"%.2f".format(current.startHour)}..${"%.2f".format(current.endHour)}"
+            },
+        )
+    }
+}
+
+private fun CircadianDebugWindow.forecastMarker(): String =
+    if (isForecast) "(forecast ${"%.2f".format(confidence)})" else "(observed ${"%.2f".format(confidence)})"
+
+private const val CircadianDebugTag = "DarkHourCircadian"

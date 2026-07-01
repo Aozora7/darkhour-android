@@ -21,8 +21,9 @@ fun analyzeCircadianCsf(
     val globalFirstDate = sorted.first().dateOfSleep
     val globalFirstDateMs = globalFirstDate.startInstant(analysisOffset).toEpochMilli()
     val segments = splitIntoSegments(sorted)
-    val results = segments.mapNotNull { segment ->
-        analyzeSegment(segment, extraDays, globalFirstDate, globalFirstDateMs, config)
+    val results = segments.mapIndexedNotNull { index, segment ->
+        val segmentExtraDays = if (index == segments.lastIndex) extraDays else 0
+        analyzeSegment(segment, segmentExtraDays, globalFirstDate, globalFirstDateMs, config)
     }
 
     return mergeSegmentResults(results, globalFirstDate)

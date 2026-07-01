@@ -91,6 +91,32 @@ class CsfIntegrationTest {
     }
 
     @Test
+    fun forecastsOnlyFromLatestSegmentAfterLargeGap() {
+        val first = generateSyntheticRecords(SyntheticOptions(tau = 24.0, days = 30, noise = 0.0))
+        val gapDays = 20L
+        val second = generateSyntheticRecords(SyntheticOptions(tau = 25.0, days = 30, noise = 0.0))
+            .map { record ->
+                val shiftedDate = record.dateOfSleep.plusDays(gapDays)
+                val deltaMs = gapDays * 86_400_000L
+                record.copy(
+                    logId = record.logId + 10_000,
+                    dateOfSleep = shiftedDate,
+                    startTime = record.startTime.plusMillis(deltaMs),
+                    endTime = record.endTime.plusMillis(deltaMs),
+                )
+            }
+
+        val analysis = CircadianAnalyzer.analyze(first + second, extraDays = 30)
+        val forecastDates = analysis.days.filter { it.isForecast }.map { it.date }
+        val secondSegmentDates = second.map { it.dateOfSleep }.toSet()
+
+        assertEquals(30, forecastDates.size)
+        assertTrue(forecastDates.none { it in secondSegmentDates })
+        assertEquals(forecastDates.size, forecastDates.toSet().size)
+        assertTrue(forecastDates.first() > second.last().dateOfSleep)
+    }
+
+    @Test
     fun detectsNegativeDrift() {
         val analysis = CircadianAnalyzer.analyze(generateSyntheticRecords(SyntheticOptions(tau = 23.5, days = 120, noise = 0.0)))
 

@@ -311,7 +311,7 @@ object ActogramLayoutEngine {
                     dayMidnight = circadian.date.atStartOfDay().toInstant(offset),
                     zoneOffset = offset,
                 )
-            }
+            }.withoutOverlappingCircadianOverlays()
             ActogramRow(
                 date = date,
                 label = date.format(DateFormatter),
@@ -498,6 +498,24 @@ object ActogramLayoutEngine {
                 selection = selection,
             ),
         )
+    }
+
+    private fun List<ActogramOverlayBlock>.withoutOverlappingCircadianOverlays(): List<ActogramOverlayBlock> {
+        if (size < 2) return this
+
+        val result = mutableListOf<ActogramOverlayBlock>()
+        for (overlay in sortedWith(compareBy<ActogramOverlayBlock> { it.startHour }.thenBy { it.endHour })) {
+            val previous = result.lastOrNull()
+            if (previous == null || overlay.startHour >= previous.endHour) {
+                result += overlay
+                continue
+            }
+
+            if (overlay.endHour > previous.endHour) {
+                result += overlay.copy(startHour = previous.endHour)
+            }
+        }
+        return result
     }
 
     private fun CircadianDay.coveredCalendarDates(): List<LocalDate> {
