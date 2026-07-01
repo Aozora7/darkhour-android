@@ -135,7 +135,11 @@ class ActogramLayoutTest {
         assertEquals(24.5, Duration.between(layout.rows[0].startTime, layout.rows[1].startTime).toMinutes() / 60.0, 0.001)
         assertEquals(23.0, layout.rows[0].sleeps.single().startHour, 0.001)
         assertTrue(layout.rows[1].sleeps.any { kotlin.math.abs(it.startHour - 22.5) < 0.001 })
-        assertTrue(layout.rows[1].label.contains(":"))
+        assertTrue(
+            layout.rowsForDisplay(ActogramOrder.OLDEST_FIRST, minimumRows = 2)[1]
+                .label(layout.rowHours, layout.zoneOffset, use24HourTime = true, useIsoDateTime = false)
+                .contains(":"),
+        )
     }
 
     @Test
@@ -148,9 +152,9 @@ class ActogramLayoutTest {
         val rows = layout.rowsForDisplay(ActogramOrder.NEWEST_FIRST, minimumRows = 5)
 
         assertEquals(5, rows.size)
-        assertEquals(LocalDate.parse("2026-06-16"), rows[0].date)
-        assertEquals(LocalDate.parse("2026-06-12"), rows[4].date)
-        assertTrue(rows.last().sleeps.isEmpty())
+        assertEquals(LocalDate.parse("2026-06-16"), rows[0].dataRow().date)
+        assertEquals(LocalDate.parse("2026-06-12"), rows[4].dataRow().date)
+        assertTrue(rows.last().dataRow().sleeps.isEmpty())
     }
 
     @Test
@@ -163,9 +167,9 @@ class ActogramLayoutTest {
         val rows = layout.rowsForDisplay(ActogramOrder.OLDEST_FIRST, minimumRows = 5)
 
         assertEquals(5, rows.size)
-        assertEquals(LocalDate.parse("2026-06-15"), rows[0].date)
-        assertEquals(LocalDate.parse("2026-06-19"), rows[4].date)
-        assertTrue(rows.last().sleeps.isEmpty())
+        assertEquals(LocalDate.parse("2026-06-15"), rows[0].dataRow().date)
+        assertEquals(LocalDate.parse("2026-06-19"), rows[4].dataRow().date)
+        assertTrue(rows.last().dataRow().sleeps.isEmpty())
     }
 
     @Test
@@ -182,8 +186,8 @@ class ActogramLayoutTest {
         )
 
         assertEquals(6, rows.size)
-        assertEquals(ActogramRowKind.LEGEND_STAGES, rows[4].kind)
-        assertEquals(ActogramRowKind.LEGEND_OVERLAYS, rows[5].kind)
+        assertEquals(ActogramLegendKind.STAGES, rows[4].legendRow().kind)
+        assertEquals(ActogramLegendKind.OVERLAYS, rows[5].legendRow().kind)
     }
 
     @Test
@@ -200,8 +204,8 @@ class ActogramLayoutTest {
         )
 
         assertEquals(6, rows.size)
-        assertEquals(ActogramRowKind.LEGEND_STAGES, rows[0].kind)
-        assertEquals(ActogramRowKind.LEGEND_OVERLAYS, rows[1].kind)
+        assertEquals(ActogramLegendKind.STAGES, rows[0].legendRow().kind)
+        assertEquals(ActogramLegendKind.OVERLAYS, rows[1].legendRow().kind)
     }
 
     @Test
@@ -234,8 +238,8 @@ class ActogramLayoutTest {
             includeLegend = true,
         ).last()
 
-        assertEquals(ActogramRowKind.LEGEND_OVERLAYS, overlayLegend.kind)
-        assertEquals(listOf(ActogramLegendItem("Work", 0xFF3FA9F5)), overlayLegend.legendItems)
+        assertEquals(ActogramLegendKind.OVERLAYS, overlayLegend.legendRow().kind)
+        assertEquals(listOf(ActogramLegendItem("Work", 0xFF3FA9F5)), overlayLegend.legendRow().legendItems)
     }
 
     @Test
@@ -249,7 +253,11 @@ class ActogramLayoutTest {
         val rows = layout.rowsForDisplay(ActogramOrder.OLDEST_FIRST, minimumRows = 4)
 
         assertEquals(24.5, Duration.between(rows[2].startTime, rows[3].startTime).toMinutes() / 60.0, 0.001)
-        assertTrue(rows.last().label.contains(":"))
+        assertTrue(
+            rows.last()
+                .label(layout.rowHours, layout.zoneOffset, use24HourTime = true, useIsoDateTime = false)
+                .contains(":"),
+        )
     }
 
     @Test
@@ -486,10 +494,10 @@ class ActogramLayoutTest {
         val newestRows = layout.rowsForDisplay(ActogramOrder.NEWEST_FIRST, minimumRows = 2)
         val oldestRows = layout.rowsForDisplay(ActogramOrder.OLDEST_FIRST, minimumRows = 2)
 
-        assertEquals(6.0, newestRows[1].schedules.single().startHour, 0.001)
-        assertEquals(8.0, newestRows[0].schedules.single().startHour, 0.001)
-        assertEquals(6.0, oldestRows[0].schedules.single().startHour, 0.001)
-        assertEquals(8.0, oldestRows[1].schedules.single().startHour, 0.001)
+        assertEquals(6.0, newestRows[1].dataRow().schedules.single().startHour, 0.001)
+        assertEquals(8.0, newestRows[0].dataRow().schedules.single().startHour, 0.001)
+        assertEquals(6.0, oldestRows[0].dataRow().schedules.single().startHour, 0.001)
+        assertEquals(8.0, oldestRows[1].dataRow().schedules.single().startHour, 0.001)
     }
 
     @Test
@@ -772,6 +780,12 @@ class ActogramLayoutTest {
         assertTrue(unclampedTarget > newMaxScroll)
         assertEquals(newMaxScroll, unclampedTarget.coerceIn(0f, newMaxScroll), 0.001f)
     }
+
+    private fun ActogramDisplayRow.dataRow(): ActogramRow =
+        (this as ActogramDisplayRow.Data).row
+
+    private fun ActogramDisplayRow.legendRow(): ActogramDisplayRow.Legend =
+        this as ActogramDisplayRow.Legend
 
     private fun record(date: LocalDate, startHour: Double, durationHours: Double): SleepRecord {
         val dayStart = date.atStartOfDay().toInstant(offset)

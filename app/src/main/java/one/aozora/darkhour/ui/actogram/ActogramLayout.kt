@@ -10,7 +10,6 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.ZoneOffset
-import java.time.format.DateTimeFormatter
 import kotlin.math.ceil
 import kotlin.math.floor
 import kotlin.math.max
@@ -49,11 +48,6 @@ data class ActogramScheduleBlock(
     val selection: ActogramSelection.Schedule,
 )
 
-data class ActogramLegendItem(
-    val label: String,
-    val color: Long,
-)
-
 sealed interface ActogramSelection {
     data class Sleep(
         val logId: Long,
@@ -85,13 +79,10 @@ sealed interface ActogramSelection {
 
 data class ActogramRow(
     val date: LocalDate,
-    val label: String,
     val startTime: Instant,
     val sleeps: List<ActogramSleepBlock>,
     val overlays: List<ActogramOverlayBlock>,
     val schedules: List<ActogramScheduleBlock>,
-    val kind: ActogramRowKind = ActogramRowKind.DATA,
-    val legendItems: List<ActogramLegendItem> = emptyList(),
 )
 
 data class ActogramLayout(
@@ -101,125 +92,7 @@ data class ActogramLayout(
     val zoneOffset: ZoneOffset,
 )
 
-enum class ActogramRowKind {
-    DATA,
-    LEGEND_STAGES,
-    LEGEND_OVERLAYS,
-}
-
-internal fun ActogramLayout.rowsForDisplay(
-    order: ActogramOrder,
-    minimumRows: Int,
-    includeLegend: Boolean = false,
-): List<ActogramRow> {
-    val legendRows = if (includeLegend && hasRealData && rows.isNotEmpty()) {
-        legendRows(scheduleLegendItems())
-    } else {
-        emptyList()
-    }
-    val minimumDataRows = (minimumRows - legendRows.size).coerceAtLeast(rows.size)
-    if (rows.isEmpty() || minimumDataRows <= rows.size) {
-        val orderedRows = if (order == ActogramOrder.NEWEST_FIRST) rows.asReversed() else rows
-        return when (order) {
-            ActogramOrder.NEWEST_FIRST -> orderedRows + legendRows
-            ActogramOrder.OLDEST_FIRST -> legendRows + orderedRows
-        }
-    }
-
-    val missingRows = minimumDataRows - rows.size
-    val rowDurationMs = (rowHours * 3_600_000.0).roundToLong()
-    val fillerRows = when (order) {
-        ActogramOrder.NEWEST_FIRST -> {
-            val oldest = rows.first()
-            (1..missingRows).map { distance ->
-                emptyRow(oldest.startTime.minusMillis(distance * rowDurationMs))
-            }
-        }
-
-        ActogramOrder.OLDEST_FIRST -> {
-            val newest = rows.last()
-            (1..missingRows).map { distance ->
-                emptyRow(newest.startTime.plusMillis(distance * rowDurationMs))
-            }
-        }
-    }
-    val orderedRows = if (order == ActogramOrder.NEWEST_FIRST) rows.asReversed() else rows
-    return when (order) {
-        ActogramOrder.NEWEST_FIRST -> orderedRows + fillerRows + legendRows
-        ActogramOrder.OLDEST_FIRST -> legendRows + orderedRows + fillerRows
-    }
-}
-
-private fun ActogramLayout.legendRows(scheduleItems: List<ActogramLegendItem>): List<ActogramRow> {
-    val rowDurationMs = (rowHours * 3_600_000.0).roundToLong()
-    return listOf(
-        legendRow(
-            startTime = rows.first().startTime.minusMillis(rowDurationMs * 2),
-            label = "Stages",
-            kind = ActogramRowKind.LEGEND_STAGES,
-        ),
-        legendRow(
-            startTime = rows.first().startTime.minusMillis(rowDurationMs),
-            label = "Overlays",
-            kind = ActogramRowKind.LEGEND_OVERLAYS,
-            legendItems = scheduleItems,
-        ),
-    )
-}
-
-private fun ActogramLayout.legendRow(
-    startTime: Instant,
-    label: String,
-    kind: ActogramRowKind,
-    legendItems: List<ActogramLegendItem> = emptyList(),
-): ActogramRow {
-    val localStart = startTime.atOffset(zoneOffset)
-    return ActogramRow(
-        date = localStart.toLocalDate(),
-        label = label,
-        startTime = startTime,
-        sleeps = emptyList(),
-        overlays = emptyList(),
-        schedules = emptyList(),
-        kind = kind,
-        legendItems = legendItems,
-    )
-}
-
-private fun ActogramLayout.scheduleLegendItems(): List<ActogramLegendItem> =
-    rows.asSequence()
-        .flatMap { it.schedules.asSequence() }
-        .map { schedule ->
-            ActogramLegendItem(
-                label = schedule.selection.entry.label.ifBlank { "Schedule" },
-                color = schedule.color,
-            )
-        }
-        .distinctBy { it.label to it.color }
-        .toList()
-
-private fun ActogramLayout.emptyRow(startTime: Instant): ActogramRow {
-    val localStart = startTime.atOffset(zoneOffset)
-    val date = localStart.toLocalDate()
-    val label = if (kotlin.math.abs(rowHours - 24.0) < 0.0001) {
-        date.format(ActogramLayoutEngine.DateFormatter)
-    } else {
-        localStart.format(ActogramLayoutEngine.RowDateTimeFormatter)
-    }
-    return ActogramRow(
-        date = date,
-        label = label,
-        startTime = startTime,
-        sleeps = emptyList(),
-        overlays = emptyList(),
-        schedules = emptyList(),
-    )
-}
-
 object ActogramLayoutEngine {
-    internal val DateFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("MMM d")
-    internal val RowDateTimeFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("MMM d HH:mm")
-
     fun build(
         records: List<SleepRecord>,
         circadianDays: List<CircadianDay> = emptyList(),
@@ -313,7 +186,6 @@ object ActogramLayoutEngine {
             }.withoutOverlappingCircadianOverlays()
             ActogramRow(
                 date = date,
-                label = date.format(DateFormatter),
                 startTime = rowStart,
                 sleeps = sleeps,
                 overlays = overlays,
@@ -370,17 +242,11 @@ object ActogramLayoutEngine {
             val rowEnd = rowStart.plusMillis(rowDurationMs)
             val localStart = rowStart.atOffset(fallbackOffset)
             val date = localStart.toLocalDate()
-            val label = if (localStart.toLocalTime() == java.time.LocalTime.MIDNIGHT) {
-                date.format(DateFormatter)
-            } else {
-                localStart.format(RowDateTimeFormatter)
-            }
             val circadian = circadianByDate[date]
             val circadianMidnight = date.atStartOfDay().toInstant(fallbackOffset)
 
             ActogramRow(
                 date = date,
-                label = label,
                 startTime = rowStart,
                 sleeps = recordsByRow[index].mapNotNull { it.toBlock(rowStart, rowEnd) },
                 overlays = circadian?.toFixedDurationOverlays(rowStart, rowEnd, circadianMidnight, fallbackOffset)

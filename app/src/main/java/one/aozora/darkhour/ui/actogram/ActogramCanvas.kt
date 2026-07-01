@@ -108,21 +108,12 @@ fun ActogramCanvas(
                 emptyList()
             } else {
                 displayedRows.map { row ->
-                    when (row.kind) {
-                        ActogramRowKind.LEGEND_STAGES,
-                        ActogramRowKind.LEGEND_OVERLAYS,
-                        -> row.label
-                        ActogramRowKind.DATA -> if (tauMode) {
-                            formatActogramRowLabel(
-                                row.startTime,
-                                layout.zoneOffset,
-                                use24HourTime,
-                                useIsoDateTime,
-                            )
-                        } else {
-                            formatActogramDate(row.date, useIsoDateTime)
-                        }
-                    }
+                    row.label(
+                        rowHours = layout.rowHours,
+                        zoneOffset = layout.zoneOffset,
+                        use24HourTime = use24HourTime,
+                        useIsoDateTime = useIsoDateTime,
+                    )
                 }
             }
         }
@@ -405,7 +396,7 @@ internal fun calculateActogramMaxScrollOffset(
 
 private fun DrawScope.drawActogram(
     layout: ActogramLayout,
-    displayedRows: List<ActogramRow>,
+    displayedRows: List<ActogramDisplayRow>,
     visibleRows: IntRange,
     verticalScrollOffset: Float,
     rowHeightDp: Float,
@@ -428,7 +419,8 @@ private fun DrawScope.drawActogram(
 
     clipRect(top = axisHeight) {
         visibleRows.forEach { index ->
-            val row = displayedRows[index]
+            val displayRow = displayedRows[index]
+            val row = displayRow.dataRowOrNull()
             val top = axisHeight + index * rowHeight - verticalScrollOffset
             val centerY = top + rowHeight / 2f
             val blockHeight = (rowHeight * 0.62f).coerceAtLeast(5.dp.toPx())
@@ -438,7 +430,7 @@ private fun DrawScope.drawActogram(
                 topLeft = Offset(0f, top),
                 size = Size(size.width, rowHeight),
             )
-            if (row.kind == ActogramRowKind.DATA) dateColumnBackgroundColor(row.date, currentDate)?.let { color ->
+            if (row != null) dateColumnBackgroundColor(row.date, currentDate)?.let { color ->
                 drawRect(
                     color = color,
                     topLeft = Offset(0f, top),
@@ -453,35 +445,26 @@ private fun DrawScope.drawActogram(
             )
 
             if (options.showDateLabels) {
-                val label = when (row.kind) {
-                    ActogramRowKind.LEGEND_STAGES,
-                    ActogramRowKind.LEGEND_OVERLAYS,
-                    -> row.label
-                    ActogramRowKind.DATA -> if (tauMode) {
-                        formatActogramRowLabel(
-                            row.startTime,
-                            layout.zoneOffset,
-                            use24HourTime,
-                            useIsoDateTime,
-                        )
-                    } else {
-                        formatActogramDate(row.date, useIsoDateTime)
-                    }
-                }
+                val label = displayRow.label(
+                    rowHours = layout.rowHours,
+                    zoneOffset = layout.zoneOffset,
+                    use24HourTime = use24HourTime,
+                    useIsoDateTime = useIsoDateTime,
+                )
                 drawDateLabel(label, labelWidth - 6.dp.toPx(), top, rowHeight, tauMode)
             }
 
-            when (row.kind) {
-                ActogramRowKind.LEGEND_STAGES -> {
-                    drawStagesLegend(labelWidth, top, rowHeight)
-                    return@forEach
+            if (displayRow is ActogramDisplayRow.Legend) {
+                when (displayRow.kind) {
+                    ActogramLegendKind.STAGES -> drawStagesLegend(labelWidth, top, rowHeight)
+                    ActogramLegendKind.OVERLAYS -> {
+                        drawOverlaysLegend(labelWidth, top, rowHeight, displayRow.legendItems)
+                    }
                 }
-                ActogramRowKind.LEGEND_OVERLAYS -> {
-                    drawOverlaysLegend(labelWidth, top, rowHeight, row.legendItems)
-                    return@forEach
-                }
-                ActogramRowKind.DATA -> Unit
+                return@forEach
             }
+
+            if (row == null) return@forEach
 
             for (hour in 0..displayedHours.toInt() step 6) {
                 val x = labelWidth + hour * hourWidth
@@ -503,7 +486,7 @@ private fun DrawScope.drawActogram(
                             index,
                             options.order
                         )
-                    )?.schedules?.forEach { schedule ->
+                    )?.dataRowOrNull()?.schedules?.forEach { schedule ->
                         drawSchedule(
                             schedule,
                             layout.rowHours,
@@ -527,7 +510,7 @@ private fun DrawScope.drawActogram(
                             index,
                             options.order
                         )
-                    )?.overlays?.forEach { overlay ->
+                    )?.dataRowOrNull()?.overlays?.forEach { overlay ->
                         drawOverlay(
                             overlay,
                             layout.rowHours,
@@ -559,7 +542,7 @@ private fun DrawScope.drawActogram(
                         index,
                         options.order
                     )
-                )?.sleeps?.forEach { sleep ->
+                )?.dataRowOrNull()?.sleeps?.forEach { sleep ->
                     drawSleep(
                         sleep = sleep,
                         shift = layout.rowHours,
@@ -825,7 +808,7 @@ private fun DrawScope.drawSleep(
 }
 
 internal fun hitTestActogram(
-    rows: List<ActogramRow>,
+    rows: List<ActogramDisplayRow>,
     options: ActogramDisplayOptions,
     rowHours: Double,
     canvasWidth: Float,
@@ -851,7 +834,7 @@ internal fun hitTestActogram(
 
     val rowIndex = floor((contentY - axisHeight) / rowHeight).toInt()
     if (rowIndex !in rows.indices) return null
-    if (rows[rowIndex].kind != ActogramRowKind.DATA) return null
+    if (rows[rowIndex] !is ActogramDisplayRow.Data) return null
 
     val displayedHours = rowHours * if (options.doublePlot) 2.0 else 1.0
     val plottedHour = ((position.x - labelWidth) / plotWidth) * displayedHours
@@ -864,7 +847,7 @@ internal fun hitTestActogram(
         sourceIndex = rowIndex
         sourceHour = plottedHour
     }
-    val sourceRow = rows.getOrNull(sourceIndex)
+    val sourceRow = rows.getOrNull(sourceIndex).dataRowOrNull()
     val blockHeight = (rowHeight * 0.62f).coerceAtLeast(5f * density)
     val rowTop = axisHeight + rowIndex * rowHeight
     val blockTop = rowTop + (rowHeight - blockHeight) / 2f
@@ -885,6 +868,9 @@ internal fun hitTestActogram(
     }
     return null
 }
+
+private fun ActogramDisplayRow?.dataRowOrNull(): ActogramRow? =
+    (this as? ActogramDisplayRow.Data)?.row
 
 private fun nextChronologicalRowIndex(index: Int, order: ActogramOrder): Int =
     when (order) {
