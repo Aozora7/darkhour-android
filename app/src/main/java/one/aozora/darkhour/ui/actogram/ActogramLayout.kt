@@ -210,17 +210,17 @@ object ActogramLayoutEngine {
         referenceDate: LocalDate,
     ): ActogramLayout {
         val fallbackOffset = records.firstNotNullOfOrNull { it.startZoneOffset } ?: ZoneOffset.UTC
-        val firstInstant = records.minOfOrNull { it.startTime }
-        val firstDate = firstInstant?.atOffset(fallbackOffset)?.toLocalDate()
-            ?: circadianDays.minOfOrNull { it.date }
-            ?: scheduleEntries.mapNotNull { it.date }.minOrNull()
+        val circadianWindows = circadianDays.mapNotNull { it.circadianWindow(fallbackOffset) }
+        val firstDate = listOfNotNull(
+            records.minOfOrNull { it.startTime }?.atOffset(fallbackOffset)?.toLocalDate(),
+            circadianWindows.minOfOrNull { it.start.atOffset(fallbackOffset).toLocalDate() },
+            scheduleEntries.mapNotNull { it.date }.minOrNull(),
+        ).minOrNull()
             ?: referenceDate
         val origin = firstDate.atStartOfDay().toInstant(fallbackOffset)
         val rowDurationMs = (rowHours * 3_600_000.0).roundToLong()
         val lastRecordInstant = records.maxOfOrNull { it.endTime }
-        val lastCircadianInstant = circadianDays.maxOfOrNull { day ->
-            day.date.plusDays(1).atStartOfDay().toInstant(fallbackOffset)
-        }
+        val lastCircadianInstant = circadianWindows.maxOfOrNull { it.end }
         val lastScheduleInstant = scheduleEntries.mapNotNull { entry ->
             entry.date?.let { date -> entry.occurrenceEnd(date, fallbackOffset) }
         }.maxOrNull()
@@ -230,8 +230,12 @@ object ActogramLayoutEngine {
             Duration.between(origin, naturalEnd).toMillis().coerceAtLeast(1L).toDouble() / rowDurationMs,
         ).toInt()
         val rowCount = maxOf(minimumRows, naturalCount)
-        val circadianByDate = circadianDays.associateBy { it.date }
         val recordsByRow = records.toFixedDurationRecordCandidates(
+            origin = origin,
+            rowDurationMs = rowDurationMs,
+            rowCount = rowCount,
+        )
+        val circadianByRow = circadianWindows.toFixedDurationCircadianCandidates(
             origin = origin,
             rowDurationMs = rowDurationMs,
             rowCount = rowCount,
@@ -242,15 +246,14 @@ object ActogramLayoutEngine {
             val rowEnd = rowStart.plusMillis(rowDurationMs)
             val localStart = rowStart.atOffset(fallbackOffset)
             val date = localStart.toLocalDate()
-            val circadian = circadianByDate[date]
-            val circadianMidnight = date.atStartOfDay().toInstant(fallbackOffset)
 
             ActogramRow(
                 date = date,
                 startTime = rowStart,
                 sleeps = recordsByRow[index].mapNotNull { it.toBlock(rowStart, rowEnd) },
-                overlays = circadian?.toFixedDurationOverlays(rowStart, rowEnd, circadianMidnight, fallbackOffset)
-                    ?: emptyList(),
+                overlays = circadianByRow[index].flatMap { window ->
+                    window.toFixedDurationOverlays(rowStart, rowEnd)
+                }.withoutOverlappingCircadianOverlays(),
                 schedules = scheduleEntries.toScheduleBlocks(rowStart, rowEnd, fallbackOffset),
             )
         }
@@ -327,6 +330,57 @@ object ActogramLayoutEngine {
         return candidates
     }
 
+    private data class CircadianWindow(
+        val day: CircadianDay,
+        val start: Instant,
+        val end: Instant,
+        val zoneOffset: ZoneOffset,
+    )
+
+    private fun List<CircadianWindow>.toFixedDurationCircadianCandidates(
+        origin: Instant,
+        rowDurationMs: Long,
+        rowCount: Int,
+    ): List<List<CircadianWindow>> {
+        if (rowCount <= 0) return emptyList()
+        val buckets = List(rowCount) { mutableListOf<CircadianWindow>() }
+        if (isEmpty() || rowDurationMs <= 0L) return buckets
+
+        forEach { window ->
+            val firstIndex = floor(
+                Duration.between(origin, window.start).toMillis().toDouble() / rowDurationMs,
+            ).toInt()
+            val lastIndex = floor(
+                (Duration.between(origin, window.end).toMillis() - 1L).toDouble() / rowDurationMs,
+            ).toInt()
+            val first = max(0, firstIndex)
+            val last = min(rowCount - 1, lastIndex)
+            if (first <= last) {
+                for (index in first..last) {
+                    buckets[index].add(window)
+                }
+            }
+        }
+        return buckets
+    }
+
+    private fun CircadianDay.circadianWindow(zoneOffset: ZoneOffset): CircadianWindow? {
+        if (isGap) return null
+
+        val dayMidnight = date.atStartOfDay().toInstant(zoneOffset)
+        val nightStart = dayMidnight.plusMillis((nightStartHour * 3_600_000.0).roundToLong())
+        var nightEnd = dayMidnight.plusMillis((nightEndHour * 3_600_000.0).roundToLong())
+        while (nightEnd <= nightStart) {
+            nightEnd = nightEnd.plus(Duration.ofDays(1))
+        }
+        return CircadianWindow(
+            day = this,
+            start = nightStart,
+            end = nightEnd,
+            zoneOffset = zoneOffset,
+        )
+    }
+
     private fun CircadianDay.toCalendarOverlays(
         rowStart: Instant,
         rowEnd: Instant,
@@ -393,36 +447,27 @@ object ActogramLayoutEngine {
         return (firstOffset..lastOffset).map { date.plusDays(it) }
     }
 
-    private fun CircadianDay.toFixedDurationOverlays(
+    private fun CircadianWindow.toFixedDurationOverlays(
         rowStart: Instant,
         rowEnd: Instant,
-        dayMidnight: Instant,
-        zoneOffset: ZoneOffset,
     ): List<ActogramOverlayBlock> {
-        if (isGap) return emptyList()
-
-        val nightStart = dayMidnight.plusMillis((nightStartHour * 3_600_000.0).roundToLong())
-        var nightEnd = dayMidnight.plusMillis((nightEndHour * 3_600_000.0).roundToLong())
-        while (nightEnd <= nightStart) {
-            nightEnd = nightEnd.plus(Duration.ofDays(1))
-        }
-        val clippedStart = maxOf(nightStart, rowStart)
-        val clippedEnd = minOf(nightEnd, rowEnd)
+        val clippedStart = maxOf(start, rowStart)
+        val clippedEnd = minOf(end, rowEnd)
         if (clippedEnd <= clippedStart) return emptyList()
 
         return listOf(ActogramOverlayBlock(
             startHour = hoursBetween(rowStart, clippedStart),
             endHour = hoursBetween(rowStart, clippedEnd),
-            confidence = confidenceScore,
-            isForecast = isForecast,
+            confidence = day.confidenceScore,
+            isForecast = day.isForecast,
             isGap = false,
             selection = ActogramSelection.Circadian(
-                date = date,
-                startTime = nightStart,
-                endTime = nightEnd,
+                date = day.date,
+                startTime = start,
+                endTime = end,
                 zoneOffset = zoneOffset,
-                confidence = confidenceScore,
-                isForecast = isForecast,
+                confidence = day.confidenceScore,
+                isForecast = day.isForecast,
             ),
         ))
     }

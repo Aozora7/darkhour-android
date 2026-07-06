@@ -711,6 +711,57 @@ class ActogramLayoutTest {
     }
 
     @Test
+    fun fixedDurationCircadianCrossingMidnightIsClippedAcrossIndexedRows() {
+        val date = LocalDate.parse("2026-06-15")
+        val sleep = record(date, 22.0, 7.0)
+        val layout = ActogramLayoutEngine.build(
+            records = listOf(sleep),
+            circadianDays = listOf(circadian(date, sleep, 20.0, 4.0)),
+            rowHours = 24.5,
+            minimumRows = 2,
+        )
+
+        val firstSegment = layout.rows[0].overlays.single()
+        val secondSegment = layout.rows[1].overlays.single()
+
+        assertEquals(20.0, firstSegment.startHour, 0.001)
+        assertEquals(24.5, firstSegment.endHour, 0.001)
+        assertEquals(0.0, secondSegment.startHour, 0.001)
+        assertEquals(3.5, secondSegment.endHour, 0.001)
+        assertEquals(firstSegment.selection, secondSegment.selection)
+    }
+
+    @Test
+    fun doublePlotHitTestingFindsFixedDurationCircadianContinuationOnRightSide() {
+        val date = LocalDate.parse("2026-06-15")
+        val sleep = record(date, 22.0, 7.0)
+        val layout = ActogramLayoutEngine.build(
+            records = listOf(sleep),
+            circadianDays = listOf(circadian(date, sleep, 20.0, 4.0)),
+            rowHours = 24.5,
+            minimumRows = 2,
+        )
+        val rows = layout.rowsForDisplay(ActogramOrder.OLDEST_FIRST, minimumRows = 2)
+        val options = ActogramDisplayOptions(
+            doublePlot = true,
+            order = ActogramOrder.OLDEST_FIRST,
+        )
+
+        val hit = hitTestActogram(
+            rows = rows,
+            options = options,
+            rowHours = 24.5,
+            canvasWidth = 1_000f,
+            position = Offset(563f, 32f),
+            density = 1f,
+            labelWidthPx = 100f,
+        )
+
+        assertTrue(hit is ActogramSelection.Circadian)
+        assertEquals(date, (hit as ActogramSelection.Circadian).date)
+    }
+
+    @Test
     fun zoomAnchoredScrollKeepsFocalRowStable() {
         val currentScroll = 300f
         val focalY = 150f
