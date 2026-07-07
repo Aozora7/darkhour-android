@@ -13,6 +13,23 @@ val gestureTestRequested = requestedTask("gestureTest")
 val connectedGestureTestRequested = requestedTask("connectedGestureAndroidTest")
 val connectedGestureResultsDir = layout.buildDirectory.dir("outputs/androidTest-results/connected/debug")
 
+fun String.toFileNameSegment(): String =
+    trim()
+        .replace(Regex("""[^\p{Alnum}._-]+"""), "-")
+        .trim('-', '.', '_')
+        .ifBlank { "app" }
+
+val releaseApkAppName = providers.fileContents(
+    layout.projectDirectory.file("src/main/res/values/strings.xml")
+).asText.map { stringsXml ->
+    Regex("""<string\s+name="app_name">([^<]+)</string>""")
+        .find(stringsXml)
+        ?.groupValues
+        ?.get(1)
+        ?.toFileNameSegment()
+        ?: "app"
+}.get()
+
 val keystorePropertiesFile = rootProject.file("keystore.properties")
 val keystoreProperties = Properties().apply {
     if (keystorePropertiesFile.isFile) {
@@ -78,6 +95,14 @@ android {
     buildFeatures {
         buildConfig = true
         compose = true
+    }
+}
+
+androidComponents {
+    onVariants(selector().withBuildType("release")) { variant ->
+        variant.outputs.forEach { output ->
+            output.outputFileName.set("$releaseApkAppName-${output.versionName.get()}.apk")
+        }
     }
 }
 
