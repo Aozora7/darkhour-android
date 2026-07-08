@@ -16,6 +16,7 @@ import one.aozora.darkhour.data.HealthConnectAccess
 import one.aozora.darkhour.data.HealthDataRange
 import one.aozora.darkhour.data.HealthImportPhase
 import one.aozora.darkhour.ui.actogram.ActogramDisplayOptions
+import one.aozora.darkhour.ui.actogram.ActogramLayout
 import one.aozora.darkhour.ui.actogram.ActogramLayoutEngine
 import one.aozora.darkhour.ui.actogram.ActogramTimeScale
 import one.aozora.darkhour.ui.schedule.ScheduleEntry
@@ -69,6 +70,14 @@ fun rememberDarkHourAppState(
     val analysis = remember(filteredRecords, settings.forecastDays) {
         CircadianAnalyzer.analyze(filteredRecords, extraDays = settings.forecastDays)
     }
+    val actogramForecastDays = settings.forecastDays.let { days ->
+        if (days > 0) days + 1 else 0
+    }
+    val actogramAnalysis = remember(filteredRecords, actogramForecastDays) {
+        CircadianAnalyzer.analyze(filteredRecords, extraDays = actogramForecastDays)
+    }
+    val hideActogramForecastTail = actogramAnalysis.days.count { it.isForecast } >
+        analysis.days.count { it.isForecast }
     val periodogram = remember(filteredRecords) {
         computePeriodogram(buildPeriodogramAnchors(filteredRecords))
     }
@@ -77,30 +86,30 @@ fun rememberDarkHourAppState(
         ActogramTimeScale.CIRCADIAN_TAU -> analysis.globalTau
         ActogramTimeScale.CUSTOM -> options.customHours.toDouble()
     }
-    val baseLayout = remember(filteredRecords, analysis.days, rowHours) {
+    val baseLayout = remember(filteredRecords, actogramAnalysis.days, hideActogramForecastTail, rowHours) {
         ActogramLayoutEngine.build(
             records = filteredRecords,
-            circadianDays = analysis.days,
+            circadianDays = actogramAnalysis.days,
             rowHours = rowHours,
-        )
+        ).withHiddenActogramForecastTail(hideActogramForecastTail)
     }
-    val layout = remember(baseLayout, filteredRecords, analysis.days, scheduleEntries, rowHours) {
+    val layout = remember(baseLayout, filteredRecords, actogramAnalysis.days, scheduleEntries, hideActogramForecastTail, rowHours) {
         if (scheduleEntries.isEmpty()) {
             baseLayout
         } else if (scheduleEntries.any { it.date != null }) {
             ActogramLayoutEngine.build(
                 records = filteredRecords,
-                circadianDays = analysis.days,
+                circadianDays = actogramAnalysis.days,
                 scheduleEntries = scheduleEntries,
                 rowHours = rowHours,
-            )
+            ).withHiddenActogramForecastTail(hideActogramForecastTail)
         } else {
             ActogramLayoutEngine.withScheduleEntries(baseLayout, scheduleEntries)
         }
     }
 
-    LaunchedEffect(analysis.days, layout) {
-        logCircadianDebugDiagnostics(analysis.days, layout)
+    LaunchedEffect(actogramAnalysis.days, layout) {
+        logCircadianDebugDiagnostics(actogramAnalysis.days, layout)
     }
     LaunchedEffect(options) {
         delay(300.milliseconds)
@@ -164,3 +173,12 @@ fun rememberDarkHourAppState(
         ),
     )
 }
+
+private fun ActogramLayout.withHiddenActogramForecastTail(
+    hideForecastTail: Boolean,
+): ActogramLayout =
+    if (hideForecastTail && rows.isNotEmpty()) {
+        copy(hiddenChronologicalTailRows = 1)
+    } else {
+        this
+    }

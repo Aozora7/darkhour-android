@@ -90,6 +90,7 @@ data class ActogramLayout(
     val rowHours: Double,
     val hasRealData: Boolean,
     val zoneOffset: ZoneOffset,
+    val hiddenChronologicalTailRows: Int = 0,
 )
 
 object ActogramLayoutEngine {

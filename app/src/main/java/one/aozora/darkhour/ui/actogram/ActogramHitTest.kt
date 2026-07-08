@@ -37,6 +37,7 @@ internal fun hitTestActogram(
     val plottedHour = ((position.x - labelWidth) / plotWidth) * displayedHours
     val sourceIndex: Int
     val sourceHour: Double
+    val displayRow = rows[rowIndex]
     if (options.doublePlot && plottedHour >= rowHours) {
         sourceIndex = nextChronologicalRowIndex(rowIndex, options.order)
         sourceHour = plottedHour - rowHours
@@ -44,7 +45,15 @@ internal fun hitTestActogram(
         sourceIndex = rowIndex
         sourceHour = plottedHour
     }
-    val sourceRow = rows.getOrNull(sourceIndex).dataRowOrNull()
+    val sourceRow = if (options.doublePlot && plottedHour >= rowHours) {
+        displayRow.doublePlotNextDataRowOrNull(
+            rows = rows,
+            index = rowIndex,
+            order = options.order,
+        )
+    } else {
+        rows.getOrNull(sourceIndex).dataRowOrNull()
+    }
     val blockHeight = (rowHeight * 0.62f).coerceAtLeast(5f * density)
     val rowTop = axisHeight + rowIndex * rowHeight
     val blockTop = rowTop + (rowHeight - blockHeight) / 2f

@@ -310,6 +310,70 @@ class ActogramLayoutTest {
     }
 
     @Test
+    fun hiddenForecastTailOnlyAppearsOnDoublePlotRightSide() {
+        val firstDate = LocalDate.parse("2026-06-15")
+        val sleep = record(firstDate, 1.0, 4.0)
+        val layout = ActogramLayoutEngine.build(
+            records = listOf(sleep),
+            circadianDays = listOf(
+                circadian(firstDate.plusDays(1), sleep, 1.0, 3.0).copy(isForecast = true),
+                circadian(firstDate.plusDays(2), sleep, 1.0, 3.0).copy(isForecast = true),
+            ),
+            minimumRows = 1,
+        ).copy(hiddenChronologicalTailRows = 1)
+        val rows = layout.rowsForDisplay(ActogramOrder.NEWEST_FIRST, minimumRows = 1)
+
+        assertEquals(firstDate.plusDays(1), rows.first().dataRow().date)
+        assertTrue(rows.none { it.date == firstDate.plusDays(2) })
+
+        val doublePlotHit = hitTestActogram(
+            rows = rows,
+            options = ActogramDisplayOptions(
+                doublePlot = true,
+                order = ActogramOrder.NEWEST_FIRST,
+            ),
+            rowHours = 24.0,
+            canvasWidth = 1_000f,
+            position = Offset(582f, 41f),
+            density = 1f,
+            labelWidthPx = 100f,
+        )
+        val singlePlotHit = hitTestActogram(
+            rows = rows,
+            options = ActogramDisplayOptions(order = ActogramOrder.NEWEST_FIRST),
+            rowHours = 24.0,
+            canvasWidth = 1_000f,
+            position = Offset(582f, 41f),
+            density = 1f,
+            labelWidthPx = 100f,
+        )
+
+        assertTrue(doublePlotHit is ActogramSelection.Circadian)
+        assertEquals(firstDate.plusDays(2), (doublePlotHit as ActogramSelection.Circadian).date)
+        assertNull(singlePlotHit)
+    }
+
+    @Test
+    fun hiddenForecastTailDoesNotCreateOldestFirstFillerAtNewEnd() {
+        val firstDate = LocalDate.parse("2026-06-15")
+        val sleep = record(firstDate, 1.0, 4.0)
+        val layout = ActogramLayoutEngine.build(
+            records = listOf(sleep),
+            circadianDays = listOf(
+                circadian(firstDate.plusDays(1), sleep, 1.0, 3.0).copy(isForecast = true),
+                circadian(firstDate.plusDays(2), sleep, 1.0, 3.0).copy(isForecast = true),
+            ),
+            minimumRows = 1,
+        ).copy(hiddenChronologicalTailRows = 1)
+
+        val rows = layout.rowsForDisplay(ActogramOrder.OLDEST_FIRST, minimumRows = 4)
+
+        assertEquals(firstDate.minusDays(2), rows.first().dataRow().date)
+        assertEquals(firstDate.plusDays(1), rows.last().dataRow().date)
+        assertTrue(rows.none { it.date == firstDate.plusDays(2) })
+    }
+
+    @Test
     fun circadianOverlayCrossingMidnightIsClippedIntoTwoRowsWithSameSelection() {
         val date = LocalDate.parse("2026-06-15")
         val sleep = record(date, 22.0, 7.0)

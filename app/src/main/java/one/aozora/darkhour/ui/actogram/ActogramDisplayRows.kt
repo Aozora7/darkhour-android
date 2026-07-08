@@ -20,6 +20,7 @@ sealed interface ActogramDisplayRow {
 
     data class Data(
         val row: ActogramRow,
+        val hiddenDoublePlotNextRow: ActogramRow? = null,
     ) : ActogramDisplayRow {
         override val date: LocalDate = row.date
         override val startTime: Instant = row.startTime
@@ -39,41 +40,57 @@ internal fun ActogramLayout.rowsForDisplay(
     minimumRows: Int,
     includeLegend: Boolean = false,
 ): List<ActogramDisplayRow> {
+    val visibleRows = rows.dropLast(hiddenChronologicalTailRows.coerceIn(0, rows.size))
     val legendRows = if (includeLegend && hasRealData && rows.isNotEmpty()) {
         legendRows(scheduleLegendItems())
     } else {
         emptyList()
     }
-    val minimumDataRows = (minimumRows - legendRows.size).coerceAtLeast(rows.size)
-    val orderedRows = if (order == ActogramOrder.NEWEST_FIRST) rows.asReversed() else rows
-    if (rows.isEmpty() || minimumDataRows <= rows.size) {
+    val minimumDataRows = (minimumRows - legendRows.size).coerceAtLeast(visibleRows.size)
+    val orderedRows = visibleRows.toDisplayRows(
+        order = order,
+        hiddenChronologicalTailRow = rows.getOrNull(visibleRows.size),
+    )
+    if (visibleRows.isEmpty() || minimumDataRows <= visibleRows.size) {
         return when (order) {
-            ActogramOrder.NEWEST_FIRST -> orderedRows.toDisplayRows() + legendRows
-            ActogramOrder.OLDEST_FIRST -> legendRows + orderedRows.toDisplayRows()
+            ActogramOrder.NEWEST_FIRST -> orderedRows + legendRows
+            ActogramOrder.OLDEST_FIRST -> legendRows + orderedRows
         }
     }
 
-    val missingRows = minimumDataRows - rows.size
+    val missingRows = minimumDataRows - visibleRows.size
     val rowDurationMs = (rowHours * 3_600_000.0).roundToLong()
+    val hasHiddenTail = hiddenChronologicalTailRows > 0
     val fillerRows = when (order) {
         ActogramOrder.NEWEST_FIRST -> {
-            val oldest = rows.first()
+            val oldest = visibleRows.first()
             (1..missingRows).map { distance ->
                 emptyDataRow(oldest.startTime.minusMillis(distance * rowDurationMs))
             }
         }
 
         ActogramOrder.OLDEST_FIRST -> {
-            val newest = rows.last()
-            (1..missingRows).map { distance ->
-                emptyDataRow(newest.startTime.plusMillis(distance * rowDurationMs))
+            if (hasHiddenTail) {
+                val oldest = visibleRows.first()
+                (missingRows downTo 1).map { distance ->
+                    emptyDataRow(oldest.startTime.minusMillis(distance * rowDurationMs))
+                }
+            } else {
+                val newest = visibleRows.last()
+                (1..missingRows).map { distance ->
+                    emptyDataRow(newest.startTime.plusMillis(distance * rowDurationMs))
+                }
             }
         }
     }
 
     return when (order) {
-        ActogramOrder.NEWEST_FIRST -> orderedRows.toDisplayRows() + fillerRows.toDisplayRows() + legendRows
-        ActogramOrder.OLDEST_FIRST -> legendRows + orderedRows.toDisplayRows() + fillerRows.toDisplayRows()
+        ActogramOrder.NEWEST_FIRST -> orderedRows + fillerRows.toDisplayRows() + legendRows
+        ActogramOrder.OLDEST_FIRST -> if (hasHiddenTail) {
+            legendRows + fillerRows.toDisplayRows() + orderedRows
+        } else {
+            legendRows + orderedRows + fillerRows.toDisplayRows()
+        }
     }
 }
 
@@ -92,8 +109,32 @@ internal fun ActogramDisplayRow.label(
         }
     }
 
-private fun List<ActogramRow>.toDisplayRows(): List<ActogramDisplayRow.Data> =
-    map { ActogramDisplayRow.Data(it) }
+internal fun ActogramDisplayRow?.doublePlotNextDataRowOrNull(
+    rows: List<ActogramDisplayRow>,
+    index: Int,
+    order: ActogramOrder,
+): ActogramRow? {
+    val dataRow = this as? ActogramDisplayRow.Data ?: return null
+    return dataRow.hiddenDoublePlotNextRow
+        ?: rows.getOrNull(nextChronologicalRowIndex(index, order)).dataRowOrNull()
+}
+
+private fun List<ActogramRow>.toDisplayRows(
+    order: ActogramOrder = ActogramOrder.OLDEST_FIRST,
+    hiddenChronologicalTailRow: ActogramRow? = null,
+): List<ActogramDisplayRow.Data> {
+    val rows = if (order == ActogramOrder.NEWEST_FIRST) asReversed() else this
+    return rows.mapIndexed { index, row ->
+        val isNewestVisibleRow = when (order) {
+            ActogramOrder.NEWEST_FIRST -> index == 0
+            ActogramOrder.OLDEST_FIRST -> index == rows.lastIndex
+        }
+        ActogramDisplayRow.Data(
+            row = row,
+            hiddenDoublePlotNextRow = hiddenChronologicalTailRow.takeIf { isNewestVisibleRow },
+        )
+    }
+}
 
 internal fun ActogramDisplayRow?.dataRowOrNull(): ActogramRow? =
     (this as? ActogramDisplayRow.Data)?.row

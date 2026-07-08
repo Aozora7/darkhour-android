@@ -110,12 +110,11 @@ internal fun DrawScope.drawActogram(
                     drawSchedule(schedule, 0.0, labelWidth, hourWidth, top, rowHeight, selection)
                 }
                 if (options.doublePlot) {
-                    displayedRows.getOrNull(
-                        nextChronologicalRowIndex(
-                            index,
-                            options.order,
-                        ),
-                    )?.dataRowOrNull()?.schedules?.forEach { schedule ->
+                    displayRow.doublePlotNextDataRowOrNull(
+                        rows = displayedRows,
+                        index = index,
+                        order = options.order,
+                    )?.schedules?.forEach { schedule ->
                         drawSchedule(
                             schedule,
                             layout.rowHours,
@@ -134,12 +133,11 @@ internal fun DrawScope.drawActogram(
                     drawOverlay(overlay, 0.0, labelWidth, hourWidth, top, rowHeight, selection)
                 }
                 if (options.doublePlot) {
-                    displayedRows.getOrNull(
-                        nextChronologicalRowIndex(
-                            index,
-                            options.order,
-                        ),
-                    )?.dataRowOrNull()?.overlays?.forEach { overlay ->
+                    displayRow.doublePlotNextDataRowOrNull(
+                        rows = displayedRows,
+                        index = index,
+                        order = options.order,
+                    )?.overlays?.forEach { overlay ->
                         drawOverlay(
                             overlay,
                             layout.rowHours,
@@ -166,12 +164,11 @@ internal fun DrawScope.drawActogram(
                 )
             }
             if (options.doublePlot) {
-                displayedRows.getOrNull(
-                    nextChronologicalRowIndex(
-                        index,
-                        options.order,
-                    ),
-                )?.dataRowOrNull()?.sleeps?.forEach { sleep ->
+                displayRow.doublePlotNextDataRowOrNull(
+                    rows = displayedRows,
+                    index = index,
+                    order = options.order,
+                )?.sleeps?.forEach { sleep ->
                     drawSleep(
                         sleep = sleep,
                         shift = layout.rowHours,
