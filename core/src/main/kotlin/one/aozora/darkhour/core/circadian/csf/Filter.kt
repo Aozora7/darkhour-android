@@ -23,6 +23,11 @@ fun circularDiff(a: Double, b: Double): Double {
 fun resolveAmbiguity(measurement: Double, predictedPhase: Double): Double =
     measurement + round((predictedPhase - measurement) / 24.0) * 24.0
 
+/**
+ * Circular vector fusion result.  [kappa] is used as a pseudo-precision by
+ * production CSF; it is intentionally not exposed as a calibrated posterior
+ * concentration parameter.
+ */
 data class VonMisesResult(val phase: Double, val kappa: Double)
 
 fun vonMisesUpdate(
@@ -145,6 +150,11 @@ fun forwardPass(anchors: List<CsfAnchor>, firstDay: Int, lastDay: Int, config: C
     return states
 }
 
+/**
+ * Backward smoothing for the production heuristic.  Its name reflects the
+ * direction of the pass, not a claim that the preceding covariance updates are
+ * an exact Rauch--Tung--Striebel implementation.
+ */
 fun rtsSmoother(forwardStates: List<CsfState>, config: CsfConfig): List<SmoothedState> {
     if (forwardStates.isEmpty()) return emptyList()
 

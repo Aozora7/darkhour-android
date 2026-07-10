@@ -9,6 +9,13 @@ const val MIN_ANCHORS = 2
 const val TAU_MIN = 22.0
 const val TAU_MAX = 27.0
 
+/**
+ * Production CSF's heuristic state. [phase] is deliberately unwrapped in
+ * hours, while [tau] is the implied cycle length in hours.  The variance and
+ * covariance fields guide adaptive weighting but are not a fully calibrated
+ * Gaussian covariance matrix; see the prototype package for that reference
+ * formulation.
+ */
 data class CsfState(
     val phase: Double,
     val tau: Double,

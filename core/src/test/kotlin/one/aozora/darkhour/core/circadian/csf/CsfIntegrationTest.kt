@@ -1,6 +1,5 @@
 package one.aozora.darkhour.core.circadian.csf
 
-import one.aozora.darkhour.core.circadian.CircadianAnalyzer
 import java.time.Duration
 import java.time.LocalDate
 import java.time.ZoneOffset
@@ -12,23 +11,23 @@ import org.junit.Test
 class CsfIntegrationTest {
     @Test
     fun detectsStableAndPositiveSyntheticTau() {
-        assertAnalysisTau(CircadianAnalyzer.analyze(generateSyntheticRecords(SyntheticOptions(tau = 24.0, days = 90, noise = 0.0))), 24.0, 0.15)
-        assertAnalysisTau(CircadianAnalyzer.analyze(generateSyntheticRecords(SyntheticOptions(tau = 24.5, days = 90, noise = 0.0))), 24.5, 0.15)
-        assertAnalysisTau(CircadianAnalyzer.analyze(generateSyntheticRecords(SyntheticOptions(tau = 25.0, days = 90, noise = 0.0))), 25.0, 0.2)
+        assertAnalysisTau(analyzeCircadianCsf(generateSyntheticRecords(SyntheticOptions(tau = 24.0, days = 90, noise = 0.0))), 24.0, 0.15)
+        assertAnalysisTau(analyzeCircadianCsf(generateSyntheticRecords(SyntheticOptions(tau = 24.5, days = 90, noise = 0.0))), 24.5, 0.15)
+        assertAnalysisTau(analyzeCircadianCsf(generateSyntheticRecords(SyntheticOptions(tau = 25.0, days = 90, noise = 0.0))), 25.0, 0.2)
     }
 
     @Test
     fun toleratesNoisyDataAndRandomGaps() {
-        val noisy = CircadianAnalyzer.analyze(generateSyntheticRecords(SyntheticOptions(tau = 24.5, days = 120, noise = 0.8, seed = 7)))
+        val noisy = analyzeCircadianCsf(generateSyntheticRecords(SyntheticOptions(tau = 24.5, days = 120, noise = 0.8, seed = 7)))
         assertTrue(kotlin.math.abs(noisy.globalTau - 24.5) < 0.6)
 
-        val gappy = CircadianAnalyzer.analyze(generateSyntheticRecords(SyntheticOptions(tau = 24.5, days = 120, noise = 0.3, gapFraction = 0.3, seed = 11)))
+        val gappy = analyzeCircadianCsf(generateSyntheticRecords(SyntheticOptions(tau = 24.5, days = 120, noise = 0.3, gapFraction = 0.3, seed = 11)))
         assertTrue(kotlin.math.abs(gappy.globalTau - 24.5) < 0.7)
     }
 
     @Test
     fun producesForecastDaysWithDecayingConfidence() {
-        val analysis = CircadianAnalyzer.analyze(
+        val analysis = analyzeCircadianCsf(
             generateSyntheticRecords(SyntheticOptions(tau = 24.5, days = 30, noise = 0.0)),
             extraDays = 7,
         )
@@ -60,7 +59,7 @@ class CsfIntegrationTest {
             )
         }
 
-        val analysis = CircadianAnalyzer.analyze(records)
+        val analysis = analyzeCircadianCsf(records)
         val mids = analysis.days.map { (it.nightStartHour + it.nightEndHour) / 2.0 }
 
         assertTrue(mids.isNotEmpty())
@@ -82,7 +81,7 @@ class CsfIntegrationTest {
                 )
             }
 
-        val analysis = CircadianAnalyzer.analyze(first + second)
+        val analysis = analyzeCircadianCsf(first + second)
 
         assertTrue(analysis.days.any { it.isGap })
         val postGap = analysis.days.filter { !it.isGap && it.date >= second.first().dateOfSleep }
@@ -106,7 +105,7 @@ class CsfIntegrationTest {
                 )
             }
 
-        val analysis = CircadianAnalyzer.analyze(first + second, extraDays = 30)
+        val analysis = analyzeCircadianCsf(first + second, extraDays = 30)
         val forecastDates = analysis.days.filter { it.isForecast }.map { it.date }
         val secondSegmentDates = second.map { it.dateOfSleep }.toSet()
 
@@ -118,7 +117,7 @@ class CsfIntegrationTest {
 
     @Test
     fun detectsNegativeDrift() {
-        val analysis = CircadianAnalyzer.analyze(generateSyntheticRecords(SyntheticOptions(tau = 23.5, days = 120, noise = 0.0)))
+        val analysis = analyzeCircadianCsf(generateSyntheticRecords(SyntheticOptions(tau = 23.5, days = 120, noise = 0.0)))
 
         assertTrue(kotlin.math.abs(analysis.globalTau - 23.5) < 0.35)
         assertTrue(analysis.globalDailyDrift < 0.0)
@@ -126,7 +125,7 @@ class CsfIntegrationTest {
 
     @Test
     fun handlesFragmentationAndNapContamination() {
-        val fragmented = CircadianAnalyzer.analyze(
+        val fragmented = analyzeCircadianCsf(
             generateSyntheticRecords(
                 SyntheticOptions(
                     tau = 24.5,
@@ -146,12 +145,12 @@ class CsfIntegrationTest {
 
     @Test
     fun returnsSaneDefaultsForEmptyAndSingleRecordInput() {
-        val empty = CircadianAnalyzer.analyze(emptyList())
+        val empty = analyzeCircadianCsf(emptyList())
         assertEquals(ALGORITHM_ID, empty.algorithmId)
         assertEquals(24.0, empty.globalTau, 0.0)
         assertTrue(empty.days.isEmpty())
 
-        val single = CircadianAnalyzer.analyze(generateSyntheticRecords(SyntheticOptions(days = 1)))
+        val single = analyzeCircadianCsf(generateSyntheticRecords(SyntheticOptions(days = 1)))
         assertEquals(24.0, single.globalTau, 0.0)
         assertTrue(single.days.isEmpty())
     }
