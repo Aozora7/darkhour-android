@@ -51,10 +51,10 @@ object CircadianAlgorithmRegistry {
         override val id = CSF_ID
         override val displayName = "CSF"
         override val parameters = listOf(
-            CircadianNumericParameter("tau_prior", "Tau prior", 25.0, 22.0, 27.0, 100, 2, "h"),
-            CircadianNumericParameter("phase_noise", "Phase noise", 0.08, 0.01, 0.50, 49, 2),
-            CircadianNumericParameter("tau_noise", "Tau noise", 0.001, 0.0001, 0.02, 99, 4),
-            CircadianNumericParameter("measurement_kappa", "Observation weight", 0.35, 0.05, 1.00, 95, 2),
+            CircadianNumericParameter("tau_prior", "Tau prior", 25.41, 22.0, 27.0, 100, 2, "h"),
+            CircadianNumericParameter("phase_noise", "Phase noise", 0.02, 0.01, 0.50, 49, 2),
+            CircadianNumericParameter("tau_noise", "Tau noise", 0.0028, 0.0001, 0.02, 99, 4),
+            CircadianNumericParameter("measurement_kappa", "Observation weight", 0.6, 0.05, 1.00, 95, 2),
             durationSmoothingParameter(),
         )
 
@@ -77,9 +77,9 @@ object CircadianAlgorithmRegistry {
         override val displayName = "Kalman"
         override val parameters = listOf(
             CircadianNumericParameter("drift_prior", "Daily drift prior", 1.0, -1.5, 3.0, 90, 2, "h/d"),
-            CircadianNumericParameter("phase_variance", "Phase variance", 0.08, 0.01, 0.50, 49, 2),
-            CircadianNumericParameter("drift_variance", "Drift variance", 0.001, 0.0001, 0.02, 99, 4),
-            CircadianNumericParameter("measurement_variance", "Measurement variance", 5.0, 0.25, 8.0, 31, 2),
+            CircadianNumericParameter("phase_variance", "Phase variance", 0.42, 0.01, 0.50, 49, 2),
+            CircadianNumericParameter("drift_variance", "Drift variance", 0.0001, 0.0001, 0.02, 99, 4),
+            CircadianNumericParameter("measurement_variance", "Measurement variance", 8.0, 0.25, 8.0, 31, 2),
             durationSmoothingParameter(),
         )
 
@@ -98,7 +98,7 @@ object CircadianAlgorithmRegistry {
     }
 
     val algorithms: List<CircadianAlgorithmDefinition> = listOf(csf, kalman)
-    val defaultAlgorithm: CircadianAlgorithmDefinition = csf
+    val defaultAlgorithm: CircadianAlgorithmDefinition = kalman
 
     fun algorithm(id: String): CircadianAlgorithmDefinition =
         algorithms.firstOrNull { it.id == id } ?: defaultAlgorithm

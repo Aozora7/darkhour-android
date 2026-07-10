@@ -9,3 +9,22 @@ kotlin {
 dependencies {
     testImplementation(libs.junit)
 }
+
+tasks.register<JavaExec>("groundTruthTune") {
+    group = "verification"
+    description = "Search circadian algorithm parameters against the optional private ground-truth fixtures."
+    dependsOn(tasks.testClasses)
+    classpath = sourceSets.test.get().runtimeClasspath
+    mainClass.set("one.aozora.darkhour.core.circadian.groundtruth.GroundTruthTuner")
+
+    args(
+        "--algorithms=${providers.gradleProperty("tuneAlgorithms").getOrElse("csf-v1")}",
+        "--samples=${providers.gradleProperty("tuneSamples").getOrElse("256")}",
+        "--generations=${providers.gradleProperty("tuneGenerations").getOrElse("8")}",
+        "--population=${providers.gradleProperty("tunePopulation").getOrElse("32")}",
+        "--threads=${providers.gradleProperty("tuneThreads").getOrElse("2")}",
+        "--seed=${providers.gradleProperty("tuneSeed").getOrElse("25072026")}",
+        "--window-days=${providers.gradleProperty("tuneWindowDays").getOrElse("42")}",
+        "--output=${layout.buildDirectory.dir("reports/ground-truth-tuning").get().asFile.absolutePath}",
+    )
+}
