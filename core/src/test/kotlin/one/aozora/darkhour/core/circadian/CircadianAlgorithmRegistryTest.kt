@@ -16,7 +16,7 @@ class CircadianAlgorithmRegistryTest {
         )
 
         assertEquals(CircadianAlgorithmRegistry.CSF_ID, CircadianAlgorithmRegistry.defaultAlgorithm.id)
-        assertEquals(4, defaults.size)
+        assertEquals(5, defaults.size)
         assertEquals(23.0, overridden.getValue("tau_prior"), 0.0)
         assertEquals(defaults.getValue("phase_noise"), overridden.getValue("phase_noise"), 0.0)
     }

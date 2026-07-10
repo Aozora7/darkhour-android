@@ -2,6 +2,7 @@ package one.aozora.darkhour.core.circadian.csf
 
 import one.aozora.darkhour.core.circadian.CircadianAnalysis
 import one.aozora.darkhour.core.circadian.CircadianDay
+import one.aozora.darkhour.core.circadian.DurationSmoothingConfig
 import one.aozora.darkhour.core.model.SleepRecord
 
 const val ALGORITHM_ID = "csf-v1"
@@ -39,6 +40,7 @@ data class CsfConfig(
     val maxCorrectionPerStep: Double,
     val gateThreshold: Double,
     val tauPriorNoise: TauPriorNoise,
+    val durationSmoothing: DurationSmoothingConfig,
 ) {
     companion object {
         val Default = CsfConfig(
@@ -54,6 +56,7 @@ data class CsfConfig(
                 backward = 1.0,
                 none = 5.0,
             ),
+            durationSmoothing = DurationSmoothingConfig(),
         )
     }
 }

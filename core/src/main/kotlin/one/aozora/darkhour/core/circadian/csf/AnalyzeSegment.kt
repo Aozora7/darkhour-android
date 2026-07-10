@@ -2,6 +2,8 @@ package one.aozora.darkhour.core.circadian.csf
 
 import one.aozora.darkhour.core.circadian.CircadianConfidence
 import one.aozora.darkhour.core.circadian.CircadianDay
+import one.aozora.darkhour.core.circadian.DurationObservation
+import one.aozora.darkhour.core.circadian.smoothDurations
 import one.aozora.darkhour.core.model.SleepRecord
 import java.time.LocalDate
 import kotlin.math.abs
@@ -35,23 +37,11 @@ fun analyzeSegment(
     correctEdges(outputStates, anchors, segFirstDay, lastDataLocalDay, totalDays)
 
     val anchorByDay = anchors.associateBy { it.dayNumber }
-    val smoothedDurations = mutableListOf<Double>()
-    val durationSigma = 3.0
-    val durationHalfWindow = 5
-    for (i in 0..totalDays) {
-        var durSum = 0.0
-        var weightSum = 0.0
-        for (j in max(0, i - durationHalfWindow)..min(totalDays, i + durationHalfWindow)) {
-            val anchor = anchorByDay[segFirstDay + j]
-            if (anchor != null) {
-                val dist = abs(j - i)
-                val weight = exp(-0.5 * (dist / durationSigma) * (dist / durationSigma))
-                durSum += weight * anchor.record.durationHours
-                weightSum += weight
-            }
-        }
-        smoothedDurations += if (weightSum > 0.0) durSum / weightSum else 8.0
-    }
+    val smoothedDurations = smoothDurations(
+        observations = anchors.map { DurationObservation(it.dayNumber, it.record.durationHours) },
+        targetDays = segFirstDay..segLastDayWithForecast,
+        config = config.durationSmoothing,
+    )
 
     val days = mutableListOf<CircadianDay>()
     val residuals = mutableListOf<Double>()

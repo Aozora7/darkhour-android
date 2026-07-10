@@ -3,7 +3,9 @@ package one.aozora.darkhour.core.circadian.kalman
 import one.aozora.darkhour.core.circadian.CircadianConfidence
 import one.aozora.darkhour.core.circadian.CircadianDay
 import one.aozora.darkhour.core.circadian.CircadianAnalysis
+import one.aozora.darkhour.core.circadian.DurationObservation
 import one.aozora.darkhour.core.circadian.splitIntoSegments
+import one.aozora.darkhour.core.circadian.smoothDurations
 import one.aozora.darkhour.core.model.SleepRecord
 import java.time.LocalDate
 import java.time.ZoneOffset
@@ -85,7 +87,12 @@ private fun analyzeKalmanSegment(
         lastDay = dataEndDay + extraDays,
         config = config,
     )
-    val duration = anchors.map { it.record.durationHours }.average()
+    val firstStateDay = states.first().dayNumber
+    val durationsByDay = smoothDurations(
+        observations = anchors.map { DurationObservation(it.dayNumber, it.record.durationHours) },
+        targetDays = firstStateDay..states.last().dayNumber,
+        config = config.durationSmoothing,
+    ).withIndex().associate { (index, duration) -> firstStateDay + index to duration }
     return KalmanSegment(
         firstDay = anchors.first().dayNumber,
         dataEndDay = dataEndDay,
@@ -103,6 +110,7 @@ private fun analyzeKalmanSegment(
             // unwrapped value here makes the actogram treat one night as a
             // window spanning months of calendar rows.
             val midpointHour = normalizeClockHour(state.phase)
+            val duration = durationsByDay.getValue(state.dayNumber)
             CircadianDay(
                 date = firstDate.plusDays(state.dayNumber.toLong()),
                 nightStartHour = midpointHour - duration / 2.0,

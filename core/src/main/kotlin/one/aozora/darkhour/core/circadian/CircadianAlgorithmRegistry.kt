@@ -55,6 +55,7 @@ object CircadianAlgorithmRegistry {
             CircadianNumericParameter("phase_noise", "Phase noise", 0.08, 0.01, 0.50, 49, 2),
             CircadianNumericParameter("tau_noise", "Tau noise", 0.001, 0.0001, 0.02, 99, 4),
             CircadianNumericParameter("measurement_kappa", "Observation weight", 0.35, 0.05, 1.00, 95, 2),
+            durationSmoothingParameter(),
         )
 
         override fun analyze(records: List<SleepRecord>, extraDays: Int, values: Map<String, Double>): CircadianAnalysis =
@@ -66,6 +67,7 @@ object CircadianAlgorithmRegistry {
                     processNoisePhase = values.valueOf("phase_noise"),
                     processNoiseTau = values.valueOf("tau_noise"),
                     measurementKappaBase = values.valueOf("measurement_kappa"),
+                    durationSmoothing = DurationSmoothingConfig(values.valueOf("duration_smoothing_sigma")),
                 ),
             )
     }
@@ -78,6 +80,7 @@ object CircadianAlgorithmRegistry {
             CircadianNumericParameter("phase_variance", "Phase variance", 0.08, 0.01, 0.50, 49, 2),
             CircadianNumericParameter("drift_variance", "Drift variance", 0.001, 0.0001, 0.02, 99, 4),
             CircadianNumericParameter("measurement_variance", "Measurement variance", 4.0, 0.25, 8.0, 31, 2),
+            durationSmoothingParameter(),
         )
 
         override fun analyze(records: List<SleepRecord>, extraDays: Int, values: Map<String, Double>): CircadianAnalysis =
@@ -89,6 +92,7 @@ object CircadianAlgorithmRegistry {
                     processPhaseVariance = values.valueOf("phase_variance"),
                     processDriftVariance = values.valueOf("drift_variance"),
                     measurementVarianceAtUnitWeight = values.valueOf("measurement_variance"),
+                    durationSmoothing = DurationSmoothingConfig(values.valueOf("duration_smoothing_sigma")),
                 ),
             )
     }
@@ -122,4 +126,15 @@ object CircadianAlgorithmRegistry {
     }
 
     private fun Map<String, Double>.valueOf(key: String): Double = checkNotNull(this[key])
+
+    private fun durationSmoothingParameter() = CircadianNumericParameter(
+        key = "duration_smoothing_sigma",
+        label = "Duration smoothing",
+        defaultValue = DEFAULT_DURATION_SMOOTHING_SIGMA_DAYS,
+        minValue = 3.0,
+        maxValue = 60.0,
+        steps = 58,
+        decimalPlaces = 0,
+        unit = "d",
+    )
 }
