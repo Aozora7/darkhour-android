@@ -79,7 +79,7 @@ object CircadianAlgorithmRegistry {
             CircadianNumericParameter("drift_prior", "Daily drift prior", 1.0, -1.5, 3.0, 90, 2, "h/d"),
             CircadianNumericParameter("phase_variance", "Phase variance", 0.08, 0.01, 0.50, 49, 2),
             CircadianNumericParameter("drift_variance", "Drift variance", 0.001, 0.0001, 0.02, 99, 4),
-            CircadianNumericParameter("measurement_variance", "Measurement variance", 4.0, 0.25, 8.0, 31, 2),
+            CircadianNumericParameter("measurement_variance", "Measurement variance", 5.0, 0.25, 8.0, 31, 2),
             durationSmoothingParameter(),
         )
 

@@ -12,6 +12,7 @@ class SleepScoreTest {
         minutesAsleep: Int = 420,
         minutesAwake: Int = 30,
         durationMs: Long = 8L * 3_600_000L,
+        efficiency: Int = 90,
         stages: SleepStages? = SleepStages(deep = 80, light = 200, rem = 100, wake = 40),
         stageData: List<SleepStageInterval> = emptyList(),
     ) = makeSleepRecord(
@@ -19,6 +20,7 @@ class SleepScoreTest {
         minutesAwake = minutesAwake,
         durationMs = durationMs,
         durationHours = durationMs / 3_600_000.0,
+        efficiency = efficiency,
         stages = stages,
         stageData = stageData,
     )
@@ -39,12 +41,11 @@ class SleepScoreTest {
     }
 
     @Test
-    fun veryLongSleepScoresLowerThanOptimalSleep() {
+    fun longSleepIsNotAssumedToBePoorSolelyFromDuration() {
         val veryLong = calculateSleepScore(makeRecord(minutesAsleep = 780, durationMs = 14L * 3_600_000L))
         val normal = calculateSleepScore(makeRecord())
 
-        assertTrue(veryLong < normal)
-        assertTrue(veryLong < 0.85)
+        assertEquals(normal, veryLong, 0.0)
     }
 
     @Test
@@ -70,6 +71,63 @@ class SleepScoreTest {
         val score = calculateSleepScore(makeRecord(stages = null, minutesAsleep = 420, minutesAwake = 30))
 
         assertTrue(score in 0.0..1.0)
+    }
+
+    @Test
+    fun missingWakeDataUsesDurationWithoutAssumingPerfectEfficiency() {
+        val withoutWakeData = calculateSleepScore(
+            makeRecord(
+                minutesAsleep = 360,
+                minutesAwake = 0,
+                durationMs = 6L * 3_600_000L,
+                efficiency = 100,
+                stages = null,
+            ),
+        )
+
+        assertEquals(0.67, withoutWakeData, 0.0)
+    }
+
+    @Test
+    fun sleepStagesDoNotChangeScoreWhenContinuityIsUnchanged() {
+        val first = makeRecord(stages = SleepStages(deep = 120, light = 180, rem = 80, wake = 30))
+        val second = makeRecord(stages = SleepStages(deep = 20, light = 280, rem = 80, wake = 30))
+
+        assertEquals(calculateSleepScore(first), calculateSleepScore(second), 0.0)
+    }
+
+    @Test
+    fun consensusDurationAndContinuityThresholdsReceiveFullCredit() {
+        val score = calculateSleepScore(
+            makeRecord(
+                minutesAsleep = 420,
+                minutesAwake = 20,
+                durationMs = 8L * 3_600_000L,
+                efficiency = 85,
+                stages = null,
+            ),
+        )
+
+        assertEquals(1.0, score, 0.0)
+    }
+
+    @Test
+    fun poorContinuityCannotBeHiddenByLongDuration() {
+        val consolidated = calculateSleepScore(
+            makeRecord(minutesAsleep = 420, minutesAwake = 20, efficiency = 90, stages = null),
+        )
+        val fragmented = calculateSleepScore(
+            makeRecord(
+                minutesAsleep = 420,
+                minutesAwake = 300,
+                durationMs = 12L * 3_600_000L,
+                efficiency = 58,
+                stages = null,
+            ),
+        )
+
+        assertTrue(fragmented < consolidated)
+        assertTrue(fragmented <= 0.5)
     }
 
     @Test
