@@ -101,6 +101,7 @@ fun DarkHourApp(
         sleepAnalysis = appState.sleepAnalysis,
         appSettings = appState.appSettings,
         actogramDisplay = appState.actogramDisplay,
+        developerCircadian = appState.developerCircadian,
         schedule = appState.schedule.copy(onEditEntry = ::editScheduleEntry),
         healthConnect = appState.healthConnect,
     ) {

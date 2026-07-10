@@ -2,8 +2,7 @@ package one.aozora.darkhour.core.circadian.kalman
 
 import one.aozora.darkhour.core.circadian.csf.SyntheticOptions
 import one.aozora.darkhour.core.circadian.csf.generateSyntheticRecords
-import one.aozora.darkhour.core.circadian.csf.prepareAnchors
-import one.aozora.darkhour.core.circadian.csf.utcStartInstant
+import java.time.ZoneOffset
 import kotlin.math.abs
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -35,7 +34,7 @@ class UnwrappedKalmanTrendTest {
 
     private fun fit(records: List<one.aozora.darkhour.core.model.SleepRecord>, firstDate: java.time.LocalDate) =
         fitUnwrappedKalmanTrend(
-            prepareAnchors(records, firstDate, firstDate.utcStartInstant().toEpochMilli())
+            prepareKalmanAnchors(records, firstDate, firstDate.atStartOfDay().toInstant(ZoneOffset.UTC).toEpochMilli())
                 .map { KalmanObservation(it.dayNumber, it.midpointHour, it.weight) },
         )
 }

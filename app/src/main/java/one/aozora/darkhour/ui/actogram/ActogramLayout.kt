@@ -412,7 +412,7 @@ object ActogramLayoutEngine {
             ActogramOverlayBlock(
                 startHour = hoursBetween(rowStart, clippedStart),
                 endHour = hoursBetween(rowStart, clippedEnd),
-                confidence = confidenceScore,
+                confidence = overlayConfidence,
                 isForecast = isForecast,
                 isGap = false,
                 selection = selection,
@@ -459,7 +459,7 @@ object ActogramLayoutEngine {
         return listOf(ActogramOverlayBlock(
             startHour = hoursBetween(rowStart, clippedStart),
             endHour = hoursBetween(rowStart, clippedEnd),
-            confidence = day.confidenceScore,
+            confidence = day.overlayConfidence,
             isForecast = day.isForecast,
             isGap = false,
             selection = ActogramSelection.Circadian(

@@ -31,12 +31,14 @@ import one.aozora.darkhour.data.HealthDataRange
 import one.aozora.darkhour.ui.LocalAppSettings
 import one.aozora.darkhour.ui.LocalHealthConnectState
 import one.aozora.darkhour.ui.LocalSleepAnalysis
+import one.aozora.darkhour.ui.LocalDeveloperCircadian
 
 @Composable
 fun StatsScreen(
     modifier: Modifier = Modifier,
 ) {
     val selectedAnalysis = LocalSleepAnalysis.current
+    val developerCircadian = LocalDeveloperCircadian.current
     val (settings) = LocalAppSettings.current
     val healthConnect = LocalHealthConnectState.current
     var dataScope by rememberSaveable { mutableStateOf(StatsDataScope.SelectedPeriod) }
@@ -69,8 +71,18 @@ fun StatsScreen(
         statsAllRecords
             ?.let { records -> if (settings.includeNaps) records else records.filter { it.isMainSleep } }
     }
-    val allDataAnalysis = remember(allDataRecords, settings.forecastDays) {
-        CircadianAnalyzer.analyze(allDataRecords.orEmpty(), extraDays = settings.forecastDays)
+    val allDataAnalysis = remember(
+        allDataRecords,
+        settings.forecastDays,
+        developerCircadian.algorithmId,
+        developerCircadian.activeOverrides,
+    ) {
+        CircadianAnalyzer.analyze(
+            allDataRecords.orEmpty(),
+            extraDays = settings.forecastDays,
+            algorithmId = developerCircadian.algorithmId,
+            overrides = developerCircadian.activeOverrides,
+        )
     }
     val allDataPeriodogram = remember(allDataRecords) {
         computePeriodogram(buildPeriodogramAnchors(allDataRecords.orEmpty()))

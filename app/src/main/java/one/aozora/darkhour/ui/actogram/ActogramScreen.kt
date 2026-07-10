@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Build
 import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
@@ -28,11 +29,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import one.aozora.darkhour.data.HealthConnectAccess
+import one.aozora.darkhour.BuildConfig
 import one.aozora.darkhour.data.HealthDataRange
 import one.aozora.darkhour.ui.LocalActogramDisplay
 import one.aozora.darkhour.ui.LocalAppSettings
 import one.aozora.darkhour.ui.LocalHealthConnectState
 import one.aozora.darkhour.ui.LocalScheduleState
+import one.aozora.darkhour.ui.LocalDeveloperCircadian
+import one.aozora.darkhour.ui.theme.CircadianForecast
+import one.aozora.darkhour.ui.theme.SurfaceDark
 
 @Composable
 fun ActogramScreen(
@@ -43,6 +48,7 @@ fun ActogramScreen(
     val (settings, onSettingsChange) = LocalAppSettings.current
     val schedule = LocalScheduleState.current
     val healthConnect = LocalHealthConnectState.current
+    val developerCircadian = LocalDeveloperCircadian.current
 
     if (healthConnect.access != HealthConnectAccess.CONNECTED) {
         HealthConnectGate(
@@ -56,6 +62,7 @@ fun ActogramScreen(
 
     val useIsoDateTime = settings.useIsoDateTime
     var showOptions by remember { mutableStateOf(false) }
+    var showDeveloperTools by remember { mutableStateOf(false) }
     var selection by remember(layout) { mutableStateOf<ActogramSelection?>(null) }
 
     Column(modifier = modifier.fillMaxSize().background(MaterialTheme.colorScheme.surfaceContainer)) {
@@ -100,6 +107,19 @@ fun ActogramScreen(
             ) {
                 Icon(Icons.Outlined.Tune, contentDescription = "Visualization options")
             }
+            if (BuildConfig.DEBUG) {
+                FloatingActionButton(
+                    onClick = { showDeveloperTools = true },
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(end = 16.dp, bottom = 84.dp)
+                        .testTag("circadian_developer_tools"),
+                    containerColor = CircadianForecast,
+                    contentColor = SurfaceDark,
+                ) {
+                    Icon(Icons.Outlined.Build, contentDescription = "Circadian developer tools")
+                }
+            }
         }
         AnimatedVisibility(
             visible = selection != null,
@@ -129,6 +149,12 @@ fun ActogramScreen(
             options = options,
             onOptionsChange = onOptionsChange,
             onDismiss = { showOptions = false },
+        )
+    }
+    if (BuildConfig.DEBUG && showDeveloperTools) {
+        CircadianDeveloperSheet(
+            state = developerCircadian,
+            onDismiss = { showDeveloperTools = false },
         )
     }
 }

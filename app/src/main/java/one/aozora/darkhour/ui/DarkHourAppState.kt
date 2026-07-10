@@ -9,6 +9,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import kotlinx.coroutines.delay
 import one.aozora.darkhour.core.circadian.CircadianAnalyzer
+import one.aozora.darkhour.core.circadian.CircadianAlgorithmRegistry
 import one.aozora.darkhour.core.model.SleepRecord
 import one.aozora.darkhour.core.periodogram.buildPeriodogramAnchors
 import one.aozora.darkhour.core.periodogram.computePeriodogram
@@ -28,6 +29,7 @@ data class DarkHourAppState(
     val sleepAnalysis: SleepAnalysisState,
     val appSettings: AppSettingsState,
     val actogramDisplay: ActogramDisplayState,
+    val developerCircadian: DeveloperCircadianState,
     val schedule: ScheduleState,
     val healthConnect: HealthConnectState,
 )
@@ -63,18 +65,51 @@ fun rememberDarkHourAppState(
     var settings by remember { mutableStateOf(initialSettings) }
     var scheduleEntries by remember { mutableStateOf(initialScheduleEntries) }
     var pendingScheduleEditId by remember { mutableStateOf<Long?>(null) }
+    var developerAlgorithmId by remember { mutableStateOf(CircadianAlgorithmRegistry.defaultAlgorithm.id) }
+    var developerOverrides by remember { mutableStateOf<Map<String, Map<String, Double>>>(emptyMap()) }
+
+    val developerCircadian = DeveloperCircadianState(
+        algorithmId = developerAlgorithmId,
+        overridesByAlgorithm = developerOverrides,
+        onAlgorithmChange = { algorithmId ->
+            developerAlgorithmId = CircadianAlgorithmRegistry.algorithm(algorithmId).id
+        },
+        onParameterChange = { key, value ->
+            developerOverrides = developerOverrides + (
+                developerAlgorithmId to (developerOverrides[developerAlgorithmId].orEmpty() + (key to value))
+            )
+        },
+        onParameterReset = { key ->
+            val active = developerOverrides[developerAlgorithmId].orEmpty() - key
+            developerOverrides = if (active.isEmpty()) {
+                developerOverrides - developerAlgorithmId
+            } else {
+                developerOverrides + (developerAlgorithmId to active)
+            }
+        },
+    )
 
     val filteredRecords = remember(records, settings.includeNaps) {
         if (settings.includeNaps) records else records.filter { it.isMainSleep }
     }
-    val analysis = remember(filteredRecords, settings.forecastDays) {
-        CircadianAnalyzer.analyze(filteredRecords, extraDays = settings.forecastDays)
+    val analysis = remember(filteredRecords, settings.forecastDays, developerAlgorithmId, developerCircadian.activeOverrides) {
+        CircadianAnalyzer.analyze(
+            filteredRecords,
+            extraDays = settings.forecastDays,
+            algorithmId = developerAlgorithmId,
+            overrides = developerCircadian.activeOverrides,
+        )
     }
     val actogramForecastDays = settings.forecastDays.let { days ->
         if (days > 0) days + 1 else 0
     }
-    val actogramAnalysis = remember(filteredRecords, actogramForecastDays) {
-        CircadianAnalyzer.analyze(filteredRecords, extraDays = actogramForecastDays)
+    val actogramAnalysis = remember(filteredRecords, actogramForecastDays, developerAlgorithmId, developerCircadian.activeOverrides) {
+        CircadianAnalyzer.analyze(
+            filteredRecords,
+            extraDays = actogramForecastDays,
+            algorithmId = developerAlgorithmId,
+            overrides = developerCircadian.activeOverrides,
+        )
     }
     val hideActogramForecastTail = actogramAnalysis.days.count { it.isForecast } >
         analysis.days.count { it.isForecast }
@@ -145,6 +180,7 @@ fun rememberDarkHourAppState(
             options = options,
             onOptionsChange = ::updateDisplayOptions,
         ),
+        developerCircadian = developerCircadian,
         schedule = ScheduleState(
             entries = scheduleEntries,
             pendingEditId = pendingScheduleEditId,

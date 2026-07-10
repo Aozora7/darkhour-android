@@ -9,7 +9,10 @@ import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.click
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
@@ -91,6 +94,35 @@ class DarkHourAppTest {
         composeRule.onNodeWithText("Double plot").assertIsDisplayed()
         composeRule.onNodeWithTag("order_newest").assertIsSelected()
         composeRule.onNodeWithText("Vertical scale").performScrollTo().assertIsDisplayed()
+    }
+
+    @Test
+    fun debugCircadianToolsGenerateControlsForTheSelectedAlgorithm() {
+        setContent()
+
+        composeRule.onNodeWithTag("circadian_developer_tools").assertIsDisplayed().performClick()
+        composeRule.onNodeWithTag("circadian_developer_sheet").assertIsDisplayed()
+        composeRule.onNodeWithTag("circadian_parameter_tau_prior").assertIsDisplayed()
+        composeRule.onNodeWithTag("circadian_reset_tau_prior").assertIsDisplayed()
+
+        composeRule.onNodeWithTag("circadian_algorithm_unwrapped-kalman-v1").performClick()
+
+        composeRule.onNodeWithTag("circadian_parameter_drift_prior").assertIsDisplayed()
+        composeRule.onAllNodesWithTag("circadian_parameter_tau_prior").assertCountEquals(0)
+    }
+
+    @Test
+    fun debugCircadianParameterResetRestoresTheDefaultValue() {
+        setContent()
+
+        composeRule.onNodeWithTag("circadian_developer_tools").performClick()
+        composeRule.onNodeWithTag("circadian_reset_tau_prior").assertIsNotEnabled()
+
+        composeRule.onNodeWithTag("circadian_parameter_tau_prior").performTouchInput {
+            click(Offset(width * 0.2f, centerY))
+        }
+        composeRule.onNodeWithTag("circadian_reset_tau_prior").assertIsEnabled().performClick()
+        composeRule.onNodeWithTag("circadian_reset_tau_prior").assertIsNotEnabled()
     }
 
     @Test

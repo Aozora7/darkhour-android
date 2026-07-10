@@ -1,8 +1,8 @@
 package one.aozora.darkhour.core.circadian.kalman
 
-import one.aozora.darkhour.core.circadian.csf.resolveAmbiguity
 import kotlin.math.abs
 import kotlin.math.max
+import kotlin.math.round
 import kotlin.math.sqrt
 
 /** One weighted, unwrapped sleep-midpoint observation. */
@@ -105,6 +105,9 @@ private fun update(state: FilterState, observation: KalmanObservation, config: K
         ),
     )
 }
+
+private fun resolveAmbiguity(measurement: Double, predictedPhase: Double): Double =
+    measurement + round((predictedPhase - measurement) / 24.0) * 24.0
 
 private fun rtsSmooth(steps: List<FilterStep>, firstDay: Int): List<KalmanTrendState> {
     val smoothed = steps.map(FilterStep::filtered).toMutableList()

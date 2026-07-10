@@ -15,7 +15,10 @@ data class CircadianDay(
     val date: LocalDate,
     val nightStartHour: Double,
     val nightEndHour: Double,
+    /** Algorithm-native confidence retained for diagnostics and details. */
     val confidenceScore: Double,
+    /** Cross-algorithm normalized confidence used only for overlay opacity. */
+    val overlayConfidence: Double = confidenceScore,
     val confidence: CircadianConfidence,
     val localTau: Double,
     val localDrift: Double,

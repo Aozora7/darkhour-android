@@ -2,12 +2,8 @@ package one.aozora.darkhour.core.circadian.kalman
 
 import one.aozora.darkhour.core.circadian.CircadianConfidence
 import one.aozora.darkhour.core.circadian.CircadianDay
+import one.aozora.darkhour.core.circadian.CircadianAnalysis
 import one.aozora.darkhour.core.circadian.splitIntoSegments
-import one.aozora.darkhour.core.circadian.csf.CsfAnalysis
-import one.aozora.darkhour.core.circadian.csf.TAU_MAX
-import one.aozora.darkhour.core.circadian.csf.TAU_MIN
-import one.aozora.darkhour.core.circadian.csf.prepareAnchors
-import one.aozora.darkhour.core.circadian.csf.startInstant
 import one.aozora.darkhour.core.model.SleepRecord
 import java.time.LocalDate
 import java.time.ZoneOffset
@@ -15,18 +11,35 @@ import kotlin.math.exp
 import kotlin.math.max
 
 const val KALMAN_ALGORITHM_ID = "unwrapped-kalman-v1"
+private const val KALMAN_TAU_MIN = 22.0
+private const val KALMAN_TAU_MAX = 27.0
+
+data class KalmanAnalysis(
+    override val globalTau: Double,
+    override val globalDailyDrift: Double,
+    override val days: List<CircadianDay>,
+    override val algorithmId: String,
+    override val tau: Double,
+    override val dailyDrift: Double,
+    override val rSquared: Double,
+    val anchorCount: Int,
+) : CircadianAnalysis
 
 /** Production-compatible wrapper around the unwrapped Kalman trend model. */
-fun analyzeCircadianKalman(records: List<SleepRecord>, extraDays: Int = 0): CsfAnalysis {
+fun analyzeCircadianKalman(
+    records: List<SleepRecord>,
+    extraDays: Int = 0,
+    config: KalmanConfig = KalmanConfig(),
+): KalmanAnalysis {
     if (records.isEmpty()) return emptyKalmanAnalysis()
 
     val sorted = records.sortedBy(SleepRecord::startTime)
     val firstDate = sorted.first().dateOfSleep
     val offset = sorted.first().startZoneOffset ?: sorted.first().endZoneOffset ?: ZoneOffset.UTC
-    val firstDateMs = firstDate.startInstant(offset).toEpochMilli()
+    val firstDateMs = firstDate.atStartOfDay().toInstant(offset).toEpochMilli()
     val segments = splitIntoSegments(sorted)
     val results = segments.mapIndexedNotNull { index, segment ->
-        analyzeKalmanSegment(segment, firstDate, firstDateMs, if (index == segments.lastIndex) extraDays else 0)
+        analyzeKalmanSegment(segment, firstDate, firstDateMs, if (index == segments.lastIndex) extraDays else 0, config)
     }
     if (results.isEmpty()) return emptyKalmanAnalysis()
 
@@ -41,7 +54,7 @@ fun analyzeCircadianKalman(records: List<SleepRecord>, extraDays: Int = 0): CsfA
     }
     val observed = days.filter { !it.isForecast && !it.isGap }
     val globalTau = observed.map(CircadianDay::localTau).average().takeIf(Double::isFinite) ?: 24.0
-    return CsfAnalysis(
+    return KalmanAnalysis(
         globalTau = globalTau,
         globalDailyDrift = globalTau - 24.0,
         days = days,
@@ -49,7 +62,6 @@ fun analyzeCircadianKalman(records: List<SleepRecord>, extraDays: Int = 0): CsfA
         tau = globalTau,
         dailyDrift = globalTau - 24.0,
         rSquared = 0.0,
-        states = emptyList(),
         anchorCount = results.sumOf(KalmanSegment::anchorCount),
     )
 }
@@ -59,8 +71,9 @@ private fun analyzeKalmanSegment(
     firstDate: LocalDate,
     firstDateMs: Long,
     extraDays: Int,
+    config: KalmanConfig,
 ): KalmanSegment? {
-    val anchors = prepareAnchors(records, firstDate, firstDateMs)
+    val anchors = prepareKalmanAnchors(records, firstDate, firstDateMs)
     if (anchors.size < 2) return null
     // A session rejected as an anchor is not evidence that the fitted timing
     // trajectory continues.  In particular, trailing short/low-quality
@@ -70,6 +83,7 @@ private fun analyzeKalmanSegment(
         observations = anchors.map { KalmanObservation(it.dayNumber, it.midpointHour, it.weight) },
         firstDay = anchors.first().dayNumber,
         lastDay = dataEndDay + extraDays,
+        config = config,
     )
     val duration = anchors.map { it.record.durationHours }.average()
     return KalmanSegment(
@@ -83,7 +97,7 @@ private fun analyzeKalmanSegment(
             } else {
                 1.0 / (1.0 + state.phaseVariance)
             }
-            val tau = (24.0 + state.drift).coerceIn(TAU_MIN, TAU_MAX)
+            val tau = (24.0 + state.drift).coerceIn(KALMAN_TAU_MIN, KALMAN_TAU_MAX)
             // The filter's phase is intentionally unwrapped, but CircadianDay
             // is a clock-time window relative to its own [date].  Passing the
             // unwrapped value here makes the actogram treat one night as a
@@ -130,7 +144,7 @@ private fun gapDay(date: LocalDate) = CircadianDay(
 
 private fun normalizeClockHour(hour: Double): Double = ((hour % 24.0) + 24.0) % 24.0
 
-private fun emptyKalmanAnalysis() = CsfAnalysis(
+private fun emptyKalmanAnalysis() = KalmanAnalysis(
     globalTau = 24.0,
     globalDailyDrift = 0.0,
     days = emptyList(),
@@ -138,6 +152,5 @@ private fun emptyKalmanAnalysis() = CsfAnalysis(
     tau = 24.0,
     dailyDrift = 0.0,
     rSquared = 0.0,
-    states = emptyList(),
     anchorCount = 0,
 )
