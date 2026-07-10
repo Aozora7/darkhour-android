@@ -28,3 +28,20 @@ tasks.register<JavaExec>("groundTruthTune") {
         "--output=${layout.buildDirectory.dir("reports/ground-truth-tuning").get().asFile.absolutePath}",
     )
 }
+
+tasks.register<JavaExec>("groundTruthCausal") {
+    group = "verification"
+    description = "Compare blocked causal circadian forecasts against the optional private ground-truth fixtures."
+    dependsOn(tasks.testClasses)
+    classpath = sourceSets.test.get().runtimeClasspath
+    mainClass.set("one.aozora.darkhour.core.circadian.groundtruth.GroundTruthCausalRunner")
+
+    args(
+        "--algorithms=${providers.gradleProperty("causalAlgorithms").getOrElse("all")}",
+        "--history-days=${providers.gradleProperty("causalHistoryDays").getOrElse("180")}",
+        "--horizon-days=${providers.gradleProperty("causalHorizonDays").getOrElse("42")}",
+        "--spacing-days=${providers.gradleProperty("causalSpacingDays").getOrElse("42")}",
+        "--overrides=${providers.gradleProperty("causalOverrides").getOrElse("")}",
+        "--output=${layout.buildDirectory.dir("reports/ground-truth-causal").get().asFile.absolutePath}",
+    )
+}

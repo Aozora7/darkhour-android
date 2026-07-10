@@ -8,14 +8,14 @@ import org.junit.Test
 
 class CircadianAlgorithmRegistryTest {
     @Test
-    fun defaultsToCsfAndResolvesOnlyDeclaredParameters() {
+    fun defaultsToKalmanAndResolvesOnlyDeclaredParameters() {
         val defaults = CircadianAlgorithmRegistry.resolvedValues(CircadianAlgorithmRegistry.CSF_ID, emptyMap())
         val overridden = CircadianAlgorithmRegistry.resolvedValues(
             CircadianAlgorithmRegistry.CSF_ID,
             mapOf("tau_prior" to 23.0, "unknown" to 99.0),
         )
 
-        assertEquals(CircadianAlgorithmRegistry.CSF_ID, CircadianAlgorithmRegistry.defaultAlgorithm.id)
+        assertEquals(CircadianAlgorithmRegistry.KALMAN_ID, CircadianAlgorithmRegistry.defaultAlgorithm.id)
         assertEquals(5, defaults.size)
         assertEquals(23.0, overridden.getValue("tau_prior"), 0.0)
         assertEquals(defaults.getValue("phase_noise"), overridden.getValue("phase_noise"), 0.0)
