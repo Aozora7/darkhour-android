@@ -146,6 +146,21 @@ class SwitchingKalmanModelTest {
     }
 
     @Test
+    fun persistentTailStepIsNotDilutedByLongHistory() {
+        val transition = 700
+        val analysis = analyzeCircadianSwitchingKalman(
+            syntheticStep(25.0, 24.0, transition, transition + 20),
+            config = SwitchingKalmanConfig(),
+        )
+        val expected = START_DATE.plusDays(transition.toLong())
+        val change = analysis.changePoints.minByOrNull { dayDistance(it.date, expected) }
+
+        assertTrue("long-history tail step produced no boundary: ${analysis.changePoints}", change != null)
+        assertTrue("long-history boundary was ${change?.date}", dayDistance(checkNotNull(change).date, expected) <= 2)
+        assertTrue("long-history confirmation was ${change.confirmationDate}", change.confirmationDate <= expected.plusDays(19))
+    }
+
+    @Test
     fun timingRelocationDoesNotBecomeTerminalDrift() {
         val transition = 70
         val records = syntheticStep(25.0, 24.0, transition, 90).mapIndexed { day, record ->

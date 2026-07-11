@@ -64,7 +64,7 @@ internal fun detectSwitchingKalmanChangePoints(
     var committedRegimeStart = first.dayNumber
     var learnedFreeRunningDrift: Double? = null
 
-    for (observation in sorted.drop(1)) {
+    for ((observationIndex, observation) in sorted.drop(1).withIndex()) {
         val gapDays = max(1, observation.dayNumber - previousDay)
         val dailyHazard = 1.0 / config.regimePriorDays
         val hazard = (1.0 - (1.0 - dailyHazard).pow(gapDays.toDouble())).coerceIn(1e-9, 1.0 - 1e-9)
@@ -77,7 +77,12 @@ internal fun detectSwitchingKalmanChangePoints(
                 evidence = hypothesis.evidence + observation.weight,
                 logProbability = hypothesis.logProbability + ln(1.0 - hazard) + continued.logLikelihood,
             )
-            if (hypothesis.evidence >= config.regimeMinEvidence) {
+            // A hypothesis currently stores only its most recent tentative
+            // boundary. Do not let it create another boundary and silently
+            // discard the first one before that first decision is committed.
+            // The no-change history remains in the beam and continues to
+            // propose newer candidates on every observation.
+            if (hypothesis.candidate == null && hypothesis.evidence >= config.regimeMinEvidence) {
                 resetModes(
                     previousDrift = predicted.drift,
                     learnedFreeRunningDrift = learnedFreeRunningDrift ?: config.driftPrior,
@@ -103,22 +108,20 @@ internal fun detectSwitchingKalmanChangePoints(
         }
         hypotheses = normalizeAndPrune(branches)
         val candidateHypotheses = hypotheses.filter { it.candidate != null }
-        val winning = candidateHypotheses
-            .map { checkNotNull(it.candidate).dayNumber }
-            .distinct()
-            .map { center ->
-                center to candidateHypotheses.filter {
-                    kotlin.math.abs(checkNotNull(it.candidate).dayNumber - center) <= BOUNDARY_CREDIBLE_RADIUS_DAYS
-                }
-            }
-            .maxByOrNull { (_, group) -> group.sumOf(::probability) }
-        if (winning != null) {
-            val posterior = winning.second.sumOf(::probability)
-            val best = winning.second.maxBy(SwitchingHypothesis::logProbability)
-            if (posterior >= 0.5) {
+        if (candidateHypotheses.isNotEmpty()) {
+            val posterior = candidateHypotheses.sumOf(::probability)
+            val best = candidateHypotheses.maxBy(SwitchingHypothesis::logProbability)
+            val tailDiagnostic = observationIndex >= sorted.size - TAIL_DIAGNOSTIC_OBSERVATIONS - 1
+            if (posterior >= 0.5 || tailDiagnostic) {
+                val bestCandidate = checkNotNull(best.candidate)
+                val noChangePosterior = hypotheses
+                    .filter { it.candidate == null }
+                    .sumOf(::probability)
                 SwitchingKalmanDiagnostics.log(
-                    "day=${observation.dayNumber} candidate=${winning.first} posterior=$posterior " +
-                        "evidence=${best.evidence} drift=${best.state.drift} offset=${best.state.offset}",
+                    "day=${observation.dayNumber} candidate=${bestCandidate.dayNumber} " +
+                        "modeGroup=${bestCandidate.resetMode} posterior=$posterior noChange=$noChangePosterior " +
+                        "evidence=${best.evidence} previousDrift=${bestCandidate.previousDrift} " +
+                        "drift=${best.state.drift} offset=${best.state.offset} mode=${bestCandidate.resetMode}",
                 )
             }
             if (posterior >= config.changeCommitProbability && best.evidence >= config.regimeMinEvidence) {
@@ -145,7 +148,7 @@ internal fun detectSwitchingKalmanChangePoints(
                 }
                 committedRegimeStart = candidate.dayNumber
                 hypotheses = normalizeAndPrune(
-                    winning.second
+                    candidateHypotheses
                         .filter { checkNotNull(it.candidate).dayNumber == candidate.dayNumber }
                         .map { it.copy(candidate = null) },
                 )
@@ -221,7 +224,7 @@ internal fun estimateSpectralFreeRunningDrift(observations: List<KalmanObservati
     return peak.period - 24.0
 }
 
-private const val BOUNDARY_CREDIBLE_RADIUS_DAYS = 10
 private const val ENTRAINED_DRIFT_BAND = 0.25
 private const val MIN_FREE_RUNNING_DISTANCE_HOURS = 0.25
 private const val MIN_SPECTRAL_ANCHORS = 30
+private const val TAIL_DIAGNOSTIC_OBSERVATIONS = 30

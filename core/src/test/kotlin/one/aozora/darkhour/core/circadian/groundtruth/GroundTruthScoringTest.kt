@@ -75,9 +75,18 @@ class GroundTruthScoringTest {
 }
 
 internal fun GroundTruthScore.summary(datasetId: String, algorithmId: String): String =
-    "GTRESULT\t$algorithmId\t$datasetId\tn=$pairedDays\tmean=${format("%.2f", meanAbsolutePhaseErrorHours)}h" +
-        "\tmedian=${format("%.2f", medianAbsolutePhaseErrorHours)}h\tp90=${format("%.2f", p90AbsolutePhaseErrorHours)}h" +
-        "\tbias=${format("%+.2f", signedMeanPhaseErrorHours)}h\ttau-delta=${format("%+.1f", tauDeltaMinutes)}min" +
-        "\tstreaks=${divergenceStreaks.size}\tpenalty=${format("%.2f", driftPenalty.total)}"
-
-private fun format(pattern: String, value: Double): String = String.format(java.util.Locale.ROOT, pattern, value)
+    String.format(
+        java.util.Locale.ROOT,
+        "GTRESULT  %-22s %-38s n=%4d  mean=%5.2fh  median=%5.2fh  p90=%5.2fh  " +
+            "bias=%+5.2fh  tau-delta=%+6.1fmin  streaks=%2d  penalty=%7.2f",
+        algorithmId,
+        datasetId,
+        pairedDays,
+        meanAbsolutePhaseErrorHours,
+        medianAbsolutePhaseErrorHours,
+        p90AbsolutePhaseErrorHours,
+        signedMeanPhaseErrorHours,
+        tauDeltaMinutes,
+        divergenceStreaks.size,
+        driftPenalty.total,
+    )

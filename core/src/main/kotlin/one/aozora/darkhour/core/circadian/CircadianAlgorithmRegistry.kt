@@ -117,19 +117,19 @@ object CircadianAlgorithmRegistry {
         override val id = SWITCHING_KALMAN_ID
         override val displayName = "Switching Kalman (experimental)"
         override val parameters = listOf(
-            CircadianNumericParameter("drift_prior", "Daily drift prior", 0.51, -1.5, 3.0, 90, 2, "h/d"),
-            CircadianNumericParameter("phase_variance", "Phase variance", 0.49, 0.01, 0.50, 49, 2),
+            CircadianNumericParameter("drift_prior", "Daily drift prior", 1.03, -1.5, 3.0, 90, 2, "h/d"),
+            CircadianNumericParameter("phase_variance", "Phase variance", 0.50, 0.01, 0.50, 49, 2),
             CircadianNumericParameter("drift_variance", "Drift variance", 0.0001, 0.0001, 0.02, 99, 4),
-            CircadianNumericParameter("measurement_variance", "Measurement variance", 10.0, 0.25, 10.0, 31, 2),
-            CircadianNumericParameter("regime_prior_days", "Regime prior", 90.0, 14.0, 365.0, 350, 0, "d"),
-            CircadianNumericParameter("regime_min_evidence", "Regime evidence", 7.0, 3.0, 14.0, 21, 1),
-            CircadianNumericParameter("drift_reset_variance", "Drift reset variance", 1.0, 0.01, 4.0, 99, 2),
-            CircadianNumericParameter("offset_reset_variance", "Offset reset variance", 4.0, 0.25, 36.0, 143, 2, "h²"),
-            CircadianNumericParameter("offset_adaptation_days", "Offset adaptation", 14.0, 3.0, 42.0, 39, 0, "d"),
-            CircadianNumericParameter("change_commit_probability", "Change probability", 0.95, 0.60, 0.99, 38, 2),
-            CircadianNumericParameter("generic_change_weight", "Generic change weight", 0.15, 0.01, 0.50, 48, 2),
-            CircadianNumericParameter("generic_jump_scale", "Generic jump scale", 0.50, 0.20, 1.50, 25, 2, "h/d"),
-            CircadianNumericParameter("offset_change_weight", "Offset change weight", 0.20, 0.01, 0.50, 48, 2),
+            CircadianNumericParameter("measurement_variance", "Measurement variance", 6.5, 0.25, 10.0, 31, 2),
+            CircadianNumericParameter("regime_prior_days", "Regime prior", 306.0, 14.0, 365.0, 350, 0, "d"),
+            CircadianNumericParameter("regime_min_evidence", "Regime evidence", 9.2, 3.0, 14.0, 21, 1),
+            CircadianNumericParameter("drift_reset_variance", "Drift reset variance", 0.01, 0.01, 4.0, 99, 2),
+            CircadianNumericParameter("offset_reset_variance", "Offset reset variance", 0.69, 0.25, 36.0, 143, 2, "h²"),
+            CircadianNumericParameter("offset_adaptation_days", "Offset adaptation", 6.0, 3.0, 42.0, 39, 0, "d"),
+            CircadianNumericParameter("change_commit_probability", "Change probability", 0.96, 0.60, 0.99, 38, 2),
+            CircadianNumericParameter("generic_change_weight", "Generic change weight", 0.11, 0.01, 0.50, 48, 2),
+            CircadianNumericParameter("generic_jump_scale", "Generic jump scale", 0.66, 0.20, 1.50, 25, 2, "h/d"),
+            CircadianNumericParameter("offset_change_weight", "Offset change weight", 0.5, 0.01, 0.50, 48, 2),
             durationSmoothingParameter(),
         )
 
