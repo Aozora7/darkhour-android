@@ -125,7 +125,11 @@ object CircadianAlgorithmRegistry {
             CircadianNumericParameter("regime_min_evidence", "Regime evidence", 7.0, 3.0, 14.0, 21, 1),
             CircadianNumericParameter("drift_reset_variance", "Drift reset variance", 1.0, 0.01, 4.0, 99, 2),
             CircadianNumericParameter("offset_reset_variance", "Offset reset variance", 4.0, 0.25, 36.0, 143, 2, "h²"),
+            CircadianNumericParameter("offset_adaptation_days", "Offset adaptation", 14.0, 3.0, 42.0, 39, 0, "d"),
             CircadianNumericParameter("change_commit_probability", "Change probability", 0.95, 0.60, 0.99, 38, 2),
+            CircadianNumericParameter("generic_change_weight", "Generic change weight", 0.15, 0.01, 0.50, 48, 2),
+            CircadianNumericParameter("generic_jump_scale", "Generic jump scale", 0.50, 0.20, 1.50, 25, 2, "h/d"),
+            CircadianNumericParameter("offset_change_weight", "Offset change weight", 0.20, 0.01, 0.50, 48, 2),
             durationSmoothingParameter(),
         )
 
@@ -142,7 +146,11 @@ object CircadianAlgorithmRegistry {
                     regimeMinEvidence = values.valueOf("regime_min_evidence"),
                     driftResetVariance = values.valueOf("drift_reset_variance"),
                     offsetResetVariance = values.valueOf("offset_reset_variance"),
+                    offsetAdaptationDays = values.valueOf("offset_adaptation_days"),
                     changeCommitProbability = values.valueOf("change_commit_probability"),
+                    genericChangeWeight = values.valueOf("generic_change_weight"),
+                    genericJumpScale = values.valueOf("generic_jump_scale"),
+                    offsetChangeWeight = values.valueOf("offset_change_weight"),
                     durationSmoothing = DurationSmoothingConfig(values.valueOf("duration_smoothing_sigma")),
                 ),
             )

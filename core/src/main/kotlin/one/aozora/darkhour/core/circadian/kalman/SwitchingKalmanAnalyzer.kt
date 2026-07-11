@@ -105,11 +105,10 @@ private fun analyzeSwitchingSegment(
         val change = detected.getOrNull(index - 1)
         val initial = change?.let {
             val previous = states.last()
-            initialSwitchingState(
+            it.boundaryState.copy(
                 phase = previous.phase + previous.drift,
-                drift = it.newDrift,
-                offset = it.observationOffset,
-                config = config,
+                drift = previous.drift,
+                offset = 0.0,
             )
         }
         states += fitSwitchingKalmanTrend(
@@ -148,7 +147,10 @@ private fun analyzeSwitchingSegment(
             } else {
                 1.0 / (1.0 + state.phaseVariance)
             }
-            val midpoint = normalizeSwitchingHour(state.phase + state.offset)
+            // Offset is a nuisance measurement term describing sleep timing
+            // relative to latent circadian phase. Rendering it as phase would
+            // create a biologically impossible jump at every regime boundary.
+            val midpoint = normalizeSwitchingHour(state.phase)
             val duration = durations.getValue(state.dayNumber)
             val tau = (24.0 + state.drift).coerceIn(TAU_MIN, TAU_MAX)
             CircadianDay(

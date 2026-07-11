@@ -1,5 +1,9 @@
 package one.aozora.darkhour.core.circadian.kalman
 
+import one.aozora.darkhour.core.periodogram.PeriodogramAnchor
+import one.aozora.darkhour.core.periodogram.PeriodogramOptions
+import one.aozora.darkhour.core.periodogram.computePeriodogram
+import kotlin.math.abs
 import kotlin.math.exp
 import kotlin.math.ln
 import kotlin.math.max
@@ -12,6 +16,7 @@ internal data class DetectedSwitchingChangePoint(
     val previousDrift: Double,
     val newDrift: Double,
     val observationOffset: Double,
+    val boundaryState: SwitchingState,
 )
 
 object SwitchingKalmanDiagnostics {
@@ -22,6 +27,8 @@ object SwitchingKalmanDiagnostics {
 private data class CandidateBoundary(
     val dayNumber: Int,
     val previousDrift: Double,
+    val boundaryState: SwitchingState,
+    val resetMode: String,
 )
 
 private data class SwitchingHypothesis(
@@ -54,6 +61,8 @@ internal fun detectSwitchingKalmanChangePoints(
     )
     val committed = mutableListOf<DetectedSwitchingChangePoint>()
     var previousDay = first.dayNumber
+    var committedRegimeStart = first.dayNumber
+    var learnedFreeRunningDrift: Double? = null
 
     for (observation in sorted.drop(1)) {
         val gapDays = max(1, observation.dayNumber - previousDay)
@@ -69,15 +78,27 @@ internal fun detectSwitchingKalmanChangePoints(
                 logProbability = hypothesis.logProbability + ln(1.0 - hazard) + continued.logLikelihood,
             )
             if (hypothesis.evidence >= config.regimeMinEvidence) {
-                val reset = resetSwitchingState(predicted, config)
-                val changed = updateSwitchingState(reset, observation, config)
-                branches += SwitchingHypothesis(
-                    state = changed.state,
-                    regimeStartDay = observation.dayNumber,
-                    evidence = observation.weight,
-                    logProbability = hypothesis.logProbability + ln(hazard) + changed.logLikelihood,
-                    candidate = CandidateBoundary(observation.dayNumber, hypothesis.state.drift),
-                )
+                resetModes(
+                    previousDrift = predicted.drift,
+                    learnedFreeRunningDrift = learnedFreeRunningDrift ?: config.driftPrior,
+                    config = config,
+                ).forEach { mode ->
+                    val reset = resetSwitchingState(predicted, config, mode.driftMean)
+                    val changed = updateSwitchingState(reset, observation, config)
+                    branches += SwitchingHypothesis(
+                        state = changed.state,
+                        regimeStartDay = observation.dayNumber,
+                        evidence = observation.weight,
+                        logProbability = hypothesis.logProbability + ln(hazard) + ln(mode.weight) +
+                            changed.logLikelihood,
+                        candidate = CandidateBoundary(
+                            dayNumber = observation.dayNumber,
+                            previousDrift = hypothesis.state.drift,
+                            boundaryState = reset,
+                            resetMode = mode.label,
+                        ),
+                    )
+                }
             }
         }
         hypotheses = normalizeAndPrune(branches)
@@ -109,12 +130,20 @@ internal fun detectSwitchingKalmanChangePoints(
                     previousDrift = candidate.previousDrift,
                     newDrift = best.state.drift,
                     observationOffset = best.state.offset,
+                    boundaryState = candidate.boundaryState,
                 )
                 SwitchingKalmanDiagnostics.log(
                     "committed boundary=${candidate.dayNumber} confirmation=${observation.dayNumber} " +
                         "posterior=$posterior oldDrift=${candidate.previousDrift} " +
-                        "newDrift=${best.state.drift} offset=${best.state.offset}",
+                        "newDrift=${best.state.drift} offset=${best.state.offset} mode=${candidate.resetMode} " +
+                        "freePrior=${learnedFreeRunningDrift ?: config.driftPrior}",
                 )
+                if (abs(candidate.previousDrift) > ENTRAINED_DRIFT_BAND) {
+                    estimateSpectralFreeRunningDrift(
+                        sorted.filter { it.dayNumber in committedRegimeStart until candidate.dayNumber },
+                    )?.let { learnedFreeRunningDrift = it }
+                }
+                committedRegimeStart = candidate.dayNumber
                 hypotheses = normalizeAndPrune(
                     winning.second
                         .filter { checkNotNull(it.candidate).dayNumber == candidate.dayNumber }
@@ -146,4 +175,53 @@ private fun normalizeAndPrune(input: List<SwitchingHypothesis>): List<SwitchingH
 
 private fun probability(hypothesis: SwitchingHypothesis): Double = exp(hypothesis.logProbability)
 
+private data class ResetMode(val label: String, val driftMean: Double, val weight: Double)
+
+private fun resetModes(
+    previousDrift: Double,
+    learnedFreeRunningDrift: Double,
+    config: SwitchingKalmanConfig,
+): List<ResetMode> {
+    val genericWeight = config.genericChangeWeight.coerceIn(1e-6, 1.0 - 1e-6)
+    val offsetWeight = config.offsetChangeWeight.coerceIn(1e-6, 1.0 - genericWeight - 1e-6)
+    val favoredWeight = 1.0 - genericWeight - offsetWeight
+    val favored = if (abs(previousDrift) <= ENTRAINED_DRIFT_BAND) {
+        ResetMode("release", learnedFreeRunningDrift, favoredWeight)
+    } else {
+        ResetMode("entrainment", 0.0, favoredWeight)
+    }
+    return listOf(
+        favored,
+        ResetMode("offset-only", previousDrift, offsetWeight),
+        ResetMode("generic-plus", previousDrift + config.genericJumpScale, genericWeight / 2.0),
+        ResetMode("generic-minus", previousDrift - config.genericJumpScale, genericWeight / 2.0),
+    )
+}
+
+internal fun estimateSpectralFreeRunningDrift(observations: List<KalmanObservation>): Double? {
+    if (observations.size < MIN_SPECTRAL_ANCHORS) return null
+    val result = computePeriodogram(
+        anchors = observations.map { observation ->
+            PeriodogramAnchor(
+                dayNumber = observation.dayNumber,
+                midpointHour = observation.midpointHour - observation.dayNumber * 24.0,
+                weight = observation.weight,
+            )
+        },
+        // Branch proposals only need a broad favored tau. The chart's 0.01 h
+        // resolution adds substantial work here without useful inference precision.
+        options = PeriodogramOptions(minPeriod = 22.0, maxPeriod = 27.0, step = 0.05),
+    )
+    val peak = result.points
+        .asSequence()
+        .filter { abs(it.period - 24.0) >= MIN_FREE_RUNNING_DISTANCE_HOURS }
+        .maxByOrNull { it.power }
+        ?: return null
+    if (peak.power <= result.significanceThreshold) return null
+    return peak.period - 24.0
+}
+
 private const val BOUNDARY_CREDIBLE_RADIUS_DAYS = 10
+private const val ENTRAINED_DRIFT_BAND = 0.25
+private const val MIN_FREE_RUNNING_DISTANCE_HOURS = 0.25
+private const val MIN_SPECTRAL_ANCHORS = 30

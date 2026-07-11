@@ -20,7 +20,11 @@ data class SwitchingKalmanConfig(
     val regimeMinEvidence: Double = 7.0,
     val driftResetVariance: Double = 1.0,
     val offsetResetVariance: Double = 4.0,
+    val offsetAdaptationDays: Double = 14.0,
     val changeCommitProbability: Double = 0.95,
+    val genericChangeWeight: Double = 0.15,
+    val genericJumpScale: Double = 0.50,
+    val offsetChangeWeight: Double = 0.20,
     val durationSmoothing: DurationSmoothingConfig = DurationSmoothingConfig(),
 ) {
     init {
@@ -31,7 +35,12 @@ data class SwitchingKalmanConfig(
         require(regimeMinEvidence > 0.0)
         require(driftResetVariance > 0.0)
         require(offsetResetVariance > 0.0)
+        require(offsetAdaptationDays > 0.0)
         require(changeCommitProbability in 0.0..1.0)
+        require(genericChangeWeight in 0.0..1.0)
+        require(genericJumpScale > 0.0)
+        require(offsetChangeWeight in 0.0..1.0)
+        require(genericChangeWeight + offsetChangeWeight <= 1.0)
     }
 }
 
@@ -89,21 +98,25 @@ internal fun predictSwitchingState(
     var result = state
     repeat(days.coerceAtLeast(0)) {
         val p = result.covariance
+        val retention = offsetRetention(config)
+        val absorption = 1.0 - retention
+        val p00 = p[0, 0] + 2.0 * p[0, 1] + p[1, 1] +
+            2.0 * absorption * (p[0, 2] + p[1, 2]) +
+            absorption * absorption * p[2, 2] + config.processPhaseVariance
+        val p01 = p[0, 1] + p[1, 1] + absorption * p[1, 2]
+        val p02 = retention * (p[0, 2] + p[1, 2] + absorption * p[2, 2])
+        val p11 = p[1, 1] + config.processDriftVariance
+        val p12 = retention * p[1, 2]
+        val p22 = retention * retention * p[2, 2]
         result = SwitchingState(
-            phase = result.phase + result.drift,
+            phase = result.phase + result.drift + absorption * result.offset,
             drift = result.drift,
-            offset = result.offset,
+            offset = retention * result.offset,
             covariance = Matrix3(
                 doubleArrayOf(
-                    p[0, 0] + 2.0 * p[0, 1] + p[1, 1] + config.processPhaseVariance,
-                    p[0, 1] + p[1, 1],
-                    p[0, 2] + p[1, 2],
-                    p[1, 0] + p[1, 1],
-                    p[1, 1] + config.processDriftVariance,
-                    p[1, 2],
-                    p[2, 0] + p[2, 1],
-                    p[2, 1],
-                    p[2, 2],
+                    max(p00, 1e-9), p01, p02,
+                    p01, max(p11, 1e-9), p12,
+                    p02, p12, max(p22, 1e-9),
                 ),
             ),
         )
@@ -158,12 +171,13 @@ internal fun updateSwitchingState(
 internal fun resetSwitchingState(
     predicted: SwitchingState,
     config: SwitchingKalmanConfig,
+    driftMean: Double = predicted.drift,
 ): SwitchingState = SwitchingState(
     phase = predicted.phase,
-    drift = config.driftPrior,
+    drift = driftMean,
     offset = 0.0,
     covariance = Matrix3.diagonal(
-        max(predicted.covariance[0, 0], 1e-6),
+        predicted.covariance[0, 0].coerceIn(1e-6, config.processPhaseVariance),
         config.driftResetVariance,
         config.offsetResetVariance,
     ),
@@ -202,15 +216,19 @@ internal fun fitSwitchingKalmanTrend(
     for (index in 0 until steps.lastIndex) {
         steps[index] = steps[index].copy(predictedNext = predictSwitchingState(steps[index].filtered, 1, config))
     }
-    return smoothSwitchingSteps(steps)
+    return smoothSwitchingSteps(steps, config)
 }
 
-private fun smoothSwitchingSteps(steps: List<SwitchingFilterStep>): List<SwitchingTrendState> {
+private fun smoothSwitchingSteps(
+    steps: List<SwitchingFilterStep>,
+    config: SwitchingKalmanConfig,
+): List<SwitchingTrendState> {
     val smoothed = steps.map(SwitchingFilterStep::filtered).toMutableList()
     for (index in smoothed.lastIndex - 1 downTo 0) {
         val filtered = steps[index].filtered
         val predicted = checkNotNull(steps[index].predictedNext)
-        val gain = multiply(multiply(filtered.covariance, transpose(TRANSITION)), inverse(predicted.covariance))
+        val transition = switchingTransition(config)
+        val gain = multiply(multiply(filtered.covariance, transpose(transition)), inverse(predicted.covariance))
         val innovation = doubleArrayOf(
             smoothed[index + 1].phase - predicted.phase,
             smoothed[index + 1].drift - predicted.drift,
@@ -276,9 +294,18 @@ private fun inverse(matrix: Matrix3): Matrix3 {
     )
 }
 
-private val TRANSITION = Matrix3(
-    doubleArrayOf(1.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0),
-)
+private fun offsetRetention(config: SwitchingKalmanConfig): Double = exp(-1.0 / config.offsetAdaptationDays)
+
+private fun switchingTransition(config: SwitchingKalmanConfig): Matrix3 {
+    val retention = offsetRetention(config)
+    return Matrix3(
+        doubleArrayOf(
+            1.0, 1.0, 1.0 - retention,
+            0.0, 1.0, 0.0,
+            0.0, 0.0, retention,
+        ),
+    )
+}
 private const val OUTLIER_PROBABILITY = 0.03
 private const val OUTLIER_VARIANCE_HOURS_SQUARED = 36.0
 internal const val SWITCHING_BEAM_WIDTH = 32

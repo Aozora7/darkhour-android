@@ -66,7 +66,9 @@ fun rememberDarkHourAppState(
     var settings by remember { mutableStateOf(initialSettings) }
     var scheduleEntries by remember { mutableStateOf(initialScheduleEntries) }
     var pendingScheduleEditId by remember { mutableStateOf<Long?>(null) }
-    var developerAlgorithmId by remember { mutableStateOf(CircadianAlgorithmRegistry.defaultAlgorithm.id) }
+    var developerAlgorithmId by remember {
+        mutableStateOf(initialDeveloperAlgorithmId(BuildConfig.DEBUG))
+    }
     var developerOverrides by remember { mutableStateOf<Map<String, Map<String, Double>>>(emptyMap()) }
     var developerInjectedRecords by remember { mutableStateOf<List<SleepRecord>>(emptyList()) }
     var developerInjectionForm by remember { mutableStateOf(defaultDebugSleepInjectionForm(records)) }
@@ -268,6 +270,10 @@ fun rememberDarkHourAppState(
         ),
     )
 }
+
+internal fun initialDeveloperAlgorithmId(isDebug: Boolean): String =
+    if (isDebug) CircadianAlgorithmRegistry.SWITCHING_KALMAN_ID
+    else CircadianAlgorithmRegistry.defaultAlgorithm.id
 
 private fun ActogramLayout.withHiddenActogramForecastTail(
     hideForecastTail: Boolean,

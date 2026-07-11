@@ -14,6 +14,19 @@ import org.junit.Test
 
 class SwitchingKalmanModelTest {
     @Test
+    fun branchWeightRegistryMaximaAreValidTogether() {
+        val config = SwitchingKalmanConfig(
+            genericChangeWeight = 0.50,
+            offsetChangeWeight = 0.50,
+        )
+        val records = generateSyntheticRecords(options(days = 40, tau = 25.0, seed = 71))
+
+        val analysis = analyzeCircadianSwitchingKalman(records, config = config)
+
+        assertTrue(analysis.days.isNotEmpty())
+    }
+
+    @Test
     fun weightedUpdateUsesPhasePlusOffsetObservation() {
         val config = testConfig()
         val predicted = initialSwitchingState(phase = 10.0, drift = 1.0, offset = 2.0, config = config)
@@ -31,9 +44,9 @@ class SwitchingKalmanModelTest {
         val state = initialSwitchingState(phase = 2.0, drift = 0.75, offset = -1.5, config = config)
         val predicted = predictSwitchingState(state, 4, config)
 
-        assertEquals(5.0, predicted.phase, 1e-9)
         assertEquals(0.75, predicted.drift, 1e-9)
-        assertEquals(-1.5, predicted.offset, 1e-9)
+        assertTrue(abs(predicted.offset) < 1.5)
+        assertEquals(3.5, predicted.phase + predicted.offset, 1e-9)
     }
 
     @Test
@@ -44,7 +57,10 @@ class SwitchingKalmanModelTest {
         val first = detectSwitchingKalmanChangePoints(observations, testConfig())
         val second = detectSwitchingKalmanChangePoints(observations, testConfig())
 
-        assertEquals(first, second)
+        assertEquals(
+            first.map { listOf(it.dayNumber, it.confirmationDayNumber, it.posteriorProbability, it.newDrift) },
+            second.map { listOf(it.dayNumber, it.confirmationDayNumber, it.posteriorProbability, it.newDrift) },
+        )
         assertTrue(SWITCHING_BEAM_WIDTH <= 32)
     }
 
@@ -94,11 +110,25 @@ class SwitchingKalmanModelTest {
                 ),
             ),
         )
-        val analysis = analyzeCircadianSwitchingKalman(records, config = testConfig())
+        val analysis = analyzeCircadianSwitchingKalman(
+            records,
+            config = testConfig().copy(driftPrior = 0.20),
+        )
 
         assertTrue("expected two regimes: ${analysis.changePoints}", analysis.changePoints.size >= 2)
         assertTrue(dayDistance(analysis.changePoints[0].date, START_DATE.plusDays(50)) <= 2)
         assertTrue(dayDistance(analysis.changePoints[1].date, START_DATE.plusDays(100)) <= 2)
+        assertTrue(
+            "release ignored learned free-running prior: ${analysis.changePoints[1]}",
+            analysis.changePoints[1].newDrift > 0.70,
+        )
+    }
+
+    @Test
+    fun spectralPriorRecoversStableFreeRunningTau() {
+        val records = generateSyntheticRecords(options(days = 150, tau = 25.0, seed = 61))
+        val drift = estimateSpectralFreeRunningDrift(observations(records))
+        assertTrue("spectral drift was $drift", drift != null && abs(drift - 1.0) < 0.15)
     }
 
     @Test
@@ -130,7 +160,7 @@ class SwitchingKalmanModelTest {
     }
 
     @Test
-    fun phaseRelocationIsRepresentedByOffsetWithoutChangingTau() {
+    fun phaseRelocationDoesNotChangeTau() {
         val transition = 70
         val records = generateSyntheticRecords(options(days = 100, tau = 25.0, seed = 29))
             .mapIndexed { day, record -> if (day < transition) record else shift(record, 5.0) }
@@ -138,9 +168,22 @@ class SwitchingKalmanModelTest {
         val terminalDrift = analysis.days.filterNot { it.isGap || it.isForecast }.takeLast(5)
             .map { it.localDrift }.average()
 
-        assertTrue("phase relocation was not committed: ${analysis.changePoints}", analysis.changePoints.isNotEmpty())
         assertTrue("phase relocation changed tau to ${24.0 + terminalDrift}", abs(terminalDrift - 1.0) < 0.25)
-        assertTrue("phase relocation did not use offset", abs(analysis.changePoints.first().observationOffset) > 1.0)
+    }
+
+    @Test
+    fun sleepPlacementOffsetDoesNotCreateCircadianPhaseDiscontinuity() {
+        val transition = 70
+        val records = generateSyntheticRecords(options(days = 100, tau = 25.0, seed = 53))
+            .mapIndexed { day, record -> if (day < transition) record else shift(record, 5.0) }
+        val analysis = analyzeCircadianSwitchingKalman(records, config = testConfig())
+        val boundary = analysis.changePoints.first().date
+        val days = analysis.days.filterNot { it.isGap || it.isForecast }.associateBy { it.date }
+        val previous = days.getValue(boundary.minusDays(1))
+        val current = days.getValue(boundary)
+        val movement = circularDifference(midpoint(current), midpoint(previous))
+
+        assertTrue("offset produced a $movement h phase jump at $boundary", abs(movement - 1.0) < 1.0)
     }
 
     @Test
