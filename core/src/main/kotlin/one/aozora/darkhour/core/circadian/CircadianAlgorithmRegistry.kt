@@ -4,7 +4,9 @@ import one.aozora.darkhour.core.circadian.csf.CsfConfig
 import one.aozora.darkhour.core.circadian.csf.analyzeCircadianCsf
 import one.aozora.darkhour.core.circadian.kalman.KalmanConfig
 import one.aozora.darkhour.core.circadian.kalman.KalmanChangeDetectionConfig
+import one.aozora.darkhour.core.circadian.kalman.SwitchingKalmanConfig
 import one.aozora.darkhour.core.circadian.kalman.analyzeCircadianKalman
+import one.aozora.darkhour.core.circadian.kalman.analyzeCircadianSwitchingKalman
 import one.aozora.darkhour.core.model.SleepRecord
 
 /** UI-neutral description of one tunable numeric algorithm parameter. */
@@ -47,6 +49,7 @@ interface CircadianAlgorithmDefinition {
 object CircadianAlgorithmRegistry {
     const val CSF_ID = "csf-v1"
     const val KALMAN_ID = "unwrapped-kalman-v1"
+    const val SWITCHING_KALMAN_ID = "switching-kalman-v1"
 
     private val csf = object : CircadianAlgorithmDefinition {
         override val id = CSF_ID
@@ -110,7 +113,42 @@ object CircadianAlgorithmRegistry {
             )
     }
 
-    val algorithms: List<CircadianAlgorithmDefinition> = listOf(csf, kalman)
+    private val switchingKalman = object : CircadianAlgorithmDefinition {
+        override val id = SWITCHING_KALMAN_ID
+        override val displayName = "Switching Kalman (experimental)"
+        override val parameters = listOf(
+            CircadianNumericParameter("drift_prior", "Daily drift prior", 0.51, -1.5, 3.0, 90, 2, "h/d"),
+            CircadianNumericParameter("phase_variance", "Phase variance", 0.49, 0.01, 0.50, 49, 2),
+            CircadianNumericParameter("drift_variance", "Drift variance", 0.0001, 0.0001, 0.02, 99, 4),
+            CircadianNumericParameter("measurement_variance", "Measurement variance", 10.0, 0.25, 10.0, 31, 2),
+            CircadianNumericParameter("regime_prior_days", "Regime prior", 90.0, 14.0, 365.0, 350, 0, "d"),
+            CircadianNumericParameter("regime_min_evidence", "Regime evidence", 7.0, 3.0, 14.0, 21, 1),
+            CircadianNumericParameter("drift_reset_variance", "Drift reset variance", 1.0, 0.01, 4.0, 99, 2),
+            CircadianNumericParameter("offset_reset_variance", "Offset reset variance", 4.0, 0.25, 36.0, 143, 2, "h²"),
+            CircadianNumericParameter("change_commit_probability", "Change probability", 0.95, 0.60, 0.99, 38, 2),
+            durationSmoothingParameter(),
+        )
+
+        override fun analyze(records: List<SleepRecord>, extraDays: Int, values: Map<String, Double>): CircadianAnalysis =
+            analyzeCircadianSwitchingKalman(
+                records = records,
+                extraDays = extraDays,
+                config = SwitchingKalmanConfig(
+                    driftPrior = values.valueOf("drift_prior"),
+                    processPhaseVariance = values.valueOf("phase_variance"),
+                    processDriftVariance = values.valueOf("drift_variance"),
+                    measurementVarianceAtUnitWeight = values.valueOf("measurement_variance"),
+                    regimePriorDays = values.valueOf("regime_prior_days"),
+                    regimeMinEvidence = values.valueOf("regime_min_evidence"),
+                    driftResetVariance = values.valueOf("drift_reset_variance"),
+                    offsetResetVariance = values.valueOf("offset_reset_variance"),
+                    changeCommitProbability = values.valueOf("change_commit_probability"),
+                    durationSmoothing = DurationSmoothingConfig(values.valueOf("duration_smoothing_sigma")),
+                ),
+            )
+    }
+
+    val algorithms: List<CircadianAlgorithmDefinition> = listOf(csf, kalman, switchingKalman)
     val defaultAlgorithm: CircadianAlgorithmDefinition = kalman
 
     fun algorithm(id: String): CircadianAlgorithmDefinition =

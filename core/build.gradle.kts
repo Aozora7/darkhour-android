@@ -25,6 +25,7 @@ tasks.register<JavaExec>("groundTruthTune") {
         "--threads=${providers.gradleProperty("tuneThreads").getOrElse("2")}",
         "--seed=${providers.gradleProperty("tuneSeed").getOrElse("25072026")}",
         "--window-days=${providers.gradleProperty("tuneWindowDays").getOrElse("42")}",
+        "--parameters=${providers.gradleProperty("tuneParameters").getOrElse("")}",
         "--output=${layout.buildDirectory.dir("reports/ground-truth-tuning").get().asFile.absolutePath}",
     )
 }

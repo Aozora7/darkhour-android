@@ -13,7 +13,11 @@ class GroundTruthScoringTest {
     @Test
     fun scoringAdaptersUseCurrentRegistryDefaults() {
         val records = generateSyntheticRecords(SyntheticOptions(days = 45, tau = 24.5, noise = 0.2))
-        val algorithms = listOf(CsfGroundTruthAlgorithm, UnwrappedKalmanGroundTruthAlgorithm)
+        val algorithms = listOf(
+            CsfGroundTruthAlgorithm,
+            UnwrappedKalmanGroundTruthAlgorithm,
+            SwitchingKalmanGroundTruthAlgorithm,
+        )
 
         algorithms.forEach { algorithm ->
             val expected = CircadianAlgorithmRegistry.analyze(records, algorithmId = algorithm.id)
@@ -36,7 +40,11 @@ class GroundTruthScoringTest {
     @Test
     fun implementationsCanBeScoredAgainstEveryManualOverlay() {
         assumeTrue("Private ground-truth fixtures are not available", GroundTruthFixtures.isAvailable)
-        val algorithms = listOf(CsfGroundTruthAlgorithm, UnwrappedKalmanGroundTruthAlgorithm)
+        val algorithms = listOf(
+            CsfGroundTruthAlgorithm,
+            UnwrappedKalmanGroundTruthAlgorithm,
+            SwitchingKalmanGroundTruthAlgorithm,
+        )
         for (algorithm in algorithms) {
             for (dataset in GroundTruthFixtures.loadAll()) {
                 val score = scoreAgainstGroundTruth(algorithm.analyze(dataset.records), dataset)

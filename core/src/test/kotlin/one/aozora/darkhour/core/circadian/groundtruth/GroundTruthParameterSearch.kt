@@ -90,9 +90,11 @@ internal class GroundTruthCandidateEvaluator(
 internal class GroundTruthParameterSearch(
     parameters: List<CircadianNumericParameter>,
     private val config: GroundTruthTuningConfig,
+    includedParameterKeys: Set<String>? = null,
 ) {
     private val dimensions = parameters
         .filterNot { it.key == DURATION_SMOOTHING_KEY }
+        .filter { includedParameterKeys == null || it.key in includedParameterKeys }
         .map(::SearchDimension)
     private val random = Random(config.seed)
 

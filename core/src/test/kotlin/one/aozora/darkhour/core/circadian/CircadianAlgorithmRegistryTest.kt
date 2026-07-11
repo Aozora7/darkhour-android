@@ -32,6 +32,18 @@ class CircadianAlgorithmRegistryTest {
     }
 
     @Test
+    fun switchingKalmanIsExperimentalPeerWithDeclaredDefaults() {
+        val definition = CircadianAlgorithmRegistry.algorithm(CircadianAlgorithmRegistry.SWITCHING_KALMAN_ID)
+        val values = CircadianAlgorithmRegistry.resolvedValues(definition.id, emptyMap())
+
+        assertEquals("Switching Kalman (experimental)", definition.displayName)
+        assertEquals(0.95, values.getValue("change_commit_probability"), 0.0)
+        assertEquals(90.0, values.getValue("regime_prior_days"), 0.0)
+        assertEquals(7.0, values.getValue("regime_min_evidence"), 0.0)
+        assertEquals(CircadianAlgorithmRegistry.KALMAN_ID, CircadianAlgorithmRegistry.defaultAlgorithm.id)
+    }
+
+    @Test
     fun executesEveryRegisteredAlgorithm() {
         val records = generateSyntheticRecords(SyntheticOptions(days = 45, tau = 24.5, noise = 0.0))
 

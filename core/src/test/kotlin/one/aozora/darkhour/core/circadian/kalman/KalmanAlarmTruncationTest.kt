@@ -15,6 +15,18 @@ import org.junit.Test
 
 class KalmanAlarmTruncationTest {
     @Test
+    fun switchingKalmanIgnoresTemporaryAlarmTruncation() {
+        val analysis = analyzeCircadianSwitchingKalman(
+            alarmTruncationFixture(),
+            config = SwitchingKalmanConfig(),
+        )
+        assertTrue(
+            "switching Kalman created a boundary for alarm truncation: ${analysis.changePoints}",
+            analysis.changePoints.isEmpty(),
+        )
+    }
+
+    @Test
     fun temporaryAlarmTruncationDoesNotReplaceTheFreeRunningTrend() {
         val records = alarmTruncationFixture()
         val analysis = analyzeCircadianKalman(records, config = productionKalmanConfig())
@@ -54,6 +66,17 @@ class KalmanAlarmTruncationTest {
         val episode = LocalDate.parse("2025-03-24")..LocalDate.parse("2025-04-08")
         assertTrue(
             "private alarm episode created a change point: ${analysis.changePoints}",
+            analysis.changePoints.none { it.date in episode },
+        )
+    }
+
+    @Test
+    fun switchingKalmanPrivateAlarmEpisodeDoesNotCreateABoundaryWhenFixtureIsAvailable() {
+        assumeTrue("Private ground-truth fixtures are not available", GroundTruthFixtures.isAvailable)
+        val analysis = analyzeCircadianSwitchingKalman(GroundTruthFixtures.load("Aozora_2026-02-13").records)
+        val episode = LocalDate.parse("2025-03-24")..LocalDate.parse("2025-04-08")
+        assertTrue(
+            "switching Kalman private alarm episode created a boundary: ${analysis.changePoints}",
             analysis.changePoints.none { it.date in episode },
         )
     }

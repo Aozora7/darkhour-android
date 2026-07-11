@@ -13,6 +13,7 @@ import one.aozora.darkhour.data.HealthConnectDataController
 import one.aozora.darkhour.data.HealthDataRange
 import one.aozora.darkhour.data.settings.AppSettingsStore
 import one.aozora.darkhour.core.circadian.kalman.KalmanChangeDetectionDiagnostics
+import one.aozora.darkhour.core.circadian.kalman.SwitchingKalmanDiagnostics
 import one.aozora.darkhour.ui.DarkHourApp
 import one.aozora.darkhour.ui.DemoData
 import one.aozora.darkhour.ui.actogram.ActogramDisplayOptions
@@ -35,6 +36,9 @@ class MainActivity : ComponentActivity() {
         if (BuildConfig.DEBUG) {
             KalmanChangeDetectionDiagnostics.logger = { message ->
                 Log.d(KALMAN_CHANGE_LOG_TAG, message)
+            }
+            SwitchingKalmanDiagnostics.logger = { message ->
+                Log.d(SWITCHING_KALMAN_LOG_TAG, message)
             }
         }
         appSettings = AppSettingsStore(this)
@@ -121,7 +125,10 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
-        if (BuildConfig.DEBUG) KalmanChangeDetectionDiagnostics.logger = null
+        if (BuildConfig.DEBUG) {
+            KalmanChangeDetectionDiagnostics.logger = null
+            SwitchingKalmanDiagnostics.logger = null
+        }
         super.onDestroy()
     }
 }
@@ -148,3 +155,4 @@ private fun ComponentActivity.initialVisibleImportDuration(
 
 private const val ACTOGRAM_AXIS_HEIGHT_DP = 30f
 private const val KALMAN_CHANGE_LOG_TAG = "DarkHourKalmanChange"
+private const val SWITCHING_KALMAN_LOG_TAG = "DarkHourSwitchingKalman"

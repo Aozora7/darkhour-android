@@ -38,6 +38,10 @@ object GroundTruthTuner {
             windowDays = options.getValue("window-days").toInt(),
         )
         val outputRoot = Path.of(options.getValue("output"))
+        val includedParameterKeys = options["parameters"]
+            ?.takeIf(String::isNotBlank)
+            ?.split(',')
+            ?.toSet()
         val datasets = GroundTruthFixtures.loadAll()
         Files.createDirectories(outputRoot)
 
@@ -50,7 +54,17 @@ object GroundTruthTuner {
             )
             val evaluator = GroundTruthCandidateEvaluator(algorithm, datasets, config.windowDays)
             val algorithmConfig = config.copy(seed = config.seed + index)
-            val candidates = GroundTruthParameterSearch(algorithm.parameters, algorithmConfig)
+            includedParameterKeys?.let { requested ->
+                val available = algorithm.parameters.map { it.key }.toSet()
+                require(requested.all { it in available }) {
+                    "Unknown parameters for ${algorithm.id}: ${requested - available}"
+                }
+            }
+            val candidates = GroundTruthParameterSearch(
+                algorithm.parameters,
+                algorithmConfig,
+                includedParameterKeys,
+            )
                 .search(evaluator::evaluate)
             val output = outputRoot.resolve(algorithm.id)
             writeReports(output, algorithm, candidates, algorithmConfig)
@@ -66,7 +80,8 @@ private fun writeReports(
     config: GroundTruthTuningConfig,
 ) {
     Files.createDirectories(output)
-    val parameterKeys = algorithm.parameters.map { it.key }.filterNot { it == DURATION_SMOOTHING_KEY }
+    val searchedKeys = candidates.first().values.keys
+    val parameterKeys = algorithm.parameters.map { it.key }.filter { it in searchedKeys }
     Files.newBufferedWriter(output.resolve("candidates.csv")).use { writer ->
         writer.appendLine(
             (listOf("rank", "evaluation", "objective", "tauRiskMinutesPerDay", "meanPhaseErrorHours") + parameterKeys)
