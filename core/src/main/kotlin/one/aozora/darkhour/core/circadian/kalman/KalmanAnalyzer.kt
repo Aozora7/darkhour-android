@@ -25,7 +25,16 @@ data class KalmanAnalysis(
     override val dailyDrift: Double,
     override val rSquared: Double,
     val anchorCount: Int,
+    val changePoints: List<KalmanChangePoint>,
 ) : CircadianAnalysis
+
+data class KalmanChangePoint(
+    val date: LocalDate,
+    val previousDrift: Double,
+    val newDrift: Double,
+    val evidenceRatio: Double,
+    val confirmationDate: LocalDate,
+)
 
 /** Production-compatible wrapper around the unwrapped Kalman trend model. */
 fun analyzeCircadianKalman(
@@ -65,6 +74,7 @@ fun analyzeCircadianKalman(
         dailyDrift = globalTau - 24.0,
         rSquared = 0.0,
         anchorCount = results.sumOf(KalmanSegment::anchorCount),
+        changePoints = results.flatMap(KalmanSegment::changePoints),
     )
 }
 
@@ -81,12 +91,32 @@ private fun analyzeKalmanSegment(
     // trajectory continues.  In particular, trailing short/low-quality
     // sessions must not turn into months of apparent observed overlay.
     val dataEndDay = anchors.last().dayNumber
-    val states = fitUnwrappedKalmanTrend(
-        observations = anchors.map { KalmanObservation(it.dayNumber, it.midpointHour, it.weight) },
+    val observations = anchors.map { KalmanObservation(it.dayNumber, it.midpointHour, it.weight) }
+    val detected = detectKalmanChangePoints(
+        observations = observations,
         firstDay = anchors.first().dayNumber,
-        lastDay = dataEndDay + extraDays,
+        lastDay = dataEndDay,
         config = config,
     )
+    val regimeStarts = listOf(anchors.first().dayNumber) + detected.map(DetectedKalmanChangePoint::dayNumber)
+    val states = mutableListOf<KalmanTrendState>()
+    regimeStarts.forEachIndexed { index, regimeStart ->
+        val observedEnd = detected.getOrNull(index)?.dayNumber?.minus(1) ?: dataEndDay
+        val stateEnd = if (index == regimeStarts.lastIndex) dataEndDay + extraDays else observedEnd
+        val regimeObservations = observations.filter { it.dayNumber in regimeStart..observedEnd }
+        val change = detected.getOrNull(index - 1)
+        val continuousInitialState = change?.let {
+            val previous = states.last()
+            KalmanInitialState(previous.phase + previous.drift, it.newDrift)
+        }
+        states += fitUnwrappedKalmanTrend(
+            observations = regimeObservations,
+            firstDay = regimeStart,
+            lastDay = stateEnd,
+            config = config,
+            initialState = continuousInitialState,
+        )
+    }
     val firstStateDay = states.first().dayNumber
     val durationsByDay = smoothDurations(
         observations = anchors.map { DurationObservation(it.dayNumber, it.record.durationHours) },
@@ -97,6 +127,15 @@ private fun analyzeKalmanSegment(
         firstDay = anchors.first().dayNumber,
         dataEndDay = dataEndDay,
         anchorCount = anchors.size,
+        changePoints = detected.map { point ->
+            KalmanChangePoint(
+                date = firstDate.plusDays(point.dayNumber.toLong()),
+                previousDrift = point.previousDrift,
+                newDrift = point.newDrift,
+                evidenceRatio = point.evidenceRatio,
+                confirmationDate = firstDate.plusDays(point.confirmationDayNumber.toLong()),
+            )
+        },
         days = states.map { state ->
             val isForecast = state.dayNumber > dataEndDay
             val confidenceScore = if (isForecast) {
@@ -135,6 +174,7 @@ private data class KalmanSegment(
     val firstDay: Int,
     val dataEndDay: Int,
     val anchorCount: Int,
+    val changePoints: List<KalmanChangePoint>,
     val days: List<CircadianDay>,
 )
 
@@ -161,4 +201,5 @@ private fun emptyKalmanAnalysis() = KalmanAnalysis(
     dailyDrift = 0.0,
     rSquared = 0.0,
     anchorCount = 0,
+    changePoints = emptyList(),
 )

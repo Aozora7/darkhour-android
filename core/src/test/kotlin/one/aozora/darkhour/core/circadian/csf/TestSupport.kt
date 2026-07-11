@@ -95,6 +95,7 @@ internal data class SyntheticOptions(
     val outlierFraction: Double = 0.0,
     val outlierOffset: Double = 6.0,
     val fragmentedPeriods: List<FragmentedPeriod> = emptyList(),
+    val startDate: LocalDate = LocalDate.parse("2024-01-01"),
 )
 
 internal fun computeTrueMidpoint(day: Int, opts: SyntheticOptions = SyntheticOptions()): Double {
@@ -120,7 +121,7 @@ internal fun computeTrueMidpoint(day: Int, opts: SyntheticOptions = SyntheticOpt
 internal fun generateSyntheticRecords(opts: SyntheticOptions = SyntheticOptions()): List<SleepRecord> {
     val rng = Mulberry32(opts.seed)
     val records = mutableListOf<SleepRecord>()
-    val baseDate = LocalDate.parse("2024-01-01")
+    val baseDate = opts.startDate
     var nextLogId = 1000L
 
     for (d in 0 until opts.days) {

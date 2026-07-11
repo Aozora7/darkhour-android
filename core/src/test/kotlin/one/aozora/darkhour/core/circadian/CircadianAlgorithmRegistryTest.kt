@@ -32,6 +32,18 @@ class CircadianAlgorithmRegistryTest {
     }
 
     @Test
+    fun declaresKalmanChangeDetectionParameters() {
+        val parameters = CircadianAlgorithmRegistry.algorithm(CircadianAlgorithmRegistry.KALMAN_ID)
+            .parameters.associateBy(CircadianNumericParameter::key)
+
+        assertParameter(parameters.getValue("change_window_days"), 14.0, 7.0, 42.0, 34)
+        assertParameter(parameters.getValue("change_min_anchors"), 7.0, 3.0, 14.0, 10)
+        assertParameter(parameters.getValue("change_min_anchor_weight"), 0.50, 0.10, 0.90, 15)
+        assertParameter(parameters.getValue("change_min_drift_delta"), 0.30, 0.10, 1.00, 17)
+        assertParameter(parameters.getValue("change_fit_improvement"), 2.0, 1.1, 5.0, 38)
+    }
+
+    @Test
     fun executesEveryRegisteredAlgorithm() {
         val records = generateSyntheticRecords(SyntheticOptions(days = 45, tau = 24.5, noise = 0.0))
 
@@ -42,4 +54,17 @@ class CircadianAlgorithmRegistryTest {
             assertTrue(analysis.days.all { it.localTau.isFinite() && it.nightStartHour.isFinite() })
         }
     }
+}
+
+private fun assertParameter(
+    parameter: CircadianNumericParameter,
+    default: Double,
+    minimum: Double,
+    maximum: Double,
+    steps: Int,
+) {
+    assertEquals(default, parameter.defaultValue, 0.0)
+    assertEquals(minimum, parameter.minValue, 0.0)
+    assertEquals(maximum, parameter.maxValue, 0.0)
+    assertEquals(steps, parameter.steps)
 }

@@ -1,5 +1,8 @@
 package one.aozora.darkhour.core.circadian.groundtruth
 
+import one.aozora.darkhour.core.circadian.CircadianAlgorithmRegistry
+import one.aozora.darkhour.core.circadian.csf.SyntheticOptions
+import one.aozora.darkhour.core.circadian.csf.generateSyntheticRecords
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
@@ -7,6 +10,18 @@ import java.time.LocalDate
 import org.junit.Test
 
 class GroundTruthScoringTest {
+    @Test
+    fun scoringAdaptersUseCurrentRegistryDefaults() {
+        val records = generateSyntheticRecords(SyntheticOptions(days = 45, tau = 24.5, noise = 0.2))
+        val algorithms = listOf(CsfGroundTruthAlgorithm, UnwrappedKalmanGroundTruthAlgorithm)
+
+        algorithms.forEach { algorithm ->
+            val expected = CircadianAlgorithmRegistry.analyze(records, algorithmId = algorithm.id)
+                .toGroundTruthPrediction()
+            assertEquals(expected, algorithm.analyze(records))
+        }
+    }
+
     @Test
     fun compactFixturesRetainTheManualOverlayAndControlPoints() {
         assumeTrue("Private ground-truth fixtures are not available", GroundTruthFixtures.isAvailable)

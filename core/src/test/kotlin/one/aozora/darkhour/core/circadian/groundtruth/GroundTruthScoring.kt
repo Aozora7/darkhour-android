@@ -1,9 +1,9 @@
 package one.aozora.darkhour.core.circadian.groundtruth
 
 import one.aozora.darkhour.core.circadian.CircadianAnalysis
+import one.aozora.darkhour.core.circadian.CircadianAlgorithmRegistry
 import one.aozora.darkhour.core.circadian.CircadianDay
 import one.aozora.darkhour.core.model.SleepRecord
-import one.aozora.darkhour.core.circadian.csf.analyzeCircadianCsf
 import java.time.LocalDate
 import kotlin.math.abs
 import kotlin.math.sign
@@ -25,10 +25,10 @@ interface GroundTruthAlgorithm {
 }
 
 object CsfGroundTruthAlgorithm : GroundTruthAlgorithm {
-    override val id = "csf-v1"
+    override val id = CircadianAlgorithmRegistry.CSF_ID
 
     override fun analyze(records: List<SleepRecord>): List<GroundTruthPredictionDay> =
-        analyzeCircadianCsf(records).toGroundTruthPrediction()
+        CircadianAlgorithmRegistry.analyze(records, algorithmId = id).toGroundTruthPrediction()
 }
 
 fun CircadianAnalysis.toGroundTruthPrediction(): List<GroundTruthPredictionDay> = days.map(CircadianDay::toGroundTruthPrediction)

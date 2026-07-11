@@ -3,6 +3,7 @@ package one.aozora.darkhour.core.circadian
 import one.aozora.darkhour.core.circadian.csf.CsfConfig
 import one.aozora.darkhour.core.circadian.csf.analyzeCircadianCsf
 import one.aozora.darkhour.core.circadian.kalman.KalmanConfig
+import one.aozora.darkhour.core.circadian.kalman.KalmanChangeDetectionConfig
 import one.aozora.darkhour.core.circadian.kalman.analyzeCircadianKalman
 import one.aozora.darkhour.core.model.SleepRecord
 
@@ -79,8 +80,13 @@ object CircadianAlgorithmRegistry {
             CircadianNumericParameter("drift_prior", "Daily drift prior", 1.0, -1.5, 3.0, 90, 2, "h/d"),
             CircadianNumericParameter("phase_variance", "Phase variance", 0.42, 0.01, 0.50, 49, 2),
             CircadianNumericParameter("drift_variance", "Drift variance", 0.0001, 0.0001, 0.02, 99, 4),
-            CircadianNumericParameter("measurement_variance", "Measurement variance", 8.0, 0.25, 8.0, 31, 2),
+            CircadianNumericParameter("measurement_variance", "Measurement variance", 8.0, 0.25, 10.0, 31, 2),
             durationSmoothingParameter(),
+            CircadianNumericParameter("change_window_days", "Change window", 14.0, 7.0, 42.0, 34, 0, "d"),
+            CircadianNumericParameter("change_min_anchors", "Change anchors", 7.0, 3.0, 14.0, 10, 0),
+            CircadianNumericParameter("change_min_anchor_weight", "Change anchor weight", 0.50, 0.10, 0.90, 15, 2),
+            CircadianNumericParameter("change_min_drift_delta", "Change drift delta", 0.30, 0.10, 1.00, 17, 2, "h/d"),
+            CircadianNumericParameter("change_fit_improvement", "Change fit improvement", 2.0, 1.1, 5.0, 38, 1, "×"),
         )
 
         override fun analyze(records: List<SleepRecord>, extraDays: Int, values: Map<String, Double>): CircadianAnalysis =
@@ -93,6 +99,13 @@ object CircadianAlgorithmRegistry {
                     processDriftVariance = values.valueOf("drift_variance"),
                     measurementVarianceAtUnitWeight = values.valueOf("measurement_variance"),
                     durationSmoothing = DurationSmoothingConfig(values.valueOf("duration_smoothing_sigma")),
+                    changeDetection = KalmanChangeDetectionConfig(
+                        windowDays = values.valueOf("change_window_days").toInt(),
+                        minAnchors = values.valueOf("change_min_anchors").toInt(),
+                        minAnchorWeight = values.valueOf("change_min_anchor_weight"),
+                        minDriftDelta = values.valueOf("change_min_drift_delta"),
+                        fitImprovement = values.valueOf("change_fit_improvement"),
+                    ),
                 ),
             )
     }
