@@ -77,16 +77,16 @@ object CircadianAlgorithmRegistry {
         override val id = KALMAN_ID
         override val displayName = "Kalman"
         override val parameters = listOf(
-            CircadianNumericParameter("drift_prior", "Daily drift prior", 0.9, -1.5, 3.0, 90, 2, "h/d"),
+            CircadianNumericParameter("drift_prior", "Daily drift prior", 0.51, -1.5, 3.0, 90, 2, "h/d"),
             CircadianNumericParameter("phase_variance", "Phase variance", 0.49, 0.01, 0.50, 49, 2),
             CircadianNumericParameter("drift_variance", "Drift variance", 0.0001, 0.0001, 0.02, 99, 4),
             CircadianNumericParameter("measurement_variance", "Measurement variance", 10.0, 0.25, 10.0, 31, 2),
             durationSmoothingParameter(),
-            CircadianNumericParameter("change_window_days", "Change window", 33.0, 7.0, 42.0, 34, 0, "d"),
-            CircadianNumericParameter("change_min_anchors", "Change anchors", 9.0, 3.0, 14.0, 10, 0),
-            CircadianNumericParameter("change_min_anchor_weight", "Change anchor weight", 0.80, 0.10, 0.90, 15, 2),
-            CircadianNumericParameter("change_min_drift_delta", "Change drift delta", 0.26, 0.10, 1.00, 17, 2, "h/d"),
-            CircadianNumericParameter("change_fit_improvement", "Change fit improvement", 2.6, 1.1, 5.0, 38, 1, "×"),
+            CircadianNumericParameter("change_window_days", "Change window", 20.0, 7.0, 42.0, 34, 0, "d"),
+            CircadianNumericParameter("change_min_anchors", "Change anchors", 7.0, 3.0, 14.0, 10, 0),
+            CircadianNumericParameter("change_min_anchor_weight", "Change anchor weight", 0.43, 0.10, 0.90, 15, 2),
+            CircadianNumericParameter("change_min_drift_delta", "Change drift delta", 0.86, 0.10, 1.00, 17, 2, "h/d"),
+            CircadianNumericParameter("change_fit_improvement", "Change fit improvement", 3.1, 1.1, 5.0, 38, 1, "×"),
         )
 
         override fun analyze(records: List<SleepRecord>, extraDays: Int, values: Map<String, Double>): CircadianAnalysis =

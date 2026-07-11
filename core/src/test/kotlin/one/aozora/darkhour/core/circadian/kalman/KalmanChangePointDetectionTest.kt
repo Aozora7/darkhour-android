@@ -12,6 +12,38 @@ import org.junit.Test
 
 class KalmanChangePointDetectionTest {
     @Test
+    fun entrainmentIsDetectedDespitePersistentSleepTimingOffset() {
+        val transitionDay = 80
+        val records = generateSyntheticRecords(
+            baseOptions(
+                days = 89,
+                tauSegments = listOf(
+                    TauSegment(transitionDay, 25.0),
+                    TauSegment(89, 24.0),
+                ),
+            ),
+        ).mapIndexed { day, record ->
+            if (day < transitionDay) record else shift(record, 4.0)
+        }
+
+        val analysis = analyzeCircadianKalman(records, config = productionConfig())
+        val changes = analysis.changePoints
+        val expected = START_DATE.plusDays(transitionDay.toLong())
+        assertTrue("offset entrainment was not detected: $changes", changes.isNotEmpty())
+        assertTrue(
+            "offset boundary ${changes.first().date} was not near $expected",
+            dayDistance(changes.first().date, expected) <= 2,
+        )
+        assertTrue("offset slope was not entrained: ${changes.first()}", abs(changes.first().newDrift) < 0.25)
+        val terminalDrift = analysis.days
+            .filterNot { it.isGap || it.isForecast }
+            .takeLast(5)
+            .map { it.localDrift }
+            .average()
+        assertTrue("offset regime converged to tau ${24.0 + terminalDrift}", abs(terminalDrift) < 0.25)
+    }
+
+    @Test
     fun inverseEntrainmentToFreeRunningStepIsDetected() {
         val transitionDay = 80
         val records = generateSyntheticRecords(

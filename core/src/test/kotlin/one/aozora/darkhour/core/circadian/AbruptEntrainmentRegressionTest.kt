@@ -75,7 +75,7 @@ class AbruptEntrainmentRegressionTest {
             Duration.between(change.date.atStartOfDay(), change.confirmationDate.atStartOfDay()).toDays() < 14,
         )
         assertTrue(
-            "Kalman rewrote history before the inferred boundary by $revisionBeforeBoundary h",
+            "Kalman rewrote history before inferred boundary $change by $revisionBeforeBoundary h",
             revisionBeforeBoundary < 0.5,
         )
         assertTrue(

@@ -9,6 +9,7 @@ import one.aozora.darkhour.core.circadian.smoothDurations
 import one.aozora.darkhour.core.model.SleepRecord
 import java.time.LocalDate
 import java.time.ZoneOffset
+import kotlin.math.abs
 import kotlin.math.exp
 import kotlin.math.max
 
@@ -32,6 +33,7 @@ data class KalmanChangePoint(
     val date: LocalDate,
     val previousDrift: Double,
     val newDrift: Double,
+    val observationOffset: Double,
     val evidenceRatio: Double,
     val confirmationDate: LocalDate,
 )
@@ -101,21 +103,32 @@ private fun analyzeKalmanSegment(
     val regimeStarts = listOf(anchors.first().dayNumber) + detected.map(DetectedKalmanChangePoint::dayNumber)
     val states = mutableListOf<KalmanTrendState>()
     regimeStarts.forEachIndexed { index, regimeStart ->
-        val observedEnd = detected.getOrNull(index)?.dayNumber?.minus(1) ?: dataEndDay
+        val nextChange = detected.getOrNull(index)
+        val usesOffsetBoundaryGuard = nextChange != null && abs(nextChange.observationOffset) > 1e-9
+        val observedEnd = nextChange?.dayNumber?.let { boundary ->
+            if (usesOffsetBoundaryGuard) boundary else boundary - 1
+        } ?: dataEndDay
         val stateEnd = if (index == regimeStarts.lastIndex) dataEndDay + extraDays else observedEnd
         val regimeObservations = observations.filter { it.dayNumber in regimeStart..observedEnd }
         val change = detected.getOrNull(index - 1)
         val continuousInitialState = change?.let {
             val previous = states.last()
-            KalmanInitialState(previous.phase + previous.drift, it.newDrift)
+            KalmanInitialState(
+                phase = previous.phase + previous.drift + it.observationOffset,
+                drift = it.newDrift,
+            )
         }
-        states += fitUnwrappedKalmanTrend(
+        val fittedStates = fitUnwrappedKalmanTrend(
             observations = regimeObservations,
             firstDay = regimeStart,
             lastDay = stateEnd,
             config = config,
             initialState = continuousInitialState,
         )
+        // An offset-fallback boundary is intrinsically ambiguous by one
+        // observation. Let that record stabilize the old smoother, but publish
+        // the boundary only from the new regime and never smooth across it.
+        states += if (usesOffsetBoundaryGuard) fittedStates.dropLast(1) else fittedStates
     }
     val firstStateDay = states.first().dayNumber
     val durationsByDay = smoothDurations(
@@ -132,6 +145,7 @@ private fun analyzeKalmanSegment(
                 date = firstDate.plusDays(point.dayNumber.toLong()),
                 previousDrift = point.previousDrift,
                 newDrift = point.newDrift,
+                observationOffset = point.observationOffset,
                 evidenceRatio = point.evidenceRatio,
                 confirmationDate = firstDate.plusDays(point.confirmationDayNumber.toLong()),
             )
