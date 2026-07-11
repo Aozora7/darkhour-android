@@ -44,6 +44,7 @@ data class DeveloperCircadianState(
     val onAlgorithmChange: (String) -> Unit,
     val onParameterChange: (String, Double) -> Unit,
     val onParameterReset: (String) -> Unit,
+    val sleepInjection: DeveloperSleepInjectionState,
 ) {
     val activeOverrides: Map<String, Double>
         get() = overridesByAlgorithm[algorithmId].orEmpty()
@@ -51,6 +52,17 @@ data class DeveloperCircadianState(
     val activeAlgorithm
         get() = CircadianAlgorithmRegistry.algorithm(algorithmId)
 }
+
+/** Debug-only, process-local sleep injection. No record is persisted or sent to Health Connect. */
+@Immutable
+data class DeveloperSleepInjectionState(
+    val form: DebugSleepInjectionForm,
+    val injectedRecordCount: Int,
+    val error: String?,
+    val onFormChange: (DebugSleepInjectionForm) -> Unit,
+    val onAdd: () -> Unit,
+    val onClear: () -> Unit,
+)
 
 @Immutable
 data class ScheduleState(

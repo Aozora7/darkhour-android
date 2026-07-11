@@ -28,7 +28,7 @@ class CircadianAlgorithmRegistryTest {
             mapOf("measurement_variance" to 99.0),
         )
 
-        assertEquals(8.0, values.getValue("measurement_variance"), 0.0)
+        assertEquals(10.0, values.getValue("measurement_variance"), 0.0)
     }
 
     @Test
@@ -36,11 +36,11 @@ class CircadianAlgorithmRegistryTest {
         val parameters = CircadianAlgorithmRegistry.algorithm(CircadianAlgorithmRegistry.KALMAN_ID)
             .parameters.associateBy(CircadianNumericParameter::key)
 
-        assertParameter(parameters.getValue("change_window_days"), 14.0, 7.0, 42.0, 34)
-        assertParameter(parameters.getValue("change_min_anchors"), 7.0, 3.0, 14.0, 10)
-        assertParameter(parameters.getValue("change_min_anchor_weight"), 0.50, 0.10, 0.90, 15)
-        assertParameter(parameters.getValue("change_min_drift_delta"), 0.30, 0.10, 1.00, 17)
-        assertParameter(parameters.getValue("change_fit_improvement"), 2.0, 1.1, 5.0, 38)
+        assertParameter(parameters.getValue("change_window_days"), 33.0, 7.0, 42.0, 34)
+        assertParameter(parameters.getValue("change_min_anchors"), 9.0, 3.0, 14.0, 10)
+        assertParameter(parameters.getValue("change_min_anchor_weight"), 0.80, 0.10, 0.90, 15)
+        assertParameter(parameters.getValue("change_min_drift_delta"), 0.26, 0.10, 1.00, 17)
+        assertParameter(parameters.getValue("change_fit_improvement"), 2.6, 1.1, 5.0, 38)
     }
 
     @Test

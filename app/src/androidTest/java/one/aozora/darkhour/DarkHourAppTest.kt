@@ -126,6 +126,26 @@ class DarkHourAppTest {
     }
 
     @Test
+    fun debugSleepInjectionHasSeparateTabAndSessionControls() {
+        setContent()
+
+        composeRule.onNodeWithTag("circadian_developer_tools").performClick()
+        composeRule.onNodeWithTag("circadian_developer_tab_sleep_injection").performClick()
+
+        composeRule.onNodeWithTag("sleep_injection_date").assertIsDisplayed()
+        composeRule.onNodeWithTag("sleep_injection_time_from").assertIsDisplayed()
+        composeRule.onNodeWithTag("sleep_injection_time_to").assertIsDisplayed()
+        composeRule.onNodeWithTag("sleep_injection_drift").assertIsDisplayed()
+        composeRule.onNodeWithTag("sleep_injection_days").assertIsDisplayed()
+        composeRule.onNodeWithText("Injected records: 0").assertIsDisplayed()
+
+        composeRule.onNodeWithTag("sleep_injection_add").performClick()
+        composeRule.onNodeWithText("Injected records: 1").assertIsDisplayed()
+        composeRule.onNodeWithTag("sleep_injection_clear").performClick()
+        composeRule.onNodeWithText("Injected records: 0").assertIsDisplayed()
+    }
+
+    @Test
     fun visualizationOrderCanBeChanged() {
         setContent()
 

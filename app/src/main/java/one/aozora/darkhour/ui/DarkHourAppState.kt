@@ -10,6 +10,7 @@ import androidx.compose.runtime.setValue
 import kotlinx.coroutines.delay
 import one.aozora.darkhour.core.circadian.CircadianAnalyzer
 import one.aozora.darkhour.core.circadian.CircadianAlgorithmRegistry
+import one.aozora.darkhour.BuildConfig
 import one.aozora.darkhour.core.model.SleepRecord
 import one.aozora.darkhour.core.periodogram.buildPeriodogramAnchors
 import one.aozora.darkhour.core.periodogram.computePeriodogram
@@ -67,6 +68,39 @@ fun rememberDarkHourAppState(
     var pendingScheduleEditId by remember { mutableStateOf<Long?>(null) }
     var developerAlgorithmId by remember { mutableStateOf(CircadianAlgorithmRegistry.defaultAlgorithm.id) }
     var developerOverrides by remember { mutableStateOf<Map<String, Map<String, Double>>>(emptyMap()) }
+    var developerInjectedRecords by remember { mutableStateOf<List<SleepRecord>>(emptyList()) }
+    var developerInjectionForm by remember { mutableStateOf(defaultDebugSleepInjectionForm(records)) }
+    var developerInjectionError by remember { mutableStateOf<String?>(null) }
+    var developerInjectionEdited by remember { mutableStateOf(false) }
+
+    LaunchedEffect(records) {
+        if (developerInjectedRecords.isEmpty() && !developerInjectionEdited) {
+            developerInjectionForm = defaultDebugSleepInjectionForm(records)
+        }
+    }
+
+    fun addDeveloperSleepRecords() {
+        if (!BuildConfig.DEBUG) return
+        generateDebugSleepRecords(
+            form = developerInjectionForm,
+            existingInjectedCount = developerInjectedRecords.size,
+        ).fold(
+            onSuccess = { result ->
+                developerInjectedRecords = developerInjectedRecords + result.records
+                developerInjectionForm = result.nextForm
+                developerInjectionError = null
+                developerInjectionEdited = true
+            },
+            onFailure = { error -> developerInjectionError = error.message ?: "Invalid injection values" },
+        )
+    }
+
+    fun clearDeveloperSleepRecords() {
+        developerInjectedRecords = emptyList()
+        developerInjectionForm = defaultDebugSleepInjectionForm(records)
+        developerInjectionError = null
+        developerInjectionEdited = false
+    }
 
     val developerCircadian = DeveloperCircadianState(
         algorithmId = developerAlgorithmId,
@@ -87,10 +121,29 @@ fun rememberDarkHourAppState(
                 developerOverrides + (developerAlgorithmId to active)
             }
         },
+        sleepInjection = DeveloperSleepInjectionState(
+            form = developerInjectionForm,
+            injectedRecordCount = developerInjectedRecords.size,
+            error = developerInjectionError,
+            onFormChange = { form ->
+                developerInjectionForm = form
+                developerInjectionError = null
+                developerInjectionEdited = true
+            },
+            onAdd = ::addDeveloperSleepRecords,
+            onClear = ::clearDeveloperSleepRecords,
+        ),
     )
 
-    val filteredRecords = remember(records, settings.includeNaps) {
-        if (settings.includeNaps) records else records.filter { it.isMainSleep }
+    val recordsWithDebugInjection = remember(records, developerInjectedRecords) {
+        if (BuildConfig.DEBUG && developerInjectedRecords.isNotEmpty()) {
+            (records + developerInjectedRecords).sortedBy(SleepRecord::startTime)
+        } else {
+            records
+        }
+    }
+    val filteredRecords = remember(recordsWithDebugInjection, settings.includeNaps) {
+        if (settings.includeNaps) recordsWithDebugInjection else recordsWithDebugInjection.filter { it.isMainSleep }
     }
     val analysis = remember(filteredRecords, settings.forecastDays, developerAlgorithmId, developerCircadian.activeOverrides) {
         CircadianAnalyzer.analyze(
@@ -192,7 +245,13 @@ fun rememberDarkHourAppState(
             access = healthConnectAccess,
             dataRange = healthDataRange,
             hasHistoryPermission = hasHistoryPermission,
-            statsAllRecords = statsAllRecords,
+            statsAllRecords = statsAllRecords?.let { allRecords ->
+                if (BuildConfig.DEBUG && developerInjectedRecords.isNotEmpty()) {
+                    (allRecords + developerInjectedRecords).distinctBy(SleepRecord::logId).sortedBy(SleepRecord::startTime)
+                } else {
+                    allRecords
+                }
+            },
             isRefreshing = isRefreshing,
             isStatsAllDataRefreshing = isStatsAllDataRefreshing,
             importedRecordCount = importedRecordCount,
