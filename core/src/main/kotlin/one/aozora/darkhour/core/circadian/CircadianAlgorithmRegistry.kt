@@ -7,6 +7,8 @@ import one.aozora.darkhour.core.circadian.kalman.KalmanChangeDetectionConfig
 import one.aozora.darkhour.core.circadian.kalman.SwitchingKalmanConfig
 import one.aozora.darkhour.core.circadian.kalman.analyzeCircadianKalman
 import one.aozora.darkhour.core.circadian.kalman.analyzeCircadianSwitchingKalman
+import one.aozora.darkhour.core.circadian.adaptive.AdaptiveKalmanConfig
+import one.aozora.darkhour.core.circadian.adaptive.analyzeCircadianAdaptiveKalman
 import one.aozora.darkhour.core.model.SleepRecord
 
 /** UI-neutral description of one tunable numeric algorithm parameter. */
@@ -50,6 +52,7 @@ object CircadianAlgorithmRegistry {
     const val CSF_ID = "csf-v1"
     const val KALMAN_ID = "unwrapped-kalman-v1"
     const val SWITCHING_KALMAN_ID = "switching-kalman-v1"
+    const val ADAPTIVE_KALMAN_ID = "adaptive-kalman-v1"
 
     private val csf = object : CircadianAlgorithmDefinition {
         override val id = CSF_ID
@@ -182,7 +185,46 @@ object CircadianAlgorithmRegistry {
             )
     }
 
-    val algorithms: List<CircadianAlgorithmDefinition> = listOf(csf, kalman, switchingKalman)
+    private val adaptiveKalman = object : CircadianAlgorithmDefinition {
+        override val id = ADAPTIVE_KALMAN_ID
+        override val displayName = "Adaptive Kalman (experimental)"
+        override val parameters = listOf(
+            CircadianNumericParameter("drift_prior", "Daily drift prior", 0.51, -1.5, 3.0, 90, 2, "h/d"),
+            CircadianNumericParameter("phase_variance", "Phase variance", 0.49, 0.01, 0.50, 49, 2),
+            CircadianNumericParameter("drift_variance", "Drift variance", 0.0001, 0.0001, 0.02, 99, 4),
+            CircadianNumericParameter("measurement_variance", "Measurement variance", 10.0, 0.25, 10.0, 39, 2),
+            CircadianNumericParameter("evidence_window_days", "Transition window", 26.0, 7.0, 42.0, 35, 0, "d"),
+            CircadianNumericParameter("evidence_min_anchors", "Transition anchors", 7.0, 5.0, 14.0, 9, 0),
+            CircadianNumericParameter("evidence_min_anchor_weight", "Minimum anchor weight", 0.23, 0.10, 0.90, 16, 2),
+            CircadianNumericParameter("evidence_min_drift_delta", "Transition drift delta", 0.50, 0.20, 1.00, 16, 2, "h/d"),
+            CircadianNumericParameter("evidence_fit_improvement", "Transition fit improvement", 2.4, 1.1, 5.0, 39, 1, "×"),
+            CircadianNumericParameter("transition_phase_variance", "Transition phase variance", 36.0, 0.50, 36.0, 71, 2),
+            CircadianNumericParameter("transition_drift_variance", "Transition drift variance", 0.01, 0.001, 0.10, 99, 3),
+            durationSmoothingParameter(),
+        )
+
+        override fun analyze(records: List<SleepRecord>, extraDays: Int, values: Map<String, Double>): CircadianAnalysis =
+            analyzeCircadianAdaptiveKalman(
+                records = records,
+                extraDays = extraDays,
+                config = AdaptiveKalmanConfig(
+                    driftPrior = values.valueOf("drift_prior"),
+                    processPhaseVariance = values.valueOf("phase_variance"),
+                    processDriftVariance = values.valueOf("drift_variance"),
+                    measurementVarianceAtUnitWeight = values.valueOf("measurement_variance"),
+                    evidenceWindowDays = values.valueOf("evidence_window_days").toInt(),
+                    evidenceMinAnchors = values.valueOf("evidence_min_anchors").toInt(),
+                    evidenceMinAnchorWeight = values.valueOf("evidence_min_anchor_weight"),
+                    evidenceMinDriftDelta = values.valueOf("evidence_min_drift_delta"),
+                    evidenceFitImprovement = values.valueOf("evidence_fit_improvement"),
+                    transitionPhaseVariance = values.valueOf("transition_phase_variance"),
+                    transitionDriftVariance = values.valueOf("transition_drift_variance"),
+                ),
+                durationSmoothing = DurationSmoothingConfig(values.valueOf("duration_smoothing_sigma")),
+            )
+    }
+
+    val algorithms: List<CircadianAlgorithmDefinition> = listOf(csf, kalman, switchingKalman, adaptiveKalman)
     val defaultAlgorithm: CircadianAlgorithmDefinition = kalman
 
     fun algorithm(id: String): CircadianAlgorithmDefinition =

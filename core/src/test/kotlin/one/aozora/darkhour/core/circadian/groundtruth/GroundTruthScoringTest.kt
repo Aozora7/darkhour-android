@@ -17,6 +17,7 @@ class GroundTruthScoringTest {
             CsfGroundTruthAlgorithm,
             UnwrappedKalmanGroundTruthAlgorithm,
             SwitchingKalmanGroundTruthAlgorithm,
+            AdaptiveKalmanGroundTruthAlgorithm,
         )
 
         algorithms.forEach { algorithm ->
@@ -43,6 +44,7 @@ class GroundTruthScoringTest {
             CsfGroundTruthAlgorithm,
             UnwrappedKalmanGroundTruthAlgorithm,
             SwitchingKalmanGroundTruthAlgorithm,
+            AdaptiveKalmanGroundTruthAlgorithm,
         )
         for (algorithm in algorithms) {
             for (dataset in GroundTruthFixtures.loadAll()) {
