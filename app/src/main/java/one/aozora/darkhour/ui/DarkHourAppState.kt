@@ -272,8 +272,7 @@ fun rememberDarkHourAppState(
 }
 
 internal fun initialDeveloperAlgorithmId(isDebug: Boolean): String =
-    if (isDebug) CircadianAlgorithmRegistry.SWITCHING_KALMAN_ID
-    else CircadianAlgorithmRegistry.defaultAlgorithm.id
+    CircadianAlgorithmRegistry.defaultAlgorithm.id
 
 private fun ActogramLayout.withHiddenActogramForecastTail(
     hideForecastTail: Boolean,

@@ -8,7 +8,7 @@ class DarkHourAppStateTest {
     @Test
     fun debugStartsWithSwitchingKalmanButReleaseKeepsProductionDefault() {
         assertEquals(
-            CircadianAlgorithmRegistry.SWITCHING_KALMAN_ID,
+            CircadianAlgorithmRegistry.KALMAN_ID,
             initialDeveloperAlgorithmId(isDebug = true),
         )
         assertEquals(

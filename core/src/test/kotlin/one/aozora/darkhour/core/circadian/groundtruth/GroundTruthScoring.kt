@@ -62,6 +62,7 @@ data class GroundTruthScore(
     val phaseConsistencyP90Hours: Double,
     val firstSevenDayMeanErrorHours: Double?,
     val lastSevenDayMeanErrorHours: Double?,
+    val regimeTransitions: GroundTruthRegimeTransitionScore,
 )
 
 data class DivergenceStreak(
@@ -148,6 +149,7 @@ fun scoreAgainstGroundTruth(
         phaseConsistencyP90Hours = consistency.takeIf { it.isNotEmpty() }?.let { percentile(it, 0.9) } ?: 0.0,
         firstSevenDayMeanErrorHours = pairs.take(7).takeIf { it.size == 7 }?.map(ScoredPair::absoluteError)?.average(),
         lastSevenDayMeanErrorHours = pairs.takeLast(7).takeIf { it.size == 7 }?.map(ScoredPair::absoluteError)?.average(),
+        regimeTransitions = scoreRegimeTransitions(prediction, dataset),
     )
 }
 

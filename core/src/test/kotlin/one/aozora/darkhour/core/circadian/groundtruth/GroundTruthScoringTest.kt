@@ -77,7 +77,7 @@ internal fun GroundTruthScore.summary(datasetId: String, algorithmId: String): S
     String.format(
         java.util.Locale.ROOT,
         "GTRESULT  %-22s %-38s n=%4d  mean=%5.2fh  median=%5.2fh  p90=%5.2fh  " +
-            "bias=%+5.2fh  tau-delta=%+6.1fmin  streaks=%2d  penalty=%7.2f",
+            "bias=%+5.2fh  tau-delta=%+6.1fmin  transition=%5.2fh/%2d  streaks=%2d  penalty=%7.2f",
         algorithmId,
         datasetId,
         pairedDays,
@@ -86,6 +86,8 @@ internal fun GroundTruthScore.summary(datasetId: String, algorithmId: String): S
         p90AbsolutePhaseErrorHours,
         signedMeanPhaseErrorHours,
         tauDeltaMinutes,
+        regimeTransitions.meanAbsoluteMovementErrorHours,
+        regimeTransitions.transitions,
         divergenceStreaks.size,
         driftPenalty.total,
     )

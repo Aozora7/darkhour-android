@@ -102,7 +102,8 @@ private fun writeReports(
     Files.newBufferedWriter(output.resolve("comparison.csv")).use { writer ->
         writer.appendLine(
             "candidate,dataset,pairedDays,phaseMeanHours,phaseP90Hours,tauMeanMinutesPerDay," +
-                "tauP90MinutesPerDay,tauMaxMinutesPerDay,significantWindowFraction,rollingWindows",
+                "tauP90MinutesPerDay,tauMaxMinutesPerDay,significantWindowFraction,rollingWindows," +
+                "regimeTransitions,transitionScoredDays,transitionMovementMeanHours,transitionMovementP90Hours",
         )
         listOf("baseline" to candidates.single { it.evaluation == 0 }, "best" to candidates.first()).forEach {
                 (candidateName, candidate) ->
@@ -119,6 +120,10 @@ private fun writeReports(
                         score.tauScore.maxAbsoluteDeltaMinutesPerDay,
                         score.tauScore.significantWindowFraction,
                         score.tauScore.windows,
+                        score.transitionScore.transitions,
+                        score.transitionScore.scoredDays,
+                        score.transitionScore.meanAbsoluteMovementErrorHours,
+                        score.transitionScore.p90AbsoluteMovementErrorHours,
                     ).joinToString(","),
                 )
             }
@@ -152,6 +157,8 @@ private fun printResult(algorithm: CircadianAlgorithmDefinition, candidates: Lis
                 "\ttau-p90=${format(score.tauScore.p90AbsoluteDeltaMinutesPerDay)}min/d" +
                 "\ttau-max=${format(score.tauScore.maxAbsoluteDeltaMinutesPerDay)}min/d" +
                 "\tsignificant=${format(score.tauScore.significantWindowFraction * 100.0)}%" +
+                "\ttransitions=${score.transitionScore.transitions}" +
+                "\ttransition=${format(score.transitionScore.meanAbsoluteMovementErrorHours)}h" +
                 "\tphase=${format(score.phaseScore.meanAbsolutePhaseErrorHours)}h",
         )
     }

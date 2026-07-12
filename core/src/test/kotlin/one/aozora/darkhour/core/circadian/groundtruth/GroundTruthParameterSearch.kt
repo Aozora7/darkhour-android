@@ -35,6 +35,7 @@ internal data class DatasetTuningScore(
     val datasetId: String,
     val phaseScore: GroundTruthScore,
     val tauScore: GroundTruthTauDivergence,
+    val transitionScore: GroundTruthRegimeTransitionScore = GroundTruthRegimeTransitionScore(0, 0, 0.0, 0.0),
 )
 
 internal data class TuningCandidate(
@@ -53,6 +54,8 @@ internal fun tuningObjective(scores: List<DatasetTuningScore>): Triple<Double, D
     val maximum = scores.map { it.tauScore.maxAbsoluteDeltaMinutesPerDay }
     val significantFraction = scores.map { it.tauScore.significantWindowFraction }
     val meanPhaseError = scores.map { it.phaseScore.meanAbsolutePhaseErrorHours }.average()
+    val transitionScores = scores.map(DatasetTuningScore::transitionScore)
+        .filter { it.transitions > 0 && it.scoredDays > 0 }
     // All tau terms remain in minutes/day. The significant fraction is
     // scaled by a one-hour mismatch so duration matters even when an episode
     // is shorter than the p90 tail of a multi-year fixture.
@@ -61,7 +64,11 @@ internal fun tuningObjective(scores: List<DatasetTuningScore>): Triple<Double, D
         0.20 * p90.max() +
         0.10 * maximum.max() +
         0.10 * 60.0 * significantFraction.max()
-    return Triple(tauRisk + 2.0 * meanPhaseError, tauRisk, meanPhaseError)
+    val transitionRisk = transitionScores.takeIf { it.isNotEmpty() }?.let {
+        1.5 * it.map(GroundTruthRegimeTransitionScore::meanAbsoluteMovementErrorHours).average() +
+            0.5 * it.map(GroundTruthRegimeTransitionScore::p90AbsoluteMovementErrorHours).average()
+    } ?: 0.0
+    return Triple(tauRisk + 2.0 * meanPhaseError + 2.0 * transitionRisk, tauRisk, meanPhaseError)
 }
 
 internal class GroundTruthCandidateEvaluator(
@@ -76,10 +83,12 @@ internal class GroundTruthCandidateEvaluator(
         val scores = datasets.map { dataset ->
             val prediction = algorithm.analyze(dataset.records, extraDays = 0, values = resolved)
                 .toGroundTruthPrediction()
+            val phaseScore = scoreAgainstGroundTruth(prediction, dataset)
             DatasetTuningScore(
                 datasetId = dataset.id,
-                phaseScore = scoreAgainstGroundTruth(prediction, dataset),
+                phaseScore = phaseScore,
                 tauScore = scoreTauDivergence(prediction, dataset, windowDays),
+                transitionScore = phaseScore.regimeTransitions,
             )
         }
         val (objective, tauRisk, meanPhaseError) = tuningObjective(scores)
