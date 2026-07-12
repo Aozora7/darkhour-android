@@ -19,9 +19,13 @@ data class SwitchingKalmanConfig(
     val regimePriorDays: Double = 90.0,
     val regimeMinEvidence: Double = 7.0,
     val driftResetVariance: Double = 1.0,
+    val preferredRegimePriorDays: Double = 60.0,
+    val preferredRegimeMinEvidence: Double = 7.5,
+    val preferredDriftResetVariance: Double = 0.08,
     val offsetResetVariance: Double = 4.0,
     val offsetAdaptationDays: Double = 14.0,
     val changeCommitProbability: Double = 0.95,
+    val preferredChangeCommitProbability: Double = 0.80,
     val genericChangeWeight: Double = 0.15,
     val genericJumpScale: Double = 0.50,
     val offsetChangeWeight: Double = 0.20,
@@ -34,9 +38,13 @@ data class SwitchingKalmanConfig(
         require(regimePriorDays > 1.0)
         require(regimeMinEvidence > 0.0)
         require(driftResetVariance > 0.0)
+        require(preferredRegimePriorDays > 1.0)
+        require(preferredRegimeMinEvidence > 0.0)
+        require(preferredDriftResetVariance > 0.0)
         require(offsetResetVariance > 0.0)
         require(offsetAdaptationDays > 0.0)
         require(changeCommitProbability in 0.0..1.0)
+        require(preferredChangeCommitProbability in 0.0..1.0)
         require(genericChangeWeight in 0.0..1.0)
         require(genericJumpScale > 0.0)
         require(offsetChangeWeight in 0.0..1.0)
@@ -172,13 +180,14 @@ internal fun resetSwitchingState(
     predicted: SwitchingState,
     config: SwitchingKalmanConfig,
     driftMean: Double = predicted.drift,
+    driftVariance: Double = config.driftResetVariance,
 ): SwitchingState = SwitchingState(
     phase = predicted.phase,
     drift = driftMean,
     offset = 0.0,
     covariance = Matrix3.diagonal(
         predicted.covariance[0, 0].coerceIn(1e-6, config.processPhaseVariance),
-        config.driftResetVariance,
+        driftVariance,
         config.offsetResetVariance,
     ),
 )

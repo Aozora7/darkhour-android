@@ -4,6 +4,7 @@ import one.aozora.darkhour.core.circadian.csf.SyntheticOptions
 import one.aozora.darkhour.core.circadian.csf.TauSegment
 import one.aozora.darkhour.core.circadian.csf.FragmentedPeriod
 import one.aozora.darkhour.core.circadian.csf.generateSyntheticRecords
+import one.aozora.darkhour.core.circadian.CircadianAlgorithmRegistry
 import one.aozora.darkhour.core.model.SleepRecord
 import java.time.Duration
 import java.time.LocalDate
@@ -158,6 +159,38 @@ class SwitchingKalmanModelTest {
         assertTrue("long-history tail step produced no boundary: ${analysis.changePoints}", change != null)
         assertTrue("long-history boundary was ${change?.date}", dayDistance(checkNotNull(change).date, expected) <= 2)
         assertTrue("long-history confirmation was ${change.confirmationDate}", change.confirmationDate <= expected.plusDays(19))
+    }
+
+    @Test
+    fun registryDefaultsCommitPreferredStepWithinTenNights() {
+        val transition = 90
+        val expected = START_DATE.plusDays(transition.toLong())
+        val analysis = registryAnalysis(syntheticStep(25.0, 24.0, transition, transition + 10))
+        val change = analysis.changePoints.minByOrNull { dayDistance(it.date, expected) }
+
+        assertTrue("preferred tail step produced no boundary: ${analysis.changePoints}", change != null)
+        assertTrue("preferred boundary was ${change?.date}", dayDistance(checkNotNull(change).date, expected) <= 2)
+        assertTrue("preferred confirmation was ${change.confirmationDate}", change.confirmationDate <= expected.plusDays(9))
+    }
+
+    @Test
+    fun registryDefaultsCommitPreferredReleaseWithinTenNights() {
+        val transition = 90
+        val expected = START_DATE.plusDays(transition.toLong())
+        val analysis = registryAnalysis(syntheticStep(24.0, 25.0, transition, transition + 10))
+        val change = analysis.changePoints.minByOrNull { dayDistance(it.date, expected) }
+
+        assertTrue("preferred release produced no boundary: ${analysis.changePoints}", change != null)
+        assertTrue("preferred release boundary was ${change?.date}", dayDistance(checkNotNull(change).date, expected) <= 2)
+        assertTrue("preferred release confirmation was ${change.confirmationDate}", change.confirmationDate <= expected.plusDays(9))
+    }
+
+    @Test
+    fun registryDefaultsDoNotCommitSmallGenericStepWithinTenNights() {
+        val transition = 90
+        val analysis = registryAnalysis(syntheticStep(24.8, 25.3, transition, transition + 10))
+
+        assertTrue("small generic step committed too quickly: ${analysis.changePoints}", analysis.changePoints.isEmpty())
     }
 
     @Test
@@ -326,6 +359,15 @@ private fun observations(records: List<SleepRecord>): List<KalmanObservation> {
     val firstDateMs = firstDate.atStartOfDay().toInstant(java.time.ZoneOffset.UTC).toEpochMilli()
     return prepareKalmanAnchors(records, firstDate, firstDateMs)
         .map { KalmanObservation(it.dayNumber, it.midpointHour, it.weight) }
+}
+
+private fun registryAnalysis(records: List<SleepRecord>): SwitchingKalmanAnalysis {
+    val algorithm = CircadianAlgorithmRegistry.algorithm(CircadianAlgorithmRegistry.SWITCHING_KALMAN_ID)
+    return algorithm.analyze(
+        records = records,
+        extraDays = 0,
+        values = CircadianAlgorithmRegistry.resolvedValues(algorithm.id, emptyMap()),
+    ) as SwitchingKalmanAnalysis
 }
 
 private fun shift(record: SleepRecord, hours: Double): SleepRecord {

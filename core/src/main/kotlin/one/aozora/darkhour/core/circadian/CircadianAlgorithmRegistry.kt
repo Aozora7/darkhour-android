@@ -118,19 +118,41 @@ object CircadianAlgorithmRegistry {
         override val displayName = "Switching Kalman (experimental)"
         override val parameters = listOf(
             CircadianNumericParameter("drift_prior", "Daily drift prior", 1.03, -1.5, 3.0, 90, 2, "h/d"),
+            // Sets the initial free-running drift and the fallback target when a preferred release branch is created.
             CircadianNumericParameter("phase_variance", "Phase variance", 0.50, 0.01, 0.50, 49, 2),
+            // Higher values let circadian phase respond more readily to day-to-day timing deviations.
             CircadianNumericParameter("drift_variance", "Drift variance", 0.0001, 0.0001, 0.02, 99, 4),
+            // Higher values let tau change gradually within a regime instead of requiring a regime boundary.
             CircadianNumericParameter("measurement_variance", "Measurement variance", 6.5, 0.25, 10.0, 31, 2),
-            CircadianNumericParameter("regime_prior_days", "Regime prior", 306.0, 14.0, 365.0, 350, 0, "d"),
-            CircadianNumericParameter("regime_min_evidence", "Regime evidence", 9.2, 3.0, 14.0, 21, 1),
-            CircadianNumericParameter("drift_reset_variance", "Drift reset variance", 0.01, 0.01, 4.0, 99, 2),
+            // Higher values place less trust in each observed sleep midpoint.
+            CircadianNumericParameter("regime_prior_days", "Generic regime prior", 306.0, 14.0, 365.0, 350, 0, "d"),
+            // Higher values make arbitrary non-24 and sleep-offset regime changes less likely a priori.
+            CircadianNumericParameter("regime_min_evidence", "Generic regime evidence", 9.2, 3.0, 14.0, 21, 1),
+            // Sets the minimum accumulated anchor weight required to propose and commit a generic change.
+            CircadianNumericParameter("drift_reset_variance", "Generic drift reset variance", 0.01, 0.01, 4.0, 99, 2),
+            // Higher values let a generic change branch estimate a slope farther from its proposed jump target.
+            CircadianNumericParameter("preferred_regime_prior_days", "Preferred regime prior", 60.0, 7.0, 180.0, 173, 0, "d"),
+            // Higher values make transitions to or from 24-hour tau less likely a priori.
+            CircadianNumericParameter("preferred_regime_min_evidence", "Preferred regime evidence", 7.5, 3.0, 10.0, 28, 1),
+            // Sets the minimum accumulated anchor weight required to propose and commit a preferred change.
+            CircadianNumericParameter("preferred_drift_reset_variance", "Preferred drift reset variance", 0.08, 0.01, 0.50, 49, 2),
+            // Higher values let entrainment or release branches adapt farther from their favored tau target.
             CircadianNumericParameter("offset_reset_variance", "Offset reset variance", 0.69, 0.25, 36.0, 143, 2, "h²"),
+            // Higher values allow a regime change to explain more timing relocation as sleep placement rather than phase.
             CircadianNumericParameter("offset_adaptation_days", "Offset adaptation", 6.0, 3.0, 42.0, 39, 0, "d"),
-            CircadianNumericParameter("change_commit_probability", "Change probability", 0.96, 0.60, 0.99, 38, 2),
+            // Higher values preserve the inferred sleep-placement offset longer before transferring it into phase.
+            CircadianNumericParameter("change_commit_probability", "Generic change probability", 0.96, 0.60, 0.99, 38, 2),
+            // Higher values require stronger posterior confidence before committing a generic boundary.
+            CircadianNumericParameter("preferred_change_commit_probability", "Preferred change probability", 0.80, 0.60, 0.99, 38, 2),
+            // Higher values require stronger posterior confidence before committing entrainment or release.
             CircadianNumericParameter("generic_change_weight", "Generic change weight", 0.11, 0.01, 0.50, 48, 2),
+            // Higher values favor arbitrary slope-jump branches over offset-only branches within the generic hazard.
             CircadianNumericParameter("generic_jump_scale", "Generic jump scale", 0.66, 0.20, 1.50, 25, 2, "h/d"),
+            // Sets the positive and negative drift displacement proposed by generic slope-jump branches.
             CircadianNumericParameter("offset_change_weight", "Offset change weight", 0.5, 0.01, 0.50, 48, 2),
+            // Higher values favor offset-only branches over arbitrary slope jumps within the generic hazard.
             durationSmoothingParameter(),
+            // Higher values smooth estimated sleep duration over more days without directly changing phase or tau.
         )
 
         override fun analyze(records: List<SleepRecord>, extraDays: Int, values: Map<String, Double>): CircadianAnalysis =
@@ -145,9 +167,13 @@ object CircadianAlgorithmRegistry {
                     regimePriorDays = values.valueOf("regime_prior_days"),
                     regimeMinEvidence = values.valueOf("regime_min_evidence"),
                     driftResetVariance = values.valueOf("drift_reset_variance"),
+                    preferredRegimePriorDays = values.valueOf("preferred_regime_prior_days"),
+                    preferredRegimeMinEvidence = values.valueOf("preferred_regime_min_evidence"),
+                    preferredDriftResetVariance = values.valueOf("preferred_drift_reset_variance"),
                     offsetResetVariance = values.valueOf("offset_reset_variance"),
                     offsetAdaptationDays = values.valueOf("offset_adaptation_days"),
                     changeCommitProbability = values.valueOf("change_commit_probability"),
+                    preferredChangeCommitProbability = values.valueOf("preferred_change_commit_probability"),
                     genericChangeWeight = values.valueOf("generic_change_weight"),
                     genericJumpScale = values.valueOf("generic_jump_scale"),
                     offsetChangeWeight = values.valueOf("offset_change_weight"),

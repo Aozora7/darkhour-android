@@ -7,7 +7,6 @@ import kotlin.math.abs
 import kotlin.math.exp
 import kotlin.math.ln
 import kotlin.math.max
-import kotlin.math.pow
 
 internal data class DetectedSwitchingChangePoint(
     val dayNumber: Int,
@@ -29,6 +28,7 @@ private data class CandidateBoundary(
     val previousDrift: Double,
     val boundaryState: SwitchingState,
     val resetMode: String,
+    val preferred: Boolean,
 )
 
 private data class SwitchingHypothesis(
@@ -66,8 +66,12 @@ internal fun detectSwitchingKalmanChangePoints(
 
     for ((observationIndex, observation) in sorted.drop(1).withIndex()) {
         val gapDays = max(1, observation.dayNumber - previousDay)
-        val dailyHazard = 1.0 / config.regimePriorDays
-        val hazard = (1.0 - (1.0 - dailyHazard).pow(gapDays.toDouble())).coerceIn(1e-9, 1.0 - 1e-9)
+        val genericRate = 1.0 / config.regimePriorDays
+        val preferredRate = 1.0 / config.preferredRegimePriorDays
+        val combinedRate = genericRate + preferredRate
+        val hazard = (1.0 - exp(-combinedRate * gapDays)).coerceIn(1e-9, 1.0 - 1e-9)
+        val preferredHazard = hazard * preferredRate / combinedRate
+        val genericHazard = hazard * genericRate / combinedRate
         val branches = ArrayList<SwitchingHypothesis>(hypotheses.size * 2)
         for (hypothesis in hypotheses) {
             val predicted = predictSwitchingState(hypothesis.state, gapDays, config)
@@ -82,25 +86,38 @@ internal fun detectSwitchingKalmanChangePoints(
             // discard the first one before that first decision is committed.
             // The no-change history remains in the beam and continues to
             // propose newer candidates on every observation.
-            if (hypothesis.candidate == null && hypothesis.evidence >= config.regimeMinEvidence) {
+            if (hypothesis.candidate == null) {
                 resetModes(
                     previousDrift = predicted.drift,
                     learnedFreeRunningDrift = learnedFreeRunningDrift ?: config.driftPrior,
                     config = config,
                 ).forEach { mode ->
-                    val reset = resetSwitchingState(predicted, config, mode.driftMean)
+                    val minimumEvidence = if (mode.preferred) {
+                        config.preferredRegimeMinEvidence
+                    } else {
+                        config.regimeMinEvidence
+                    }
+                    if (hypothesis.evidence < minimumEvidence) return@forEach
+                    val branchHazard = if (mode.preferred) preferredHazard else genericHazard * mode.weight
+                    val resetVariance = if (mode.preferred) {
+                        config.preferredDriftResetVariance
+                    } else {
+                        config.driftResetVariance
+                    }
+                    val reset = resetSwitchingState(predicted, config, mode.driftMean, resetVariance)
                     val changed = updateSwitchingState(reset, observation, config)
                     branches += SwitchingHypothesis(
                         state = changed.state,
                         regimeStartDay = observation.dayNumber,
                         evidence = observation.weight,
-                        logProbability = hypothesis.logProbability + ln(hazard) + ln(mode.weight) +
+                        logProbability = hypothesis.logProbability + ln(branchHazard) +
                             changed.logLikelihood,
                         candidate = CandidateBoundary(
                             dayNumber = observation.dayNumber,
                             previousDrift = hypothesis.state.drift,
                             boundaryState = reset,
                             resetMode = mode.label,
+                            preferred = mode.preferred,
                         ),
                     )
                 }
@@ -124,7 +141,17 @@ internal fun detectSwitchingKalmanChangePoints(
                         "drift=${best.state.drift} offset=${best.state.offset} mode=${bestCandidate.resetMode}",
                 )
             }
-            if (posterior >= config.changeCommitProbability && best.evidence >= config.regimeMinEvidence) {
+            val commitProbability = if (checkNotNull(best.candidate).preferred) {
+                config.preferredChangeCommitProbability
+            } else {
+                config.changeCommitProbability
+            }
+            val minimumEvidence = if (best.candidate.preferred) {
+                config.preferredRegimeMinEvidence
+            } else {
+                config.regimeMinEvidence
+            }
+            if (posterior >= commitProbability && best.evidence >= minimumEvidence) {
                 val candidate = checkNotNull(best.candidate)
                 committed += DetectedSwitchingChangePoint(
                     dayNumber = candidate.dayNumber,
@@ -178,26 +205,31 @@ private fun normalizeAndPrune(input: List<SwitchingHypothesis>): List<SwitchingH
 
 private fun probability(hypothesis: SwitchingHypothesis): Double = exp(hypothesis.logProbability)
 
-private data class ResetMode(val label: String, val driftMean: Double, val weight: Double)
+private data class ResetMode(
+    val label: String,
+    val driftMean: Double,
+    val weight: Double,
+    val preferred: Boolean,
+)
 
 private fun resetModes(
     previousDrift: Double,
     learnedFreeRunningDrift: Double,
     config: SwitchingKalmanConfig,
 ): List<ResetMode> {
-    val genericWeight = config.genericChangeWeight.coerceIn(1e-6, 1.0 - 1e-6)
-    val offsetWeight = config.offsetChangeWeight.coerceIn(1e-6, 1.0 - genericWeight - 1e-6)
-    val favoredWeight = 1.0 - genericWeight - offsetWeight
+    val genericWeight = config.genericChangeWeight.coerceAtLeast(1e-6)
+    val offsetWeight = config.offsetChangeWeight.coerceAtLeast(1e-6)
+    val genericTotal = genericWeight + offsetWeight
     val favored = if (abs(previousDrift) <= ENTRAINED_DRIFT_BAND) {
-        ResetMode("release", learnedFreeRunningDrift, favoredWeight)
+        ResetMode("release", learnedFreeRunningDrift, 1.0, preferred = true)
     } else {
-        ResetMode("entrainment", 0.0, favoredWeight)
+        ResetMode("entrainment", 0.0, 1.0, preferred = true)
     }
     return listOf(
         favored,
-        ResetMode("offset-only", previousDrift, offsetWeight),
-        ResetMode("generic-plus", previousDrift + config.genericJumpScale, genericWeight / 2.0),
-        ResetMode("generic-minus", previousDrift - config.genericJumpScale, genericWeight / 2.0),
+        ResetMode("offset-only", previousDrift, offsetWeight / genericTotal, preferred = false),
+        ResetMode("generic-plus", previousDrift + config.genericJumpScale, genericWeight / (2.0 * genericTotal), preferred = false),
+        ResetMode("generic-minus", previousDrift - config.genericJumpScale, genericWeight / (2.0 * genericTotal), preferred = false),
     )
 }
 

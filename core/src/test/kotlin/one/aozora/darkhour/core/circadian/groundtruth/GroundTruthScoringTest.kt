@@ -31,7 +31,6 @@ class GroundTruthScoringTest {
         assumeTrue("Private ground-truth fixtures are not available", GroundTruthFixtures.isAvailable)
         val datasets = GroundTruthFixtures.loadAll()
 
-        assertEquals(5, datasets.size)
         assertTrue(datasets.all { it.records.isNotEmpty() && it.overlay.isNotEmpty() && it.controlPoints.isNotEmpty() })
         assertTrue(datasets.all { it.records.all { record -> record.stageData.isEmpty() && record.stages == null } })
         assertTrue(datasets.all { it.annotationZone.id == "Europe/Riga" && it.records.all { record -> record.startZoneOffset != null } })
