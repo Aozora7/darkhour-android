@@ -53,6 +53,7 @@ object CircadianAlgorithmRegistry {
     const val KALMAN_ID = "unwrapped-kalman-v1"
     const val SWITCHING_KALMAN_ID = "switching-kalman-v1"
     const val ADAPTIVE_KALMAN_ID = "adaptive-kalman-v1"
+    private val adaptiveDefaults = AdaptiveKalmanConfig()
 
     private val csf = object : CircadianAlgorithmDefinition {
         override val id = CSF_ID
@@ -189,17 +190,17 @@ object CircadianAlgorithmRegistry {
         override val id = ADAPTIVE_KALMAN_ID
         override val displayName = "Adaptive Kalman (experimental)"
         override val parameters = listOf(
-            CircadianNumericParameter("drift_prior", "Daily drift prior", 0.52, -1.5, 3.0, 90, 2, "h/d"),
-            CircadianNumericParameter("phase_variance", "Phase variance", 0.50, 0.01, 0.50, 49, 2),
-            CircadianNumericParameter("drift_variance", "Drift variance", 0.0001, 0.0001, 0.02, 99, 4),
-            CircadianNumericParameter("measurement_variance", "Measurement variance", 9.77, 0.25, 10.0, 39, 2),
-            CircadianNumericParameter("evidence_window_days", "Transition window", 18.0, 7.0, 42.0, 35, 0, "d"),
-            CircadianNumericParameter("evidence_min_anchors", "Transition anchors", 12.0, 5.0, 14.0, 9, 0),
-            CircadianNumericParameter("evidence_min_anchor_weight", "Minimum anchor weight", 0.7, 0.10, 0.90, 16, 2),
-            CircadianNumericParameter("evidence_min_drift_delta", "Transition drift delta", 0.85, 0.20, 1.00, 16, 2, "h/d"),
-            CircadianNumericParameter("evidence_fit_improvement", "Transition fit improvement", 5.0, 1.1, 5.0, 39, 1, "×"),
-            CircadianNumericParameter("transition_phase_variance", "Transition phase variance", 17.23, 0.50, 36.0, 71, 2),
-            CircadianNumericParameter("transition_drift_variance", "Transition drift variance", 0.076, 0.001, 0.10, 99, 3),
+            CircadianNumericParameter("drift_prior", "Daily drift prior", adaptiveDefaults.driftPrior, -1.5, 3.0, 90, 2, "h/d"),
+            CircadianNumericParameter("phase_variance", "Phase variance", adaptiveDefaults.processPhaseVariance, 0.01, 0.50, 49, 2),
+            CircadianNumericParameter("drift_variance", "Drift variance", adaptiveDefaults.processDriftVariance, 0.0001, 0.02, 99, 4),
+            CircadianNumericParameter("measurement_variance", "Measurement variance", adaptiveDefaults.measurementVarianceAtUnitWeight, 0.25, 10.0, 39, 2),
+            CircadianNumericParameter("evidence_window_days", "Transition window", adaptiveDefaults.evidenceWindowDays.toDouble(), 7.0, 42.0, 35, 0, "d"),
+            CircadianNumericParameter("evidence_min_anchors", "Transition anchors", adaptiveDefaults.evidenceMinAnchors.toDouble(), 5.0, 14.0, 9, 0),
+            CircadianNumericParameter("evidence_min_anchor_weight", "Minimum anchor weight", adaptiveDefaults.evidenceMinAnchorWeight, 0.10, 0.90, 16, 2),
+            CircadianNumericParameter("evidence_min_drift_delta", "Transition drift delta", adaptiveDefaults.evidenceMinDriftDelta, 0.20, 1.00, 16, 2, "h/d"),
+            CircadianNumericParameter("evidence_fit_improvement", "Transition fit improvement", adaptiveDefaults.evidenceFitImprovement, 1.1, 5.0, 39, 1, "×"),
+            CircadianNumericParameter("transition_phase_variance", "Transition phase variance", adaptiveDefaults.transitionPhaseVariance, 0.50, 36.0, 71, 2),
+            CircadianNumericParameter("transition_drift_variance", "Transition drift variance", adaptiveDefaults.transitionDriftVariance, 0.001, 0.10, 99, 3),
             durationSmoothingParameter(),
         )
 

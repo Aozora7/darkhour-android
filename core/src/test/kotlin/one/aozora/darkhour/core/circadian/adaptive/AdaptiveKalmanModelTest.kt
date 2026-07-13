@@ -4,8 +4,39 @@ import kotlin.math.abs
 import kotlin.math.sin
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import one.aozora.darkhour.core.circadian.kalman.KalmanConfig
+import one.aozora.darkhour.core.circadian.kalman.KalmanObservation
+import one.aozora.darkhour.core.circadian.kalman.fitUnwrappedKalmanTrend
 
 class AdaptiveKalmanModelTest {
+    @Test
+    fun ordinaryDynamicsMatchLegacyKalmanNumericallyWhenNoTransitionIsDetected() {
+        val config = AdaptiveKalmanConfig()
+        val observations = (0 until 160).map { day ->
+            observation(day, 4.0 + 0.75 * day + 0.4 * sin(day * 1.3))
+        }
+
+        val adaptive = fitAdaptiveKalman(observations, config = config)
+        val legacy = fitUnwrappedKalmanTrend(
+            observations = observations.map { KalmanObservation(it.dayNumber, it.midpointHour, it.weight) },
+            config = KalmanConfig(
+                driftPrior = config.driftPrior,
+                initialPhaseVariance = config.initialPhaseVariance,
+                initialDriftVariance = config.initialDriftVariance,
+                processPhaseVariance = config.processPhaseVariance,
+                processDriftVariance = config.processDriftVariance,
+                measurementVarianceAtUnitWeight = config.measurementVarianceAtUnitWeight,
+                gateStandardDeviations = config.gateStandardDeviations,
+            ),
+        )
+
+        assertTrue(adaptive.transitions.isEmpty())
+        adaptive.states.zip(legacy).forEach { (actual, expected) ->
+            assertTrue("day ${actual.dayNumber} phase differs", abs(actual.phase - expected.phase) < 1e-9)
+            assertTrue("day ${actual.dayNumber} drift differs", abs(actual.drift - expected.drift) < 1e-9)
+        }
+    }
+
     @Test
     fun stableNoiseDoesNotTurnIntoTauNoiseOrTransitionEvidence() {
         val observations = (0 until 180).map { day ->

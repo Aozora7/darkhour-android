@@ -26,7 +26,18 @@ data class AdaptiveKalmanAnalysis(
     override val rSquared: Double = 0.0,
     val anchorCount: Int,
     val transitionEvidenceDays: List<LocalDate>,
+    val changePoints: List<AdaptiveKalmanChangePoint>,
 ) : CircadianAnalysis
+
+data class AdaptiveKalmanChangePoint(
+    val date: LocalDate,
+    val confirmationDate: LocalDate,
+    val previousDrift: Double,
+    val newDrift: Double,
+    val evidence: Double,
+) {
+    val confirmationLagDays: Long get() = java.time.temporal.ChronoUnit.DAYS.between(date, confirmationDate)
+}
 
 fun analyzeCircadianAdaptiveKalman(
     records: List<SleepRecord>,
@@ -69,6 +80,7 @@ fun analyzeCircadianAdaptiveKalman(
         days = days,
         anchorCount = segments.sumOf(SegmentResult::anchorCount),
         transitionEvidenceDays = segments.flatMap(SegmentResult::transitionEvidenceDays),
+        changePoints = segments.flatMap(SegmentResult::changePoints),
     )
 }
 
@@ -84,12 +96,13 @@ private fun analyzeSegment(
     if (anchors.size < 2) return null
     val firstDay = anchors.first().dayNumber
     val dataEndDay = anchors.last().dayNumber
-    val states = fitAdaptiveKalmanTrend(
+    val fit = fitAdaptiveKalman(
         observations = anchors.map { AdaptiveKalmanObservation(it.dayNumber, it.midpointHour, it.weight) },
         firstDay = firstDay,
         lastDay = dataEndDay + extraDays,
         config = config,
     )
+    val states = fit.states
     val durations = smoothDurations(
         observations = anchors.map { DurationObservation(it.dayNumber, it.record.durationHours) },
         targetDays = firstDay..states.last().dayNumber,
@@ -102,6 +115,15 @@ private fun analyzeSegment(
         anchorCount = anchors.size,
         transitionEvidenceDays = states.filter { it.transitionEvidence > 0.0 }
             .map { globalFirstDate.plusDays(it.dayNumber.toLong()) },
+        changePoints = fit.transitions.map { transition ->
+            AdaptiveKalmanChangePoint(
+                date = globalFirstDate.plusDays(transition.boundaryDay.toLong()),
+                confirmationDate = globalFirstDate.plusDays(transition.confirmationDay.toLong()),
+                previousDrift = transition.previousDrift,
+                newDrift = transition.newDrift,
+                evidence = transition.evidence,
+            )
+        },
         days = states.mapIndexed { index, state ->
             val forecastDistance = (state.dayNumber - dataEndDay).coerceAtLeast(0)
             val confidenceScore = if (forecastDistance > 0) {
@@ -136,6 +158,7 @@ private data class SegmentResult(
     val dataEndDay: Int,
     val anchorCount: Int,
     val transitionEvidenceDays: List<LocalDate>,
+    val changePoints: List<AdaptiveKalmanChangePoint>,
     val days: List<CircadianDay>,
 )
 
@@ -159,4 +182,5 @@ private fun emptyAnalysis() = AdaptiveKalmanAnalysis(
     days = emptyList(),
     anchorCount = 0,
     transitionEvidenceDays = emptyList(),
+    changePoints = emptyList(),
 )

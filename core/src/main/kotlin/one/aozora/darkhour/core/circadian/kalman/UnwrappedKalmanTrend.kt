@@ -56,6 +56,11 @@ data class KalmanTrendState(
 
 internal data class Covariance(val phase: Double, val phaseDrift: Double, val drift: Double)
 internal data class FilterState(val phase: Double, val drift: Double, val covariance: Covariance)
+internal data class KalmanStateReset(
+    val drift: Double,
+    val phaseVariance: Double,
+    val driftVariance: Double,
+)
 internal data class FilterStep(
     val dayNumber: Int,
     val predicted: FilterState,
@@ -82,8 +87,19 @@ fun fitUnwrappedKalmanTrend(
 ): List<KalmanTrendState> {
     if (observations.isEmpty() || lastDay < firstDay) return emptyList()
 
-    return rtsSmooth(runKalmanForward(observations, firstDay, lastDay, config, initialState))
+    return fitUnwrappedKalmanTrendWithResets(observations, firstDay, lastDay, config, initialState)
 }
+
+internal fun fitUnwrappedKalmanTrendWithResets(
+    observations: List<KalmanObservation>,
+    firstDay: Int,
+    lastDay: Int,
+    config: KalmanConfig,
+    initialState: KalmanInitialState? = null,
+    resets: Map<Int, KalmanStateReset> = emptyMap(),
+): List<KalmanTrendState> = rtsSmooth(
+    runKalmanForward(observations, firstDay, lastDay, config, initialState, resets),
+)
 
 internal fun runKalmanForward(
     observations: List<KalmanObservation>,
@@ -91,6 +107,7 @@ internal fun runKalmanForward(
     lastDay: Int,
     config: KalmanConfig,
     initialState: KalmanInitialState? = null,
+    resets: Map<Int, KalmanStateReset> = emptyMap(),
 ): List<FilterStep> {
     if (observations.isEmpty() || lastDay < firstDay) return emptyList()
 
@@ -105,21 +122,25 @@ internal fun runKalmanForward(
     val steps = ArrayList<FilterStep>(lastDay - firstDay + 1)
 
     for (day in firstDay..lastDay) {
-        if (day != firstDay) state = predict(state, config)
+        if (day != firstDay) state = predictKalmanState(state, config)
+        resets[day]?.let { state = resetKalmanState(state, it, config) }
         val predicted = state
         val observation = byDay[day]
-        val resolved = observation?.let { resolveAmbiguity(it.midpointHour, predicted.phase) }
+        val resolved = observation?.let { resolveKalmanAmbiguity(it.midpointHour, predicted.phase) }
         val innovation = resolved?.minus(predicted.phase)
-        observation?.let { state = update(predicted, it, config, checkNotNull(resolved)) }
+        observation?.let { state = updateKalmanState(predicted, it, config, checkNotNull(resolved)) }
         steps += FilterStep(day, predicted, state, resolved, innovation, observation?.weight)
     }
     for (index in 0 until steps.lastIndex) {
-        steps[index] = steps[index].copy(predictedNext = predict(steps[index].filtered, config))
+        val nextDay = steps[index + 1].dayNumber
+        var predictedNext = predictKalmanState(steps[index].filtered, config)
+        resets[nextDay]?.let { predictedNext = resetKalmanState(predictedNext, it, config) }
+        steps[index] = steps[index].copy(predictedNext = predictedNext)
     }
     return steps
 }
 
-private fun predict(state: FilterState, config: KalmanConfig): FilterState {
+internal fun predictKalmanState(state: FilterState, config: KalmanConfig): FilterState {
     val p = state.covariance
     return FilterState(
         phase = state.phase + state.drift,
@@ -132,11 +153,11 @@ private fun predict(state: FilterState, config: KalmanConfig): FilterState {
     )
 }
 
-private fun update(
+internal fun updateKalmanState(
     state: FilterState,
     observation: KalmanObservation,
     config: KalmanConfig,
-    measuredPhase: Double = resolveAmbiguity(observation.midpointHour, state.phase),
+    measuredPhase: Double = resolveKalmanAmbiguity(observation.midpointHour, state.phase),
 ): FilterState {
     val p = state.covariance
     val measurementVariance = config.measurementVarianceAtUnitWeight / max(observation.weight, 1e-6)
@@ -157,8 +178,21 @@ private fun update(
     )
 }
 
-private fun resolveAmbiguity(measurement: Double, predictedPhase: Double): Double =
+internal fun resolveKalmanAmbiguity(measurement: Double, predictedPhase: Double): Double =
     measurement + round((predictedPhase - measurement) / 24.0) * 24.0
+
+internal fun resetKalmanState(
+    state: FilterState,
+    reset: KalmanStateReset,
+    config: KalmanConfig,
+): FilterState = state.copy(
+    drift = reset.drift,
+    covariance = Covariance(
+        phase = max(state.covariance.phase, reset.phaseVariance),
+        phaseDrift = 0.0,
+        drift = max(config.processDriftVariance, reset.driftVariance),
+    ),
+)
 
 private fun rtsSmooth(steps: List<FilterStep>): List<KalmanTrendState> {
     val smoothed = steps.map(FilterStep::filtered).toMutableList()
