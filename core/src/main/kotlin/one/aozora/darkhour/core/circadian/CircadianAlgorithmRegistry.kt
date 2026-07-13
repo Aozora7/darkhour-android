@@ -2,12 +2,8 @@ package one.aozora.darkhour.core.circadian
 
 import one.aozora.darkhour.core.circadian.csf.CsfConfig
 import one.aozora.darkhour.core.circadian.csf.analyzeCircadianCsf
-import one.aozora.darkhour.core.circadian.kalman.KalmanConfig
-import one.aozora.darkhour.core.circadian.kalman.KalmanChangeDetectionConfig
-import one.aozora.darkhour.core.circadian.kalman.SwitchingKalmanConfig
-import one.aozora.darkhour.core.circadian.kalman.analyzeCircadianKalman
-import one.aozora.darkhour.core.circadian.kalman.analyzeCircadianSwitchingKalman
 import one.aozora.darkhour.core.circadian.adaptive.AdaptiveKalmanConfig
+import one.aozora.darkhour.core.circadian.adaptive.AdaptiveKalmanTransitionConfig
 import one.aozora.darkhour.core.circadian.adaptive.analyzeCircadianAdaptiveKalman
 import one.aozora.darkhour.core.model.SleepRecord
 
@@ -51,9 +47,9 @@ interface CircadianAlgorithmDefinition {
 object CircadianAlgorithmRegistry {
     const val CSF_ID = "csf-v1"
     const val KALMAN_ID = "unwrapped-kalman-v1"
-    const val SWITCHING_KALMAN_ID = "switching-kalman-v1"
     const val ADAPTIVE_KALMAN_ID = "adaptive-kalman-v1"
     private val adaptiveDefaults = AdaptiveKalmanConfig()
+    private val transitionDefaults = AdaptiveKalmanTransitionConfig()
 
     private val csf = object : CircadianAlgorithmDefinition {
         override val id = CSF_ID
@@ -84,131 +80,10 @@ object CircadianAlgorithmRegistry {
         override val id = KALMAN_ID
         override val displayName = "Kalman"
         override val parameters = listOf(
-            CircadianNumericParameter("drift_prior", "Daily drift prior", 0.51, -1.5, 3.0, 90, 2, "h/d"),
-            CircadianNumericParameter("phase_variance", "Phase variance", 0.49, 0.01, 0.50, 49, 2),
-            CircadianNumericParameter("drift_variance", "Drift variance", 0.0001, 0.0001, 0.02, 99, 4),
-            CircadianNumericParameter("measurement_variance", "Measurement variance", 10.0, 0.25, 10.0, 31, 2),
-            durationSmoothingParameter(),
-            CircadianNumericParameter("change_window_days", "Change window", 26.0, 7.0, 42.0, 34, 0, "d"),
-            CircadianNumericParameter("change_min_anchors", "Change anchors", 7.0, 3.0, 14.0, 10, 0),
-            CircadianNumericParameter("change_min_anchor_weight", "Change anchor weight", 0.23, 0.10, 0.90, 15, 2),
-            CircadianNumericParameter("change_min_drift_delta", "Change drift delta", 0.93, 0.10, 1.00, 17, 2, "h/d"),
-            CircadianNumericParameter("change_fit_improvement", "Change fit improvement", 2.4, 1.1, 5.0, 38, 1, "×"),
-        )
-
-        override fun analyze(records: List<SleepRecord>, extraDays: Int, values: Map<String, Double>): CircadianAnalysis =
-            analyzeCircadianKalman(
-                records = records,
-                extraDays = extraDays,
-                config = KalmanConfig(
-                    driftPrior = values.valueOf("drift_prior"),
-                    processPhaseVariance = values.valueOf("phase_variance"),
-                    processDriftVariance = values.valueOf("drift_variance"),
-                    measurementVarianceAtUnitWeight = values.valueOf("measurement_variance"),
-                    durationSmoothing = DurationSmoothingConfig(values.valueOf("duration_smoothing_sigma")),
-                    changeDetection = KalmanChangeDetectionConfig(
-                        windowDays = values.valueOf("change_window_days").toInt(),
-                        minAnchors = values.valueOf("change_min_anchors").toInt(),
-                        minAnchorWeight = values.valueOf("change_min_anchor_weight"),
-                        minDriftDelta = values.valueOf("change_min_drift_delta"),
-                        fitImprovement = values.valueOf("change_fit_improvement"),
-                    ),
-                ),
-            )
-    }
-
-    private val switchingKalman = object : CircadianAlgorithmDefinition {
-        override val id = SWITCHING_KALMAN_ID
-        override val displayName = "Switching Kalman (experimental)"
-        override val parameters = listOf(
-            CircadianNumericParameter("drift_prior", "Daily drift prior", 0.94, -1.5, 3.0, 90, 2, "h/d"),
-            // Sets the initial free-running drift and the fallback target when a preferred release branch is created.
-            CircadianNumericParameter("phase_variance", "Phase variance", 0.50, 0.01, 0.50, 49, 2),
-            // Higher values let circadian phase respond more readily to day-to-day timing deviations.
-            CircadianNumericParameter("drift_variance", "Drift variance", 0.0001, 0.0001, 0.02, 99, 4),
-            // Higher values let tau change gradually within a regime instead of requiring a regime boundary.
-            CircadianNumericParameter("measurement_variance", "Measurement variance", 6.29, 0.25, 10.0, 31, 2),
-            // Higher values place less trust in each observed sleep midpoint.
-            CircadianNumericParameter("regime_prior_days", "Generic regime prior", 180.0, 14.0, 365.0, 350, 0, "d"),
-            // Higher values make arbitrary non-24 and sleep-offset regime changes less likely a priori.
-            CircadianNumericParameter("regime_min_evidence", "Generic regime evidence", 6.3, 3.0, 14.0, 21, 1),
-            // Sets the minimum accumulated anchor weight required to propose and commit a generic change.
-            CircadianNumericParameter("drift_reset_variance", "Generic drift reset variance", 0.01, 0.01, 4.0, 99, 2),
-            // Higher values let a generic change branch estimate a slope farther from its proposed jump target.
-            CircadianNumericParameter("preferred_regime_prior_days", "Preferred regime prior", 180.0, 7.0, 180.0, 173, 0, "d"),
-            // Higher values make transitions to or from 24-hour tau less likely a priori.
-            CircadianNumericParameter("preferred_regime_min_evidence", "Preferred regime evidence", 6.3, 3.0, 10.0, 28, 1),
-            // Sets the minimum accumulated anchor weight required to propose and commit a preferred change.
-            CircadianNumericParameter("preferred_drift_reset_variance", "Preferred drift reset variance", 0.01, 0.01, 0.50, 49, 2),
-            // Higher values let entrainment or release branches adapt farther from their favored tau target.
-            CircadianNumericParameter("offset_reset_variance", "Offset reset variance", 0.86, 0.25, 36.0, 143, 2, "h²"),
-            // Higher values allow a regime change to explain more timing relocation as sleep placement rather than phase.
-            CircadianNumericParameter("offset_adaptation_days", "Offset adaptation", 14.0, 3.0, 42.0, 39, 0, "d"),
-            // Higher values preserve the inferred sleep-placement offset longer before transferring it into phase.
-            CircadianNumericParameter("change_commit_probability", "Generic change probability", 0.67, 0.60, 0.99, 38, 2),
-            // Higher values require stronger posterior confidence before committing a generic boundary.
-            CircadianNumericParameter("preferred_change_commit_probability", "Preferred change probability", 0.72, 0.60, 0.99, 38, 2),
-            // Higher values require stronger posterior confidence before committing entrainment or release.
-            CircadianNumericParameter("generic_change_weight", "Generic change weight", 0.15, 0.01, 0.50, 48, 2),
-            // Higher values favor arbitrary slope-jump branches over offset-only branches within the generic hazard.
-            CircadianNumericParameter("generic_jump_scale", "Generic jump scale", 0.83, 0.20, 1.50, 25, 2, "h/d"),
-            // Sets the positive and negative drift displacement proposed by generic slope-jump branches.
-            CircadianNumericParameter("offset_change_weight", "Offset change weight", 0.26, 0.01, 0.50, 48, 2),
-            // Higher values favor offset-only branches over arbitrary slope jumps within the generic hazard.
-            durationSmoothingParameter(),
-            // Higher values smooth estimated sleep duration over more days without directly changing phase or tau.
-        )
-
-        override fun analyze(records: List<SleepRecord>, extraDays: Int, values: Map<String, Double>): CircadianAnalysis =
-            analyzeCircadianSwitchingKalman(
-                records = records,
-                extraDays = extraDays,
-                config = SwitchingKalmanConfig(
-                    driftPrior = values.valueOf("drift_prior"),
-                    processPhaseVariance = values.valueOf("phase_variance"),
-                    processDriftVariance = values.valueOf("drift_variance"),
-                    measurementVarianceAtUnitWeight = values.valueOf("measurement_variance"),
-                    regimePriorDays = values.valueOf("regime_prior_days"),
-                    regimeMinEvidence = values.valueOf("regime_min_evidence"),
-                    driftResetVariance = values.valueOf("drift_reset_variance"),
-                    preferredRegimePriorDays = values.valueOf("preferred_regime_prior_days"),
-                    preferredRegimeMinEvidence = values.valueOf("preferred_regime_min_evidence"),
-                    preferredDriftResetVariance = values.valueOf("preferred_drift_reset_variance"),
-                    offsetResetVariance = values.valueOf("offset_reset_variance"),
-                    offsetAdaptationDays = values.valueOf("offset_adaptation_days"),
-                    changeCommitProbability = values.valueOf("change_commit_probability"),
-                    preferredChangeCommitProbability = values.valueOf("preferred_change_commit_probability"),
-                    genericChangeWeight = values.valueOf("generic_change_weight"),
-                    genericJumpScale = values.valueOf("generic_jump_scale"),
-                    offsetChangeWeight = values.valueOf("offset_change_weight"),
-                    durationSmoothing = DurationSmoothingConfig(values.valueOf("duration_smoothing_sigma")),
-                ),
-            )
-    }
-
-    private val adaptiveKalman = object : CircadianAlgorithmDefinition {
-        override val id = ADAPTIVE_KALMAN_ID
-        override val displayName = "Adaptive Kalman (experimental)"
-        override val parameters = listOf(
             CircadianNumericParameter("drift_prior", "Daily drift prior", adaptiveDefaults.driftPrior, -1.5, 3.0, 90, 2, "h/d"),
             CircadianNumericParameter("phase_variance", "Phase variance", adaptiveDefaults.processPhaseVariance, 0.01, 0.50, 49, 2),
             CircadianNumericParameter("drift_variance", "Drift variance", adaptiveDefaults.processDriftVariance, 0.0001, 0.02, 99, 4),
             CircadianNumericParameter("measurement_variance", "Measurement variance", adaptiveDefaults.measurementVarianceAtUnitWeight, 0.25, 10.0, 39, 2),
-            CircadianNumericParameter("evidence_window_days", "Transition window", adaptiveDefaults.evidenceWindowDays.toDouble(), 7.0, 42.0, 35, 0, "d"),
-            CircadianNumericParameter("evidence_min_anchors", "Transition anchors", adaptiveDefaults.evidenceMinAnchors.toDouble(), 5.0, 14.0, 9, 0),
-            CircadianNumericParameter("evidence_min_anchor_weight", "Minimum anchor weight", adaptiveDefaults.evidenceMinAnchorWeight, 0.10, 0.90, 16, 2),
-            CircadianNumericParameter("evidence_min_drift_delta", "Transition drift delta", adaptiveDefaults.evidenceMinDriftDelta, 0.20, 1.00, 16, 2, "h/d"),
-            CircadianNumericParameter("evidence_fit_improvement", "Transition fit improvement", adaptiveDefaults.evidenceFitImprovement, 1.1, 5.0, 39, 1, "×"),
-            CircadianNumericParameter("evidence_max_mean_loss", "Transition residual tolerance", adaptiveDefaults.evidenceMaxMeanHuberLoss, 0.005, 1.0, 199, 3),
-            CircadianNumericParameter("evidence_max_half_slope_difference", "Transition half-slope tolerance", adaptiveDefaults.evidenceMaxHalfSlopeDifference, 0.10, 1.50, 28, 2, "h/d"),
-            CircadianNumericParameter("evidence_max_anchor_gap_days", "Transition maximum anchor gap", adaptiveDefaults.evidenceMaxAnchorGapDays.toDouble(), 1.0, 14.0, 13, 0, "d"),
-            CircadianNumericParameter("minimum_regime_days", "Minimum regime duration", adaptiveDefaults.minimumRegimeDays.toDouble(), 14.0, 120.0, 106, 0, "d"),
-            CircadianNumericParameter("commit_min_drift_delta", "Commit drift delta", adaptiveDefaults.commitMinDriftDelta, 0.50, 1.50, 20, 2, "h/d"),
-            CircadianNumericParameter("commit_fit_improvement", "Commit fit improvement", adaptiveDefaults.commitFitImprovement, 2.0, 10.0, 32, 1, "×"),
-            CircadianNumericParameter("commit_max_mean_loss", "Commit residual tolerance", adaptiveDefaults.commitMaxMeanHuberLoss, 0.005, 0.10, 95, 3),
-            CircadianNumericParameter("commit_max_half_slope_difference", "Commit half-slope tolerance", adaptiveDefaults.commitMaxHalfSlopeDifference, 0.10, 0.80, 28, 2, "h/d"),
-            CircadianNumericParameter("transition_phase_variance", "Transition phase variance", adaptiveDefaults.transitionPhaseVariance, 0.50, 36.0, 71, 2),
-            CircadianNumericParameter("transition_drift_variance", "Transition drift variance", adaptiveDefaults.transitionDriftVariance, 0.001, 0.10, 99, 3),
             durationSmoothingParameter(),
         )
 
@@ -221,6 +96,50 @@ object CircadianAlgorithmRegistry {
                     processPhaseVariance = values.valueOf("phase_variance"),
                     processDriftVariance = values.valueOf("drift_variance"),
                     measurementVarianceAtUnitWeight = values.valueOf("measurement_variance"),
+                ),
+                transitionConfig = null,
+                durationSmoothing = DurationSmoothingConfig(values.valueOf("duration_smoothing_sigma")),
+                algorithmId = KALMAN_ID,
+            )
+    }
+
+    private val adaptiveKalman = object : CircadianAlgorithmDefinition {
+        override val id = ADAPTIVE_KALMAN_ID
+        override val displayName = "Kalman + change detection (experimental)"
+        override val parameters = listOf(
+            CircadianNumericParameter("drift_prior", "Daily drift prior", adaptiveDefaults.driftPrior, -1.5, 3.0, 90, 2, "h/d"),
+            CircadianNumericParameter("phase_variance", "Phase variance", adaptiveDefaults.processPhaseVariance, 0.01, 0.50, 49, 2),
+            CircadianNumericParameter("drift_variance", "Drift variance", adaptiveDefaults.processDriftVariance, 0.0001, 0.02, 99, 4),
+            CircadianNumericParameter("measurement_variance", "Measurement variance", adaptiveDefaults.measurementVarianceAtUnitWeight, 0.25, 10.0, 39, 2),
+            CircadianNumericParameter("evidence_window_days", "Transition window", transitionDefaults.evidenceWindowDays.toDouble(), 7.0, 42.0, 35, 0, "d"),
+            CircadianNumericParameter("evidence_min_anchors", "Transition anchors", transitionDefaults.evidenceMinAnchors.toDouble(), 5.0, 14.0, 9, 0),
+            CircadianNumericParameter("evidence_min_anchor_weight", "Minimum anchor weight", transitionDefaults.evidenceMinAnchorWeight, 0.10, 0.90, 16, 2),
+            CircadianNumericParameter("evidence_min_drift_delta", "Transition drift delta", transitionDefaults.evidenceMinDriftDelta, 0.20, 1.00, 16, 2, "h/d"),
+            CircadianNumericParameter("evidence_fit_improvement", "Transition fit improvement", transitionDefaults.evidenceFitImprovement, 1.1, 5.0, 39, 1, "×"),
+            CircadianNumericParameter("evidence_max_mean_loss", "Transition residual tolerance", transitionDefaults.evidenceMaxMeanHuberLoss, 0.005, 1.0, 199, 3),
+            CircadianNumericParameter("evidence_max_half_slope_difference", "Transition half-slope tolerance", transitionDefaults.evidenceMaxHalfSlopeDifference, 0.10, 1.50, 28, 2, "h/d"),
+            CircadianNumericParameter("evidence_max_anchor_gap_days", "Transition maximum anchor gap", transitionDefaults.evidenceMaxAnchorGapDays.toDouble(), 1.0, 14.0, 13, 0, "d"),
+            CircadianNumericParameter("minimum_regime_days", "Minimum regime duration", transitionDefaults.minimumRegimeDays.toDouble(), 14.0, 120.0, 106, 0, "d"),
+            CircadianNumericParameter("commit_min_drift_delta", "Commit drift delta", transitionDefaults.commitMinDriftDelta, 0.50, 1.50, 20, 2, "h/d"),
+            CircadianNumericParameter("commit_fit_improvement", "Commit fit improvement", transitionDefaults.commitFitImprovement, 2.0, 10.0, 32, 1, "×"),
+            CircadianNumericParameter("commit_max_mean_loss", "Commit residual tolerance", transitionDefaults.commitMaxMeanHuberLoss, 0.005, 0.10, 95, 3),
+            CircadianNumericParameter("commit_max_half_slope_difference", "Commit half-slope tolerance", transitionDefaults.commitMaxHalfSlopeDifference, 0.10, 0.80, 28, 2, "h/d"),
+            CircadianNumericParameter("transition_phase_variance", "Transition phase variance", transitionDefaults.transitionPhaseVariance, 0.50, 36.0, 71, 2),
+            CircadianNumericParameter("transition_drift_variance", "Transition drift variance", transitionDefaults.transitionDriftVariance, 0.001, 0.10, 99, 3),
+            durationSmoothingParameter(),
+        )
+
+        override fun analyze(records: List<SleepRecord>, extraDays: Int, values: Map<String, Double>): CircadianAnalysis =
+            analyzeCircadianAdaptiveKalman(
+                records = records,
+                extraDays = extraDays,
+                config = AdaptiveKalmanConfig(
+                    driftPrior = values.valueOf("drift_prior"),
+                    processPhaseVariance = values.valueOf("phase_variance"),
+                    processDriftVariance = values.valueOf("drift_variance"),
+                    measurementVarianceAtUnitWeight = values.valueOf("measurement_variance"),
+                ),
+                transitionConfig = AdaptiveKalmanTransitionConfig(
                     evidenceWindowDays = values.valueOf("evidence_window_days").toInt(),
                     evidenceMinAnchors = values.valueOf("evidence_min_anchors").toInt(),
                     evidenceMinAnchorWeight = values.valueOf("evidence_min_anchor_weight"),
@@ -238,10 +157,11 @@ object CircadianAlgorithmRegistry {
                     transitionDriftVariance = values.valueOf("transition_drift_variance"),
                 ),
                 durationSmoothing = DurationSmoothingConfig(values.valueOf("duration_smoothing_sigma")),
+                algorithmId = ADAPTIVE_KALMAN_ID,
             )
     }
 
-    val algorithms: List<CircadianAlgorithmDefinition> = listOf(csf, kalman, switchingKalman, adaptiveKalman)
+    val algorithms: List<CircadianAlgorithmDefinition> = listOf(csf, kalman, adaptiveKalman)
     val defaultAlgorithm: CircadianAlgorithmDefinition = kalman
 
     fun algorithm(id: String): CircadianAlgorithmDefinition =

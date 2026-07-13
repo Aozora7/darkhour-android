@@ -45,9 +45,11 @@ fun analyzeCircadianAdaptiveKalman(
     records: List<SleepRecord>,
     extraDays: Int = 0,
     config: AdaptiveKalmanConfig = AdaptiveKalmanConfig(),
+    transitionConfig: AdaptiveKalmanTransitionConfig? = AdaptiveKalmanTransitionConfig(),
     durationSmoothing: DurationSmoothingConfig = DurationSmoothingConfig(),
+    algorithmId: String = ADAPTIVE_KALMAN_ALGORITHM_ID,
 ): AdaptiveKalmanAnalysis {
-    if (records.isEmpty()) return emptyAnalysis()
+    if (records.isEmpty()) return emptyAnalysis(algorithmId)
     val sorted = records.sortedBy(SleepRecord::startTime)
     val firstDate = sorted.first().dateOfSleep
     val offset = sorted.first().startZoneOffset ?: sorted.first().endZoneOffset ?: ZoneOffset.UTC
@@ -60,10 +62,11 @@ fun analyzeCircadianAdaptiveKalman(
             globalFirstDateMs = firstDateMs,
             extraDays = if (index == recordSegments.lastIndex) extraDays else 0,
             config = config,
+            transitionConfig = transitionConfig,
             durationSmoothing = durationSmoothing,
         )
     }
-    if (segments.isEmpty()) return emptyAnalysis()
+    if (segments.isEmpty()) return emptyAnalysis(algorithmId)
     val days = buildList {
         segments.forEachIndexed { index, segment ->
             if (index > 0) {
@@ -80,6 +83,7 @@ fun analyzeCircadianAdaptiveKalman(
         globalTau = globalTau,
         globalDailyDrift = globalTau - 24.0,
         days = days,
+        algorithmId = algorithmId,
         anchorCount = segments.sumOf(SegmentResult::anchorCount),
         transitionEvidenceDays = segments.flatMap(SegmentResult::transitionEvidenceDays),
         changePoints = segments.flatMap(SegmentResult::changePoints),
@@ -92,6 +96,7 @@ private fun analyzeSegment(
     globalFirstDateMs: Long,
     extraDays: Int,
     config: AdaptiveKalmanConfig,
+    transitionConfig: AdaptiveKalmanTransitionConfig?,
     durationSmoothing: DurationSmoothingConfig,
 ): SegmentResult? {
     val anchors = prepareWeightedMidpointAnchors(records, globalFirstDate, globalFirstDateMs)
@@ -103,6 +108,7 @@ private fun analyzeSegment(
         firstDay = firstDay,
         lastDay = dataEndDay + extraDays,
         config = config,
+        transitionConfig = transitionConfig,
     )
     val states = fit.states
     val durations = smoothDurations(
@@ -180,11 +186,12 @@ private fun gapDay(date: LocalDate) = CircadianDay(
 
 private fun normalizeClockHour(hour: Double): Double = ((hour % 24.0) + 24.0) % 24.0
 
-private fun emptyAnalysis() = AdaptiveKalmanAnalysis(
+private fun emptyAnalysis(algorithmId: String) = AdaptiveKalmanAnalysis(
     globalTau = 24.0,
     globalDailyDrift = 0.0,
     days = emptyList(),
     anchorCount = 0,
+    algorithmId = algorithmId,
     transitionEvidenceDays = emptyList(),
     changePoints = emptyList(),
 )

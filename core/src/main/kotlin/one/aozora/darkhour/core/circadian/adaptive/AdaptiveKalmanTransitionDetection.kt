@@ -34,6 +34,7 @@ fun detectAdaptiveKalmanTransitions(
     firstDay: Int = observations.minOfOrNull(AdaptiveKalmanObservation::dayNumber) ?: 0,
     lastDay: Int = observations.maxOfOrNull(AdaptiveKalmanObservation::dayNumber) ?: firstDay,
     config: AdaptiveKalmanConfig = AdaptiveKalmanConfig(),
+    transitionConfig: AdaptiveKalmanTransitionConfig = AdaptiveKalmanTransitionConfig(),
 ): List<AdaptiveKalmanTransition> {
     if (observations.isEmpty() || lastDay < firstDay) return emptyList()
     val sorted = observations.sortedBy(AdaptiveKalmanObservation::dayNumber)
@@ -54,10 +55,14 @@ fun detectAdaptiveKalmanTransitions(
             val resolvedPhase = resolveKalmanAmbiguity(observation.midpointHour, predicted.phase)
             val resolved = ResolvedObservation(day, resolvedPhase, observation.weight, predicted.drift)
             var resolvedForHistory = resolved
-            val initialRegimeIsLearned = day - firstDay >= 2 * config.evidenceWindowDays
-            val candidate = if (initialRegimeIsLearned) transitionCandidate(history + resolved, config) else null
+            val initialRegimeIsLearned = day - firstDay >= 2 * transitionConfig.evidenceWindowDays
+            val candidate = if (initialRegimeIsLearned) {
+                transitionCandidate(history + resolved, config, transitionConfig)
+            } else {
+                null
+            }
             val regimeIsPersistent = transitions.lastOrNull()
-                ?.let { day - it.boundaryDay >= config.minimumRegimeDays }
+                ?.let { day - it.boundaryDay >= transitionConfig.minimumRegimeDays }
                 ?: true
             if (candidate != null && regimeIsPersistent && day != firstDay) {
                 val transition = AdaptiveKalmanTransition(
@@ -82,8 +87,8 @@ fun detectAdaptiveKalmanTransitions(
                     predicted,
                     KalmanStateReset(
                         drift = transition.newDrift,
-                        phaseVariance = transition.evidence * config.transitionPhaseVariance,
-                        driftVariance = config.transitionDriftVariance,
+                        phaseVariance = transition.evidence * transitionConfig.transitionPhaseVariance,
+                        driftVariance = transitionConfig.transitionDriftVariance,
                         phase = transition.boundaryPhase,
                         blend = transition.evidence,
                     ),
@@ -101,7 +106,7 @@ fun detectAdaptiveKalmanTransitions(
                 resolvedPhase,
             )
             history += resolvedForHistory
-            history.removeAll { it.dayNumber < day - 2 * config.evidenceWindowDays }
+            history.removeAll { it.dayNumber < day - 2 * transitionConfig.evidenceWindowDays }
         } else {
             state = predicted
         }
@@ -112,54 +117,67 @@ fun detectAdaptiveKalmanTransitions(
 private fun transitionCandidate(
     history: List<ResolvedObservation>,
     config: AdaptiveKalmanConfig,
+    transitionConfig: AdaptiveKalmanTransitionConfig,
 ): TransitionCandidate? {
     // Treat commit settings as an additional gate even if independently
     // tuned registry values cross. Detection must never become stricter than
     // committing the resulting reset.
-    val commitMinDriftDelta = max(config.commitMinDriftDelta, config.evidenceMinDriftDelta)
-    val commitFitImprovement = max(config.commitFitImprovement, config.evidenceFitImprovement)
-    val commitMaxMeanHuberLoss = min(config.commitMaxMeanHuberLoss, config.evidenceMaxMeanHuberLoss)
-    val commitMaxHalfSlopeDifference = min(
-        config.commitMaxHalfSlopeDifference,
-        config.evidenceMaxHalfSlopeDifference,
+    val commitMinDriftDelta = max(
+        transitionConfig.commitMinDriftDelta,
+        transitionConfig.evidenceMinDriftDelta,
     )
-    val eligible = history.filter { it.weight >= config.evidenceMinAnchorWeight }
-    if (eligible.size < config.evidenceMinAnchors) return null
+    val commitFitImprovement = max(
+        transitionConfig.commitFitImprovement,
+        transitionConfig.evidenceFitImprovement,
+    )
+    val commitMaxMeanHuberLoss = min(
+        transitionConfig.commitMaxMeanHuberLoss,
+        transitionConfig.evidenceMaxMeanHuberLoss,
+    )
+    val commitMaxHalfSlopeDifference = min(
+        transitionConfig.commitMaxHalfSlopeDifference,
+        transitionConfig.evidenceMaxHalfSlopeDifference,
+    )
+    val eligible = history.filter { it.weight >= transitionConfig.evidenceMinAnchorWeight }
+    if (eligible.size < transitionConfig.evidenceMinAnchors) return null
     var strongest: TransitionCandidate? = null
-    for (start in 0..eligible.size - config.evidenceMinAnchors) {
+    for (start in 0..eligible.size - transitionConfig.evidenceMinAnchors) {
         val suffix = eligible.subList(start, eligible.size)
-        if (suffix.last().dayNumber - suffix.first().dayNumber > config.evidenceWindowDays) continue
+        if (suffix.last().dayNumber - suffix.first().dayNumber > transitionConfig.evidenceWindowDays) continue
         if (suffix.zipWithNext().any { (previous, next) ->
-                next.dayNumber - previous.dayNumber > config.evidenceMaxAnchorGapDays
+                next.dayNumber - previous.dayNumber > transitionConfig.evidenceMaxAnchorGapDays
             }
         ) continue
         val previousDrift = eligible
-            .lastOrNull { it.dayNumber <= suffix.first().dayNumber - config.evidenceMinAnchors }
+            .lastOrNull { it.dayNumber <= suffix.first().dayNumber - transitionConfig.evidenceMinAnchors }
             ?.predictedDrift
             ?: suffix.first().predictedDrift
         val fit = fitHuberLine(suffix, config.measurementVarianceAtUnitWeight)
         val delta = abs(fit.slope - previousDrift)
-        if (delta < config.evidenceMinDriftDelta || !isEntrainmentBoundary(previousDrift, fit.slope)) continue
+        if (delta < transitionConfig.evidenceMinDriftDelta || !isEntrainmentBoundary(previousDrift, fit.slope)) continue
         val oldFit = fitHuberFixedSlope(suffix, previousDrift, config.measurementVarianceAtUnitWeight)
         val oldLoss = robustLoss(suffix, oldFit, config.measurementVarianceAtUnitWeight)
         val newLoss = robustLoss(suffix, fit, config.measurementVarianceAtUnitWeight)
         val ratio = oldLoss / max(newLoss, 1e-9)
-        if (ratio < config.evidenceFitImprovement || newLoss / suffix.size > config.evidenceMaxMeanHuberLoss) continue
+        if (
+            ratio < transitionConfig.evidenceFitImprovement ||
+            newLoss / suffix.size > transitionConfig.evidenceMaxMeanHuberLoss
+        ) continue
         val halves = suffix.chunked((suffix.size + 1) / 2)
         if (halves.size < 2 || halves.any { it.size < 3 }) continue
         val halfSlopes = halves.map { fitHuberLine(it, config.measurementVarianceAtUnitWeight).slope }
-        if (halfSlopes.any { abs(it - fit.slope) > config.evidenceMaxHalfSlopeDifference }) continue
+        if (halfSlopes.any { abs(it - fit.slope) > transitionConfig.evidenceMaxHalfSlopeDifference }) continue
         val halfRatios = halves.map { half ->
             val halfOld = fitHuberFixedSlope(half, previousDrift, config.measurementVarianceAtUnitWeight)
             val halfNew = fitHuberFixedSlope(half, fit.slope, config.measurementVarianceAtUnitWeight)
             robustLoss(half, halfOld, config.measurementVarianceAtUnitWeight) /
                 max(robustLoss(half, halfNew, config.measurementVarianceAtUnitWeight), 1e-9)
         }
-        if (halfRatios.any { it < config.evidenceFitImprovement }) continue
-        val weightEvidence = (suffix.sumOf(ResolvedObservation::weight) / config.evidenceMinAnchors)
+        if (halfRatios.any { it < transitionConfig.evidenceFitImprovement }) continue
+        val weightEvidence = (suffix.sumOf(ResolvedObservation::weight) / transitionConfig.evidenceMinAnchors)
             .coerceIn(0.0, 1.0)
-        val ratioEvidence = ((ratio / config.evidenceFitImprovement) - 1.0).coerceIn(0.0, 1.0)
-        val deltaEvidence = ((delta / config.evidenceMinDriftDelta) - 1.0).coerceIn(0.0, 1.0)
+        val ratioEvidence = ((ratio / transitionConfig.evidenceFitImprovement) - 1.0).coerceIn(0.0, 1.0)
+        val deltaEvidence = ((delta / transitionConfig.evidenceMinDriftDelta) - 1.0).coerceIn(0.0, 1.0)
         val candidate = TransitionCandidate(
             evidence = weightEvidence * (0.5 + 0.25 * ratioEvidence + 0.25 * deltaEvidence),
             previousDrift = previousDrift,

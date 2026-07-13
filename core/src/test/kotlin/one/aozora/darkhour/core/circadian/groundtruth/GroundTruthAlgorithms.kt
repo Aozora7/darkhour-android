@@ -13,13 +13,6 @@ object UnwrappedKalmanGroundTruthAlgorithm : GroundTruthAlgorithm {
         CircadianAlgorithmRegistry.analyze(records, algorithmId = id).toGroundTruthPrediction()
 }
 
-object SwitchingKalmanGroundTruthAlgorithm : GroundTruthAlgorithm {
-    override val id = CircadianAlgorithmRegistry.SWITCHING_KALMAN_ID
-
-    override fun analyze(records: List<SleepRecord>): List<GroundTruthPredictionDay> =
-        CircadianAlgorithmRegistry.analyze(records, algorithmId = id).toGroundTruthPrediction()
-}
-
 object AdaptiveKalmanGroundTruthAlgorithm : GroundTruthAlgorithm {
     override val id = CircadianAlgorithmRegistry.ADAPTIVE_KALMAN_ID
 

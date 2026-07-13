@@ -1,6 +1,5 @@
 package one.aozora.darkhour.core.circadian.kalman
 
-import one.aozora.darkhour.core.circadian.DurationSmoothingConfig
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.round
@@ -25,25 +24,7 @@ data class KalmanConfig(
     val processDriftVariance: Double = 0.001,
     val measurementVarianceAtUnitWeight: Double = 4.0,
     val gateStandardDeviations: Double = 6.0,
-    val durationSmoothing: DurationSmoothingConfig = DurationSmoothingConfig(),
-    val changeDetection: KalmanChangeDetectionConfig = KalmanChangeDetectionConfig(),
 )
-
-data class KalmanChangeDetectionConfig(
-    val windowDays: Int = 14,
-    val minAnchors: Int = 7,
-    val minAnchorWeight: Double = 0.50,
-    val minDriftDelta: Double = 0.30,
-    val fitImprovement: Double = 2.0,
-) {
-    init {
-        require(windowDays >= 1)
-        require(minAnchors >= 2)
-        require(minAnchorWeight > 0.0)
-        require(minDriftDelta > 0.0)
-        require(fitImprovement > 1.0)
-    }
-}
 
 data class KalmanTrendState(
     val dayNumber: Int,

@@ -1,35 +1,28 @@
 package one.aozora.darkhour.core.circadian.kalman
 
 import one.aozora.darkhour.core.circadian.CircadianAlgorithmRegistry
+import one.aozora.darkhour.core.circadian.adaptive.AdaptiveKalmanConfig
+import one.aozora.darkhour.core.circadian.adaptive.analyzeCircadianAdaptiveKalman
 import one.aozora.darkhour.core.circadian.csf.SyntheticOptions
 import one.aozora.darkhour.core.circadian.csf.generateSyntheticRecords
-import one.aozora.darkhour.core.circadian.groundtruth.GroundTruthFixtures
 import one.aozora.darkhour.core.model.SleepRecord
 import java.time.Duration
 import java.time.LocalDate
 import java.time.ZoneOffset
 import kotlin.math.round
 import org.junit.Assert.assertTrue
-import org.junit.Assume.assumeTrue
 import org.junit.Test
 
 class KalmanAlarmTruncationTest {
     @Test
-    fun switchingKalmanIgnoresTemporaryAlarmTruncation() {
-        val analysis = analyzeCircadianSwitchingKalman(
-            alarmTruncationFixture(),
-            config = SwitchingKalmanConfig(),
-        )
-        assertTrue(
-            "switching Kalman created a boundary for alarm truncation: ${analysis.changePoints}",
-            analysis.changePoints.isEmpty(),
-        )
-    }
-
-    @Test
     fun temporaryAlarmTruncationDoesNotReplaceTheFreeRunningTrend() {
         val records = alarmTruncationFixture()
-        val analysis = analyzeCircadianKalman(records, config = productionKalmanConfig())
+        val analysis = analyzeCircadianAdaptiveKalman(
+            records,
+            config = productionKalmanConfig(),
+            transitionConfig = null,
+            algorithmId = CircadianAlgorithmRegistry.KALMAN_ID,
+        )
         val alarmEndDate = START_DATE.plusDays(ALARM_END_DAY.toLong())
         val alarmAndRecovery = analysis.days.filter {
             !it.isGap && !it.isForecast && it.date in ALARM_START_DATE..alarmEndDate.plusDays(14)
@@ -53,33 +46,6 @@ class KalmanAlarmTruncationTest {
         )
     }
 
-    @Test
-    fun privateAlarmEpisodeDoesNotCreateABoundaryWhenFixtureIsAvailable() {
-        assumeTrue("Private ground-truth fixtures are not available", GroundTruthFixtures.isAvailable)
-        val definition = CircadianAlgorithmRegistry.algorithm(CircadianAlgorithmRegistry.KALMAN_ID)
-        val analysis = definition.analyze(
-            records = GroundTruthFixtures.load("Aozora_2026-02-13").records,
-            extraDays = 0,
-            values = CircadianAlgorithmRegistry.resolvedValues(definition.id, emptyMap()),
-        ) as KalmanAnalysis
-
-        val episode = LocalDate.parse("2025-03-24")..LocalDate.parse("2025-04-08")
-        assertTrue(
-            "private alarm episode created a change point: ${analysis.changePoints}",
-            analysis.changePoints.none { it.date in episode },
-        )
-    }
-
-    @Test
-    fun switchingKalmanPrivateAlarmEpisodeDoesNotCreateABoundaryWhenFixtureIsAvailable() {
-        assumeTrue("Private ground-truth fixtures are not available", GroundTruthFixtures.isAvailable)
-        val analysis = analyzeCircadianSwitchingKalman(GroundTruthFixtures.load("Aozora_2026-02-13").records)
-        val episode = LocalDate.parse("2025-03-24")..LocalDate.parse("2025-04-08")
-        assertTrue(
-            "switching Kalman private alarm episode created a boundary: ${analysis.changePoints}",
-            analysis.changePoints.none { it.date in episode },
-        )
-    }
 }
 
 private fun alarmTruncationFixture(): List<SleepRecord> {
@@ -133,7 +99,7 @@ private const val ALARM_END_DAY = 78
 private val START_DATE = LocalDate.parse("2025-01-13")
 private val ALARM_START_DATE = START_DATE.plusDays(ALARM_START_DAY.toLong())
 
-private fun productionKalmanConfig() = KalmanConfig(
+private fun productionKalmanConfig() = AdaptiveKalmanConfig(
     driftPrior = 1.0,
     processPhaseVariance = 0.42,
     processDriftVariance = 0.0001,

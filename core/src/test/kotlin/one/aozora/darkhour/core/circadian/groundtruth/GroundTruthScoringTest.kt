@@ -4,8 +4,6 @@ import one.aozora.darkhour.core.circadian.CircadianAlgorithmRegistry
 import one.aozora.darkhour.core.circadian.csf.SyntheticOptions
 import one.aozora.darkhour.core.circadian.csf.generateSyntheticRecords
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertTrue
-import org.junit.Assume.assumeTrue
 import java.time.LocalDate
 import org.junit.Test
 
@@ -16,7 +14,6 @@ class GroundTruthScoringTest {
         val algorithms = listOf(
             CsfGroundTruthAlgorithm,
             UnwrappedKalmanGroundTruthAlgorithm,
-            SwitchingKalmanGroundTruthAlgorithm,
             AdaptiveKalmanGroundTruthAlgorithm,
         )
 
@@ -24,36 +21,6 @@ class GroundTruthScoringTest {
             val expected = CircadianAlgorithmRegistry.analyze(records, algorithmId = algorithm.id)
                 .toGroundTruthPrediction()
             assertEquals(expected, algorithm.analyze(records))
-        }
-    }
-
-    @Test
-    fun compactFixturesRetainTheManualOverlayAndControlPoints() {
-        assumeTrue("Private ground-truth fixtures are not available", GroundTruthFixtures.isAvailable)
-        val datasets = GroundTruthFixtures.loadAll()
-
-        assertTrue(datasets.all { it.records.isNotEmpty() && it.overlay.isNotEmpty() && it.controlPoints.isNotEmpty() })
-        assertTrue(datasets.all { it.records.all { record -> record.stageData.isEmpty() && record.stages == null } })
-        assertTrue(datasets.all { it.annotationZone.id == "Europe/Riga" && it.records.all { record -> record.startZoneOffset != null } })
-    }
-
-    @Test
-    fun implementationsCanBeScoredAgainstEveryManualOverlay() {
-        assumeTrue("Private ground-truth fixtures are not available", GroundTruthFixtures.isAvailable)
-        val algorithms = listOf(
-            CsfGroundTruthAlgorithm,
-            UnwrappedKalmanGroundTruthAlgorithm,
-            SwitchingKalmanGroundTruthAlgorithm,
-            AdaptiveKalmanGroundTruthAlgorithm,
-        )
-        for (algorithm in algorithms) {
-            for (dataset in GroundTruthFixtures.loadAll()) {
-                val score = scoreAgainstGroundTruth(algorithm.analyze(dataset.records), dataset)
-                println(score.summary(dataset.id, algorithm.id))
-
-                assertTrue("${algorithm.id}/${dataset.id}: no overlapping scored days", score.pairedDays > 0)
-                assertTrue("${algorithm.id}/${dataset.id}: non-finite score", score.meanAbsolutePhaseErrorHours.isFinite())
-            }
         }
     }
 

@@ -6,7 +6,7 @@ data class AdaptiveKalmanObservation(
     val weight: Double,
 )
 
-/** Tuned production candidate defaults. Registry metadata must mirror these values. */
+/** Shared Kalman state-space parameters used by production and experimental registrations. */
 data class AdaptiveKalmanConfig(
     val driftPrior: Double = 0.52,
     val initialPhaseVariance: Double = 4.0,
@@ -15,6 +15,20 @@ data class AdaptiveKalmanConfig(
     val processDriftVariance: Double = 0.0001,
     val measurementVarianceAtUnitWeight: Double = 9.77,
     val gateStandardDeviations: Double = 6.0,
+) {
+    init {
+        require(driftPrior.isFinite())
+        require(initialPhaseVariance > 0.0)
+        require(initialDriftVariance > 0.0)
+        require(processPhaseVariance > 0.0)
+        require(processDriftVariance > 0.0)
+        require(measurementVarianceAtUnitWeight > 0.0)
+        require(gateStandardDeviations > 0.0)
+    }
+}
+
+/** Optional transition layer. A null instance means detection cannot run. */
+data class AdaptiveKalmanTransitionConfig(
     val evidenceWindowDays: Int = 42,
     val evidenceMinAnchors: Int = 8,
     val evidenceMinAnchorWeight: Double = 0.70,
@@ -32,13 +46,6 @@ data class AdaptiveKalmanConfig(
     val transitionDriftVariance: Double = 0.01,
 ) {
     init {
-        require(driftPrior.isFinite())
-        require(initialPhaseVariance > 0.0)
-        require(initialDriftVariance > 0.0)
-        require(processPhaseVariance > 0.0)
-        require(processDriftVariance > 0.0)
-        require(measurementVarianceAtUnitWeight > 0.0)
-        require(gateStandardDeviations > 0.0)
         require(evidenceWindowDays >= 7)
         require(evidenceMinAnchors >= 5)
         require(evidenceMinAnchorWeight > 0.0)

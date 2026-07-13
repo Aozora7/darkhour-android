@@ -10,11 +10,30 @@ dependencies {
     testImplementation(libs.junit)
 }
 
+// Private manual overlays are evaluation inputs, not unit-test fixtures.
+sourceSets.test {
+    resources.exclude("circadian/ground_truth/**")
+}
+
+val privateGroundTruthResources = files("src/test/resources")
+
+tasks.register<JavaExec>("groundTruthScore") {
+    group = "verification"
+    description = "Score circadian algorithms against the optional private manual overlays."
+    dependsOn(tasks.testClasses)
+    classpath = sourceSets.test.get().runtimeClasspath + privateGroundTruthResources
+    mainClass.set("one.aozora.darkhour.core.circadian.groundtruth.GroundTruthScoringRunner")
+
+    args(
+        "--algorithms=${providers.gradleProperty("scoreAlgorithms").getOrElse("all")}",
+    )
+}
+
 tasks.register<JavaExec>("groundTruthTune") {
     group = "verification"
     description = "Search circadian algorithm parameters against the optional private ground-truth fixtures."
     dependsOn(tasks.testClasses)
-    classpath = sourceSets.test.get().runtimeClasspath
+    classpath = sourceSets.test.get().runtimeClasspath + privateGroundTruthResources
     mainClass.set("one.aozora.darkhour.core.circadian.groundtruth.GroundTruthTuner")
 
     args(
@@ -34,7 +53,7 @@ tasks.register<JavaExec>("groundTruthCausal") {
     group = "verification"
     description = "Compare blocked causal circadian forecasts against the optional private ground-truth fixtures."
     dependsOn(tasks.testClasses)
-    classpath = sourceSets.test.get().runtimeClasspath
+    classpath = sourceSets.test.get().runtimeClasspath + privateGroundTruthResources
     mainClass.set("one.aozora.darkhour.core.circadian.groundtruth.GroundTruthCausalRunner")
 
     args(

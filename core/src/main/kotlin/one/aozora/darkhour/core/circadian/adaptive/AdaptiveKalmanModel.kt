@@ -10,12 +10,22 @@ fun fitAdaptiveKalman(
     firstDay: Int = observations.minOfOrNull(AdaptiveKalmanObservation::dayNumber) ?: 0,
     lastDay: Int = observations.maxOfOrNull(AdaptiveKalmanObservation::dayNumber) ?: firstDay,
     config: AdaptiveKalmanConfig = AdaptiveKalmanConfig(),
+    transitionConfig: AdaptiveKalmanTransitionConfig? = AdaptiveKalmanTransitionConfig(),
 ): AdaptiveKalmanFit {
     if (observations.isEmpty() || lastDay < firstDay) return AdaptiveKalmanFit(emptyList(), emptyList())
     val sorted = observations.sortedBy(AdaptiveKalmanObservation::dayNumber)
-    val transitions = detectAdaptiveKalmanTransitions(sorted, firstDay, lastDay, config)
+    val transitions = transitionConfig?.let {
+        detectAdaptiveKalmanTransitions(sorted, firstDay, lastDay, config, it)
+    }.orEmpty()
     return AdaptiveKalmanFit(
-        states = runAdaptiveSmoother(sorted, firstDay, lastDay, config, transitions),
+        states = runAdaptiveSmoother(
+            sorted,
+            firstDay,
+            lastDay,
+            config,
+            transitionConfig,
+            transitions,
+        ),
         transitions = transitions,
     )
 }
@@ -26,4 +36,6 @@ fun fitAdaptiveKalmanTrend(
     firstDay: Int = observations.minOfOrNull(AdaptiveKalmanObservation::dayNumber) ?: 0,
     lastDay: Int = observations.maxOfOrNull(AdaptiveKalmanObservation::dayNumber) ?: firstDay,
     config: AdaptiveKalmanConfig = AdaptiveKalmanConfig(),
-): List<AdaptiveKalmanState> = fitAdaptiveKalman(observations, firstDay, lastDay, config).states
+    transitionConfig: AdaptiveKalmanTransitionConfig? = AdaptiveKalmanTransitionConfig(),
+): List<AdaptiveKalmanState> =
+    fitAdaptiveKalman(observations, firstDay, lastDay, config, transitionConfig).states

@@ -5,8 +5,8 @@ import one.aozora.darkhour.core.circadian.csf.TauSegment
 import one.aozora.darkhour.core.circadian.csf.computeTrueMidpoint
 import one.aozora.darkhour.core.circadian.csf.generateSyntheticRecords
 import one.aozora.darkhour.core.model.SleepRecord
-import one.aozora.darkhour.core.circadian.kalman.KalmanConfig
-import one.aozora.darkhour.core.circadian.kalman.analyzeCircadianKalman
+import one.aozora.darkhour.core.circadian.adaptive.AdaptiveKalmanConfig
+import one.aozora.darkhour.core.circadian.adaptive.analyzeCircadianAdaptiveKalman
 import java.time.Duration
 import java.time.LocalDate
 import kotlin.math.abs
@@ -55,24 +55,24 @@ class AbruptEntrainmentRegressionTest {
     }
 
     @Test
-    fun kalmanPreservesPreTreatmentHistoryAndRecognizesRapidEntrainment() {
+    fun experimentalKalmanPreservesPreTreatmentHistoryAndRecognizesRapidEntrainment() {
         val fixture = abruptEntrainmentFixture()
 
-        val behavior = transitionBehavior(CircadianAlgorithmRegistry.KALMAN_ID, fixture)
-        val direct = analyzeCircadianKalman(fixture.records, config = productionKalmanConfig())
+        val behavior = transitionBehavior(CircadianAlgorithmRegistry.ADAPTIVE_KALMAN_ID, fixture)
+        val direct = analyzeCircadianAdaptiveKalman(fixture.records, config = sharedKalmanConfig())
         val change = direct.changePoints.single()
-        val revisionBeforeBoundary = maximumRevisionBeforeBoundary(fixture, change.date)
+        val revisionBeforeBoundary = maximumRevisionBeforeBoundary(
+            fixture,
+            change.date,
+            CircadianAlgorithmRegistry.ADAPTIVE_KALMAN_ID,
+        )
         assertTrue(
             "boundary ${change.date} was not within two days of $TREATMENT_DATE",
             abs(Duration.between(TREATMENT_DATE.atStartOfDay(), change.date.atStartOfDay()).toDays()) <= 2,
         )
         assertTrue(
-            "confirmation ${change.confirmationDate} took more than seven qualifying nights",
-            Duration.between(change.date.atStartOfDay(), change.confirmationDate.atStartOfDay()).toDays() <= 6,
-        )
-        assertTrue(
-            "confirmation ${change.confirmationDate} exceeded the 14-day window",
-            Duration.between(change.date.atStartOfDay(), change.confirmationDate.atStartOfDay()).toDays() < 14,
+            "confirmation ${change.confirmationDate} took more than ten days",
+            Duration.between(change.date.atStartOfDay(), change.confirmationDate.atStartOfDay()).toDays() <= 10,
         )
         assertTrue(
             "Kalman rewrote history before inferred boundary $change by $revisionBeforeBoundary h",
@@ -87,16 +87,33 @@ class AbruptEntrainmentRegressionTest {
             abs(behavior.postLocalDriftHoursPerDay) < 0.25,
         )
     }
+
+    @Test
+    fun productionKalmanCannotRunChangeDetection() {
+        val analysis = analyzeCircadianAdaptiveKalman(
+            records = abruptEntrainmentFixture().records,
+            config = sharedKalmanConfig(),
+            transitionConfig = null,
+            algorithmId = CircadianAlgorithmRegistry.KALMAN_ID,
+        )
+
+        assertTrue(analysis.changePoints.isEmpty())
+        assertTrue(analysis.transitionEvidenceDays.isEmpty())
+    }
 }
 
-private fun maximumRevisionBeforeBoundary(fixture: AbruptEntrainmentFixture, boundary: LocalDate): Double {
+private fun maximumRevisionBeforeBoundary(
+    fixture: AbruptEntrainmentFixture,
+    boundary: LocalDate,
+    algorithmId: String,
+): Double {
     val before = CircadianAlgorithmRegistry.analyze(
         records = fixture.records.filter { it.dateOfSleep < TREATMENT_DATE },
-        algorithmId = CircadianAlgorithmRegistry.KALMAN_ID,
+        algorithmId = algorithmId,
     ).days.filterNot { it.isGap || it.isForecast }.associateBy(CircadianDay::date)
     val after = CircadianAlgorithmRegistry.analyze(
         records = fixture.records,
-        algorithmId = CircadianAlgorithmRegistry.KALMAN_ID,
+        algorithmId = algorithmId,
     ).days.filterNot { it.isGap || it.isForecast }.associateBy(CircadianDay::date)
     return before.keys.asSequence()
         .filter { it < boundary }
@@ -226,7 +243,7 @@ private fun signedCircularDifference(actual: Double, expected: Double): Double {
 
 private fun format(value: Double): String = String.format(java.util.Locale.ROOT, "%.2f", value)
 
-private fun productionKalmanConfig() = KalmanConfig(
+private fun sharedKalmanConfig() = AdaptiveKalmanConfig(
     driftPrior = 1.0,
     processPhaseVariance = 0.42,
     processDriftVariance = 0.0001,

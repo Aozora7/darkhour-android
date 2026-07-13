@@ -1,5 +1,7 @@
 package one.aozora.darkhour.core.circadian.kalman
 
+import one.aozora.darkhour.core.circadian.CircadianAlgorithmRegistry
+import one.aozora.darkhour.core.circadian.adaptive.analyzeCircadianAdaptiveKalman
 import one.aozora.darkhour.core.circadian.csf.SyntheticOptions
 import one.aozora.darkhour.core.circadian.csf.generateSyntheticRecords
 import java.time.Duration
@@ -11,12 +13,14 @@ import org.junit.Test
 class KalmanAnalyzerTest {
     @Test
     fun producesAppCompatibleAnalysisForAStableSyntheticTrend() {
-        val analysis = analyzeCircadianKalman(
+        val analysis = analyzeCircadianAdaptiveKalman(
             generateSyntheticRecords(SyntheticOptions(tau = 24.5, days = 90, noise = 0.0)),
             extraDays = 7,
+            transitionConfig = null,
+            algorithmId = CircadianAlgorithmRegistry.KALMAN_ID,
         )
 
-        assertEquals(KALMAN_ALGORITHM_ID, analysis.algorithmId)
+        assertEquals(CircadianAlgorithmRegistry.KALMAN_ID, analysis.algorithmId)
         assertEquals(7, analysis.days.count { it.isForecast })
         assertTrue(analysis.days.none { !it.nightStartHour.isFinite() || !it.nightEndHour.isFinite() })
         assertTrue(analysis.days.all { it.nightStartHour in -12.0..24.0 && it.nightEndHour in 0.0..36.0 })
@@ -40,7 +44,12 @@ class KalmanAnalyzerTest {
             )
         }
 
-        val analysis = analyzeCircadianKalman(anchored + trailingUnanchored, extraDays = 3)
+        val analysis = analyzeCircadianAdaptiveKalman(
+            anchored + trailingUnanchored,
+            extraDays = 3,
+            transitionConfig = null,
+            algorithmId = CircadianAlgorithmRegistry.KALMAN_ID,
+        )
         val nonGapDays = analysis.days.filterNot { it.isGap }
 
         assertEquals(3, analysis.days.count { it.isForecast })

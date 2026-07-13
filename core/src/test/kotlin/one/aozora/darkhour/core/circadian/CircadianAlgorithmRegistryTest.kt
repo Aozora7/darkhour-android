@@ -64,6 +64,35 @@ class CircadianAlgorithmRegistryTest {
 
         assertTrue(analysis.days.isNotEmpty())
     }
+
+    @Test
+    fun productionAndExperimentalKalmanShareBaseDynamicsWithoutATransition() {
+        val records = generateSyntheticRecords(SyntheticOptions(days = 120, tau = 24.5, noise = 0.2))
+
+        val production = CircadianAlgorithmRegistry.analyze(
+            records,
+            algorithmId = CircadianAlgorithmRegistry.KALMAN_ID,
+        )
+        val experimental = CircadianAlgorithmRegistry.analyze(
+            records,
+            algorithmId = CircadianAlgorithmRegistry.ADAPTIVE_KALMAN_ID,
+        )
+
+        assertEquals(production.days, experimental.days)
+        assertEquals(production.globalTau, experimental.globalTau, 0.0)
+    }
+
+    @Test
+    fun removedSwitchingIdFallsBackToProductionKalman() {
+        assertEquals(
+            CircadianAlgorithmRegistry.KALMAN_ID,
+            CircadianAlgorithmRegistry.algorithm("switching-kalman-v1").id,
+        )
+        assertTrue(
+            CircadianAlgorithmRegistry.algorithm(CircadianAlgorithmRegistry.KALMAN_ID)
+                .parameters.none { it.key.startsWith("evidence_") || it.key.startsWith("commit_") },
+        )
+    }
 }
 
 private fun assertParameter(

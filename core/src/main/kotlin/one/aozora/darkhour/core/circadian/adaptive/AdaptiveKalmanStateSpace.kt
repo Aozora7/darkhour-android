@@ -20,20 +20,27 @@ internal fun runAdaptiveSmoother(
     firstDay: Int,
     lastDay: Int,
     config: AdaptiveKalmanConfig,
+    transitionConfig: AdaptiveKalmanTransitionConfig?,
     transitions: List<AdaptiveKalmanTransition>,
 ): List<AdaptiveKalmanState> {
     val evidenceByDay = transitions.associate { it.boundaryDay to it.evidence }
-    val committedTransitions = transitions.filter(AdaptiveKalmanTransition::committed)
+    val committedTransitions = if (transitionConfig == null) {
+        emptyList()
+    } else {
+        transitions.filter(AdaptiveKalmanTransition::committed)
+    }
+    val resetConfig = transitionConfig
     val states = fitUnwrappedKalmanTrendWithResets(
         observations = observations.map { KalmanObservation(it.dayNumber, it.midpointHour, it.weight) },
         firstDay = firstDay,
         lastDay = lastDay,
         config = config.asKalmanConfig(),
         resets = committedTransitions.associate { transition ->
+            val transitionSettings = checkNotNull(resetConfig)
             transition.boundaryDay to KalmanStateReset(
                 drift = transition.newDrift,
-                phaseVariance = transition.evidence * config.transitionPhaseVariance,
-                driftVariance = config.transitionDriftVariance,
+                phaseVariance = transition.evidence * transitionSettings.transitionPhaseVariance,
+                driftVariance = transitionSettings.transitionDriftVariance,
                 phase = transition.boundaryPhase,
                 blend = transition.evidence,
             )
