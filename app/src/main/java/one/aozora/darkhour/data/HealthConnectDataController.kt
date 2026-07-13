@@ -59,6 +59,7 @@ class HealthConnectDataController(
                     HealthConnectClient.SDK_UNAVAILABLE -> {
                         mutableState.value = state.value.copy(
                             records = emptyList(),
+                            analysisRecords = emptyList(),
                             access = HealthConnectAccess.UNAVAILABLE,
                             totalHistoryDays = null,
                             hasHistoryPermission = false,
@@ -73,6 +74,7 @@ class HealthConnectDataController(
                     HealthConnectClient.SDK_UNAVAILABLE_PROVIDER_UPDATE_REQUIRED -> {
                         mutableState.value = state.value.copy(
                             records = emptyList(),
+                            analysisRecords = emptyList(),
                             access = HealthConnectAccess.UPDATE_REQUIRED,
                             totalHistoryDays = null,
                             hasHistoryPermission = false,
@@ -131,6 +133,7 @@ class HealthConnectDataController(
         if (!granted.containsAll(requiredPermissions(range))) {
             mutableState.value = state.value.copy(
                 records = emptyList(),
+                analysisRecords = emptyList(),
                 access = HealthConnectAccess.PERMISSION_REQUIRED,
                 totalHistoryDays = if (hasHistoryPermission) state.value.totalHistoryDays else null,
                 hasHistoryPermission = hasHistoryPermission,
@@ -167,6 +170,9 @@ class HealthConnectDataController(
             }
             mutableState.value = state.value.copy(
                 records = imported.records.map(ImportedSleepRecord::record).sortedBy(SleepRecord::startTime),
+                analysisRecords = imported.analysisRecords
+                    .map(ImportedSleepRecord::record)
+                    .sortedBy(SleepRecord::startTime),
                 totalHistoryDays = if (hasHistoryPermission) {
                     imported.totalHistoryDays ?: state.value.totalHistoryDays
                 } else {
@@ -221,7 +227,9 @@ class HealthConnectDataController(
                 )
             }
             mutableState.value = state.value.copy(
-                statsAllRecords = imported.records.map(ImportedSleepRecord::record).sortedBy(SleepRecord::startTime),
+                statsAllRecords = imported.analysisRecords
+                    .map(ImportedSleepRecord::record)
+                    .sortedBy(SleepRecord::startTime),
                 totalHistoryDays = imported.totalHistoryDays ?: state.value.totalHistoryDays,
                 hasHistoryPermission = true,
                 isStatsAllDataRefreshing = false,
@@ -241,8 +249,12 @@ class HealthConnectDataController(
         val progressRecords = progress.records
             ?.map(ImportedSleepRecord::record)
             ?.sortedBy(SleepRecord::startTime)
+        val progressAnalysisRecords = progress.analysisRecords
+            ?.map(ImportedSleepRecord::record)
+            ?.sortedBy(SleepRecord::startTime)
         mutableState.value = state.value.copy(
             records = progressRecords ?: state.value.records,
+            analysisRecords = progressAnalysisRecords ?: state.value.analysisRecords,
             importedRecordCount = progress.importedRecordCount,
             expectedRecordCount = progress.expectedRecordCount,
             isImportPartial = progress.isImportPartial,

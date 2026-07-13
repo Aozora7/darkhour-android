@@ -52,6 +52,11 @@ class MainActivity : ComponentActivity() {
             val initialDisplayOptions = remember { startupDisplayOptions }
             val initialScheduleEntries = remember { appSettings.readScheduleEntries() }
             val records = if (BuildConfig.USE_DEMO_DATA) DemoData.records else healthState.records
+            val analysisRecords = if (BuildConfig.USE_DEMO_DATA) {
+                DemoData.records
+            } else {
+                healthState.analysisRecords
+            }
             val healthConnectAccess = if (BuildConfig.USE_DEMO_DATA) {
                 one.aozora.darkhour.data.HealthConnectAccess.CONNECTED
             } else {
@@ -60,6 +65,7 @@ class MainActivity : ComponentActivity() {
             DarkHourTheme {
                 DarkHourApp(
                     records = records,
+                    analysisRecords = analysisRecords,
                     initialSettings = initialSettings,
                     onAppSettingsChange = appSettings::write,
                     initialDisplayOptions = initialDisplayOptions,

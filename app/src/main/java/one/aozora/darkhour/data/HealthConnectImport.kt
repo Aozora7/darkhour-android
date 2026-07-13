@@ -23,19 +23,25 @@ internal fun importSleepRecords(
         .asSequence()
         .filter { it.isInRange(range, now) }
         .map { it.toImportedSleepRecord(zoneId) }
-        .distinctBy { it.sourceRecordId ?: it.record.logId }
         .toList()
-    return ImportedSleepRecords(imported, totalHistoryDays)
+    val resolved = resolveImportedSleepRecords(imported)
+    return ImportedSleepRecords(
+        records = resolved.records,
+        analysisRecords = resolved.analysisRecords,
+        totalHistoryDays = totalHistoryDays,
+    )
 }
 
 internal data class ImportedSleepRecords(
     val records: List<ImportedSleepRecord>,
+    val analysisRecords: List<ImportedSleepRecord>,
     val totalHistoryDays: Int?,
 )
 
 internal data class HealthImportProgress(
     val phase: HealthImportPhase,
     val records: List<ImportedSleepRecord>? = null,
+    val analysisRecords: List<ImportedSleepRecord>? = null,
     val importedRecordCount: Int,
     val expectedRecordCount: Int?,
     val isImportPartial: Boolean,
@@ -47,17 +53,22 @@ internal class ImportedSleepAccumulator(
     private val recordsByIdentity = LinkedHashMap<Any, ImportedSleepRecord>()
 
     val size: Int
-        get() = recordsByIdentity.size
+        get() = resolvedRecords().records.size
 
     fun add(rawRecords: List<SleepSessionRecord>) {
         rawRecords.forEach { rawRecord ->
             val imported = rawRecord.toImportedSleepRecord(zoneId)
-            recordsByIdentity[imported.deduplicationIdentity()] = imported
+            val identity = imported.deduplicationIdentity()
+            recordsByIdentity[identity] = recordsByIdentity[identity]
+                ?.let { existing -> preferredImportedSleepRecord(existing, imported) }
+                ?: imported
         }
     }
 
-    fun sortedRecords(): List<ImportedSleepRecord> =
-        recordsByIdentity.values.sortedBy { it.record.startTime }
+    fun resolvedRecords(): ResolvedImportedSleepRecords =
+        resolveImportedSleepRecords(recordsByIdentity.values.toList())
+
+    fun sortedRecords(): List<ImportedSleepRecord> = resolvedRecords().records
 }
 
 internal fun totalHistoryDaysFromOldest(
@@ -72,9 +83,6 @@ internal fun totalHistoryDaysFromOldest(
         .coerceAtLeast(HealthDataRange.MINIMUM_CUSTOM_DAYS.toLong())
         .toInt()
 }
-
-private fun ImportedSleepRecord.deduplicationIdentity(): Any =
-    sourceRecordId ?: record.logId
 
 private fun SleepSessionRecord.isInRange(range: HealthDataRange, now: Instant): Boolean {
     val filterStart = when (range) {

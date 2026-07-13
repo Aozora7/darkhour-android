@@ -53,10 +53,12 @@ fun DarkHourApp(
     onRequestHistoryPermission: () -> Unit = {},
     onRequestStatsAllData: () -> Unit = {},
     onHealthDataRangeChange: (HealthDataRange) -> Unit = {},
+    analysisRecords: List<SleepRecord> = records,
 ) {
     var actogramTransforming by remember { mutableStateOf(false) }
     val appState = rememberDarkHourAppState(
         records = records,
+        analysisRecords = analysisRecords,
         initialSettings = initialSettings,
         onAppSettingsChange = onAppSettingsChange,
         initialDisplayOptions = initialDisplayOptions,

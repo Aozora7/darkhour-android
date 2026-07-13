@@ -9,6 +9,7 @@ import one.aozora.darkhour.core.model.calculateSleepScore
 import java.nio.ByteBuffer
 import java.security.MessageDigest
 import java.time.Duration
+import java.time.Instant
 import java.time.ZoneId
 
 /**
@@ -23,6 +24,10 @@ data class ImportedSleepRecord(
     val sourceRecordId: String?,
     val sourcePackageName: String?,
     val sourceDevice: String? = null,
+    val sourceRecordingMethod: Int = androidx.health.connect.client.records.metadata.Metadata.RECORDING_METHOD_UNKNOWN,
+    val sourceLastModifiedTime: Instant = Instant.EPOCH,
+    val specificStageSeconds: Long = -1,
+    val usableStageSeconds: Long = -1,
 )
 
 internal fun SleepSessionRecord.toImportedSleepRecord(
@@ -31,6 +36,13 @@ internal fun SleepSessionRecord.toImportedSleepRecord(
     val duration = Duration.between(startTime, endTime)
     val mappedStages = stages.mapNotNull { stage ->
         stage.toSleepStageInterval()
+    }
+    val specificStageSeconds = stages.sumOf { stage ->
+        if (stage.isSpecificallyClassified()) {
+            Duration.between(stage.startTime, stage.endTime).seconds.coerceAtLeast(0)
+        } else {
+            0L
+        }
     }
     val stageMinutes = mappedStages
         .groupingBy(SleepStageInterval::level)
@@ -77,8 +89,17 @@ internal fun SleepSessionRecord.toImportedSleepRecord(
         sourceDevice = listOfNotNull(metadata.device?.manufacturer, metadata.device?.model)
             .joinToString(" ")
             .ifBlank { null },
+        sourceRecordingMethod = metadata.recordingMethod,
+        sourceLastModifiedTime = metadata.lastModifiedTime,
+        specificStageSeconds = specificStageSeconds,
+        usableStageSeconds = mappedStages.sumOf { it.seconds.toLong().coerceAtLeast(0) },
     )
 }
+
+private fun SleepSessionRecord.Stage.isSpecificallyClassified(): Boolean =
+    stage != SleepSessionRecord.STAGE_TYPE_SLEEPING &&
+        stage != SleepSessionRecord.STAGE_TYPE_UNKNOWN &&
+        toSleepStageInterval() != null
 
 private fun SleepSessionRecord.Stage.toSleepStageInterval(): SleepStageInterval? {
     val level = when (stage) {
@@ -101,7 +122,7 @@ private fun SleepSessionRecord.Stage.toSleepStageInterval(): SleepStageInterval?
     )
 }
 
-private fun stableLogId(sourceId: String, startMillis: Long, endMillis: Long): Long {
+internal fun stableLogId(sourceId: String, startMillis: Long, endMillis: Long): Long {
     val identity = sourceId.ifBlank { "$startMillis:$endMillis" }
     val digest = MessageDigest.getInstance("SHA-256").digest(identity.toByteArray())
     return ByteBuffer.wrap(digest).long and Long.MAX_VALUE

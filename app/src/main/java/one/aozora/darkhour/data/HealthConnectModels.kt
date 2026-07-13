@@ -36,6 +36,7 @@ enum class HealthImportPhase {
 
 data class HealthConnectUiState(
     val records: List<SleepRecord> = emptyList(),
+    val analysisRecords: List<SleepRecord> = records,
     val statsAllRecords: List<SleepRecord>? = null,
     val access: HealthConnectAccess = HealthConnectAccess.UNAVAILABLE,
     val dataRange: HealthDataRange = HealthDataRange.DEFAULT_PERIOD,

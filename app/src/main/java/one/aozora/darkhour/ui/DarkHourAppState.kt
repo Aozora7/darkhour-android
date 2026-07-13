@@ -38,6 +38,7 @@ data class DarkHourAppState(
 @Composable
 fun rememberDarkHourAppState(
     records: List<SleepRecord>,
+    analysisRecords: List<SleepRecord>,
     initialSettings: AppSettings,
     onAppSettingsChange: (AppSettings) -> Unit,
     initialDisplayOptions: ActogramDisplayOptions,
@@ -144,12 +145,28 @@ fun rememberDarkHourAppState(
             records
         }
     }
-    val filteredRecords = remember(recordsWithDebugInjection, settings.includeNaps) {
+    val analysisRecordsWithDebugInjection = remember(analysisRecords, developerInjectedRecords) {
+        if (BuildConfig.DEBUG && developerInjectedRecords.isNotEmpty()) {
+            (analysisRecords + developerInjectedRecords)
+                .distinctBy(SleepRecord::logId)
+                .sortedBy(SleepRecord::startTime)
+        } else {
+            analysisRecords
+        }
+    }
+    val filteredDisplayRecords = remember(recordsWithDebugInjection, settings.includeNaps) {
         if (settings.includeNaps) recordsWithDebugInjection else recordsWithDebugInjection.filter { it.isMainSleep }
     }
-    val analysis = remember(filteredRecords, settings.forecastDays, developerAlgorithmId, developerCircadian.activeOverrides) {
+    val filteredAnalysisRecords = remember(analysisRecordsWithDebugInjection, settings.includeNaps) {
+        if (settings.includeNaps) {
+            analysisRecordsWithDebugInjection
+        } else {
+            analysisRecordsWithDebugInjection.filter { it.isMainSleep }
+        }
+    }
+    val analysis = remember(filteredAnalysisRecords, settings.forecastDays, developerAlgorithmId, developerCircadian.activeOverrides) {
         CircadianAnalyzer.analyze(
-            filteredRecords,
+            filteredAnalysisRecords,
             extraDays = settings.forecastDays,
             algorithmId = developerAlgorithmId,
             overrides = developerCircadian.activeOverrides,
@@ -158,9 +175,9 @@ fun rememberDarkHourAppState(
     val actogramForecastDays = settings.forecastDays.let { days ->
         if (days > 0) days + 1 else 0
     }
-    val actogramAnalysis = remember(filteredRecords, actogramForecastDays, developerAlgorithmId, developerCircadian.activeOverrides) {
+    val actogramAnalysis = remember(filteredAnalysisRecords, actogramForecastDays, developerAlgorithmId, developerCircadian.activeOverrides) {
         CircadianAnalyzer.analyze(
-            filteredRecords,
+            filteredAnalysisRecords,
             extraDays = actogramForecastDays,
             algorithmId = developerAlgorithmId,
             overrides = developerCircadian.activeOverrides,
@@ -168,27 +185,27 @@ fun rememberDarkHourAppState(
     }
     val hideActogramForecastTail = actogramAnalysis.days.count { it.isForecast } >
         analysis.days.count { it.isForecast }
-    val periodogram = remember(filteredRecords) {
-        computePeriodogram(buildPeriodogramAnchors(filteredRecords))
+    val periodogram = remember(filteredAnalysisRecords) {
+        computePeriodogram(buildPeriodogramAnchors(filteredAnalysisRecords))
     }
     val rowHours = when (options.timeScale) {
         ActogramTimeScale.HOURS_24 -> 24.0
         ActogramTimeScale.CIRCADIAN_TAU -> analysis.globalTau
         ActogramTimeScale.CUSTOM -> options.customHours.toDouble()
     }
-    val baseLayout = remember(filteredRecords, actogramAnalysis.days, hideActogramForecastTail, rowHours) {
+    val baseLayout = remember(filteredDisplayRecords, actogramAnalysis.days, hideActogramForecastTail, rowHours) {
         ActogramLayoutEngine.build(
-            records = filteredRecords,
+            records = filteredDisplayRecords,
             circadianDays = actogramAnalysis.days,
             rowHours = rowHours,
         ).withHiddenActogramForecastTail(hideActogramForecastTail)
     }
-    val layout = remember(baseLayout, filteredRecords, actogramAnalysis.days, scheduleEntries, hideActogramForecastTail, rowHours) {
+    val layout = remember(baseLayout, filteredDisplayRecords, actogramAnalysis.days, scheduleEntries, hideActogramForecastTail, rowHours) {
         if (scheduleEntries.isEmpty()) {
             baseLayout
         } else if (scheduleEntries.any { it.date != null }) {
             ActogramLayoutEngine.build(
-                records = filteredRecords,
+                records = filteredDisplayRecords,
                 circadianDays = actogramAnalysis.days,
                 scheduleEntries = scheduleEntries,
                 rowHours = rowHours,
@@ -222,7 +239,7 @@ fun rememberDarkHourAppState(
 
     return DarkHourAppState(
         sleepAnalysis = SleepAnalysisState(
-            records = filteredRecords,
+            records = filteredAnalysisRecords,
             analysis = analysis,
             periodogram = periodogram,
         ),

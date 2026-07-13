@@ -31,6 +31,7 @@ class HealthConnectSleepImportTest {
         )
 
         assertEquals(1, imported.records.size)
+        assertEquals(1, imported.analysisRecords.size)
         assertEquals(includedStart, imported.records.single().record.startTime)
         assertEquals(91, imported.totalHistoryDays)
     }

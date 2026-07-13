@@ -41,6 +41,7 @@ internal suspend fun HealthConnectClient.readSleepRecordsRecentFirst(
     val recentRange = healthConnectInitialReadRange(range, now, initialImportDuration)
     val recentRecords = readSleepRecordsPageRange(recentRange.start, recentRange.end)
     accumulator.add(recentRecords)
+    val recentResolved = accumulator.resolvedRecords()
     currentCoroutineContext().ensureActive()
     val oldestAvailableStart = if (readTotalHistoryDays) {
         readOldestSleepRecord(Instant.EPOCH, now)?.startTime
@@ -61,8 +62,9 @@ internal suspend fun HealthConnectClient.readSleepRecordsRecentFirst(
         onProgress(
             HealthImportProgress(
                 phase = HealthImportPhase.HISTORY,
-                records = accumulator.sortedRecords(),
-                importedRecordCount = accumulator.size,
+                records = recentResolved.records,
+                analysisRecords = recentResolved.analysisRecords,
+                importedRecordCount = recentResolved.records.size,
                 expectedRecordCount = null,
                 isImportPartial = true,
             ),
@@ -84,8 +86,10 @@ internal suspend fun HealthConnectClient.readSleepRecordsRecentFirst(
         )
     }
 
+    val resolved = accumulator.resolvedRecords()
     return ImportedSleepRecords(
-        records = accumulator.sortedRecords(),
+        records = resolved.records,
+        analysisRecords = resolved.analysisRecords,
         totalHistoryDays = totalHistoryDaysFromOldest(oldestAvailableStart, now, zoneId),
     )
 }
