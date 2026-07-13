@@ -1,6 +1,7 @@
 package one.aozora.darkhour.core.circadian
 
 import one.aozora.darkhour.core.circadian.csf.CsfConfig
+import one.aozora.darkhour.core.circadian.csf.CsfSmoothingConfig
 import one.aozora.darkhour.core.circadian.csf.analyzeCircadianCsf
 import one.aozora.darkhour.core.circadian.adaptive.AdaptiveKalmanConfig
 import one.aozora.darkhour.core.circadian.adaptive.AdaptiveKalmanTransitionConfig
@@ -46,6 +47,7 @@ interface CircadianAlgorithmDefinition {
  */
 object CircadianAlgorithmRegistry {
     const val CSF_ID = "csf-v1"
+
     const val KALMAN_ID = "unwrapped-kalman-v1"
     const val ADAPTIVE_KALMAN_ID = "adaptive-kalman-v1"
     private val adaptiveDefaults = AdaptiveKalmanConfig()
@@ -55,10 +57,11 @@ object CircadianAlgorithmRegistry {
         override val id = CSF_ID
         override val displayName = "CSF"
         override val parameters = listOf(
-            CircadianNumericParameter("tau_prior", "Tau prior", 25.59, 22.0, 27.0, 100, 2, "h"),
-            CircadianNumericParameter("phase_noise", "Phase noise", 0.04, 0.01, 0.50, 49, 2),
-            CircadianNumericParameter("tau_noise", "Tau noise", 0.0033, 0.0001, 0.02, 99, 4),
-            CircadianNumericParameter("measurement_kappa", "Observation weight", 0.7, 0.05, 1.00, 95, 2),
+            CircadianNumericParameter("tau_prior", "Tau prior", 25.23, 22.0, 27.0, 100, 2, "h"),
+            CircadianNumericParameter("phase_noise", "Phase noise", 0.05, 0.01, 0.50, 49, 2),
+            CircadianNumericParameter("tau_noise", "Tau noise", 0.0029, 0.0001, 0.02, 99, 4),
+            CircadianNumericParameter("measurement_kappa", "Observation weight", 0.63, 0.05, 1.00, 95, 2),
+            CircadianNumericParameter("smoothing_days", "Phase and tau smoothing", 5.0, 2.0, 14.0, 24, 1, "d"),
             durationSmoothingParameter(),
         )
 
@@ -66,6 +69,7 @@ object CircadianAlgorithmRegistry {
             analyzeCircadianCsf(
                 records = records,
                 extraDays = extraDays,
+                smoothing = CsfSmoothingConfig(values.valueOf("smoothing_days")),
                 config = CsfConfig.Default.copy(
                     tauPrior = values.valueOf("tau_prior"),
                     processNoisePhase = values.valueOf("phase_noise"),
@@ -162,7 +166,7 @@ object CircadianAlgorithmRegistry {
     }
 
     val algorithms: List<CircadianAlgorithmDefinition> = listOf(csf, kalman, adaptiveKalman)
-    val defaultAlgorithm: CircadianAlgorithmDefinition = kalman
+    val defaultAlgorithm: CircadianAlgorithmDefinition = csf
 
     fun algorithm(id: String): CircadianAlgorithmDefinition =
         algorithms.firstOrNull { it.id == id } ?: defaultAlgorithm

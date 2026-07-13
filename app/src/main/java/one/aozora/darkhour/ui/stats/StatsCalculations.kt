@@ -1,10 +1,16 @@
 package one.aozora.darkhour.ui.stats
 
+import one.aozora.darkhour.core.circadian.CircadianAlgorithmRegistry
 import one.aozora.darkhour.core.circadian.CircadianDay
 import one.aozora.darkhour.core.model.SleepRecord
 import one.aozora.darkhour.data.HealthDataRange
 import java.time.Duration
 import kotlin.math.roundToInt
+
+internal const val STATS_CSF_SMOOTHING_DAYS = 14.0
+
+internal fun statsCircadianOverrides(overrides: Map<String, Double>): Map<String, Double> =
+    overrides + ("smoothing_days" to STATS_CSF_SMOOTHING_DAYS)
 
 internal fun statsScopeSummary(
     dataScope: StatsDataScope = StatsDataScope.SelectedPeriod,

@@ -7,6 +7,7 @@ import java.time.ZoneOffset
 
 fun analyzeCircadianCsf(
     records: List<SleepRecord>,
+    smoothing: CsfSmoothingConfig,
     extraDays: Int = 0,
     config: CsfConfig = CsfConfig.Default,
 ): CsfAnalysis {
@@ -23,7 +24,7 @@ fun analyzeCircadianCsf(
     val segments = splitIntoSegments(sorted)
     val results = segments.mapIndexedNotNull { index, segment ->
         val segmentExtraDays = if (index == segments.lastIndex) extraDays else 0
-        analyzeSegment(segment, segmentExtraDays, globalFirstDate, globalFirstDateMs, config)
+        analyzeSegment(segment, segmentExtraDays, globalFirstDate, globalFirstDateMs, smoothing, config)
     }
 
     return mergeSegmentResults(results, globalFirstDate)

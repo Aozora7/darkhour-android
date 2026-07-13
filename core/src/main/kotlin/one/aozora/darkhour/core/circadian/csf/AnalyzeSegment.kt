@@ -16,6 +16,7 @@ fun analyzeSegment(
     extraDays: Int,
     globalFirstDate: LocalDate,
     globalFirstDateMs: Long,
+    smoothing: CsfSmoothingConfig,
     config: CsfConfig = CsfConfig.Default,
 ): SegmentResult? {
     if (records.isEmpty()) return null
@@ -32,9 +33,9 @@ fun analyzeSegment(
 
     val forwardStates = forwardPass(anchors, segFirstDay, segLastDayWithForecast, config)
     val smoothedStates = rtsSmoother(forwardStates, config)
-    val outputStates = smoothOutputPhase(smoothedStates, sigmaDays = 5.0, halfWindow = 8).toMutableList()
+    val outputStates = smoothOutputStates(smoothedStates, smoothing).toMutableList()
     val lastDataLocalDay = max(lastAnchor.dayNumber, lastRecordDay) - segFirstDay
-    correctEdges(outputStates, anchors, segFirstDay, lastDataLocalDay, totalDays)
+    correctEdges(outputStates, anchors, segFirstDay, lastDataLocalDay, totalDays, smoothing)
 
     val anchorByDay = anchors.associateBy { it.dayNumber }
     val smoothedDurations = smoothDurations(
@@ -92,7 +93,6 @@ fun analyzeSegment(
     return SegmentResult(
         days = days,
         states = smoothedStates,
-        anchors = anchors,
         anchorCount = anchors.size,
         residuals = residuals,
         segFirstDay = segFirstDay,

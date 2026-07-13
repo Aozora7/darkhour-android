@@ -4,6 +4,8 @@ import one.aozora.darkhour.core.circadian.CircadianAnalysis
 import one.aozora.darkhour.core.circadian.CircadianDay
 import one.aozora.darkhour.core.circadian.DurationSmoothingConfig
 import one.aozora.darkhour.core.model.SleepRecord
+import kotlin.math.ceil
+import kotlin.math.max
 
 const val ALGORITHM_ID = "csf-v1"
 const val MIN_ANCHORS = 2
@@ -30,6 +32,27 @@ data class TauPriorNoise(
     val backward: Double,
     val none: Double,
 )
+
+/** Derived output and edge horizons for one explicitly supplied timescale. */
+data class CsfSmoothingConfig(
+    val smoothingDays: Double,
+) {
+    init {
+        require(smoothingDays.isFinite() && smoothingDays > 0.0) {
+            "CSF smoothing timescale must be finite and positive"
+        }
+    }
+
+    val outputRadiusDays: Int get() = scaledDays(1.6)
+    val edgeBlendDays: Int get() = scaledDays(2.0)
+    val edgeAnchorSigmaDays: Double get() = smoothingDays * 1.4
+    val edgeAnchorRadiusDays: Int get() = scaledDays(3.0)
+    val edgeRegressionLookbackDays: Int get() = max(14, scaledDays(6.0))
+    val startReferenceFirstDay: Int get() = scaledDays(3.0)
+    val startReferenceLastDay: Int get() = scaledDays(5.0)
+
+    private fun scaledDays(multiplier: Double): Int = max(1, ceil(smoothingDays * multiplier).toInt())
+}
 
 data class CsfConfig(
     val processNoisePhase: Double,
@@ -119,7 +142,6 @@ data class SmoothedState(
 data class SegmentResult(
     val days: List<CircadianDay>,
     val states: List<SmoothedState>,
-    val anchors: List<CsfAnchor>,
     val anchorCount: Int,
     val residuals: List<Double>,
     val segFirstDay: Int,

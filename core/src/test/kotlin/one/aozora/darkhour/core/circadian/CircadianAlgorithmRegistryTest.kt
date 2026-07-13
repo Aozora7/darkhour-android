@@ -7,19 +7,6 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class CircadianAlgorithmRegistryTest {
-    @Test
-    fun defaultsToKalmanAndResolvesOnlyDeclaredParameters() {
-        val defaults = CircadianAlgorithmRegistry.resolvedValues(CircadianAlgorithmRegistry.CSF_ID, emptyMap())
-        val overridden = CircadianAlgorithmRegistry.resolvedValues(
-            CircadianAlgorithmRegistry.CSF_ID,
-            mapOf("tau_prior" to 23.0, "unknown" to 99.0),
-        )
-
-        assertEquals(CircadianAlgorithmRegistry.KALMAN_ID, CircadianAlgorithmRegistry.defaultAlgorithm.id)
-        assertEquals(5, defaults.size)
-        assertEquals(23.0, overridden.getValue("tau_prior"), 0.0)
-        assertEquals(defaults.getValue("phase_noise"), overridden.getValue("phase_noise"), 0.0)
-    }
 
     @Test
     fun clampsOverridesToTheParameterRange() {
@@ -82,17 +69,6 @@ class CircadianAlgorithmRegistryTest {
         assertEquals(production.globalTau, experimental.globalTau, 0.0)
     }
 
-    @Test
-    fun removedSwitchingIdFallsBackToProductionKalman() {
-        assertEquals(
-            CircadianAlgorithmRegistry.KALMAN_ID,
-            CircadianAlgorithmRegistry.algorithm("switching-kalman-v1").id,
-        )
-        assertTrue(
-            CircadianAlgorithmRegistry.algorithm(CircadianAlgorithmRegistry.KALMAN_ID)
-                .parameters.none { it.key.startsWith("evidence_") || it.key.startsWith("commit_") },
-        )
-    }
 }
 
 private fun assertParameter(

@@ -39,6 +39,9 @@ fun StatsScreen(
 ) {
     val selectedAnalysis = LocalSleepAnalysis.current
     val developerCircadian = LocalDeveloperCircadian.current
+    val statsOverrides = remember(developerCircadian.activeOverrides) {
+        statsCircadianOverrides(developerCircadian.activeOverrides)
+    }
     val (settings) = LocalAppSettings.current
     val healthConnect = LocalHealthConnectState.current
     var dataScope by rememberSaveable { mutableStateOf(StatsDataScope.SelectedPeriod) }
@@ -75,13 +78,26 @@ fun StatsScreen(
         allDataRecords,
         settings.forecastDays,
         developerCircadian.algorithmId,
-        developerCircadian.activeOverrides,
+        statsOverrides,
     ) {
         CircadianAnalyzer.analyze(
             allDataRecords.orEmpty(),
             extraDays = settings.forecastDays,
             algorithmId = developerCircadian.algorithmId,
-            overrides = developerCircadian.activeOverrides,
+            overrides = statsOverrides,
+        )
+    }
+    val selectedPeriodAnalysis = remember(
+        selectedAnalysis.records,
+        settings.forecastDays,
+        developerCircadian.algorithmId,
+        statsOverrides,
+    ) {
+        CircadianAnalyzer.analyze(
+            selectedAnalysis.records,
+            extraDays = settings.forecastDays,
+            algorithmId = developerCircadian.algorithmId,
+            overrides = statsOverrides,
         )
     }
     val allDataPeriodogram = remember(allDataRecords) {
@@ -92,7 +108,7 @@ fun StatsScreen(
         StatsDataScope.AllAvailable -> allDataRecords.orEmpty()
     }
     val analysis = when (dataScope) {
-        StatsDataScope.SelectedPeriod -> selectedAnalysis.analysis
+        StatsDataScope.SelectedPeriod -> selectedPeriodAnalysis
         StatsDataScope.AllAvailable -> allDataAnalysis
     }
     val periodogram = when (dataScope) {

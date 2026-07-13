@@ -5,14 +5,7 @@ import kotlin.math.exp
 import kotlin.math.max
 import kotlin.math.min
 
-private const val EDGE_WINDOW = 10
-private const val ANCHOR_HALF_WINDOW = 15
-private const val ANCHOR_SIGMA = 7.0
-
-private enum class EdgeType {
-    START,
-    END,
-}
+private const val MIN_EDGE_ANCHORS = 3
 
 private data class UnwrappedHour(val dayNumber: Int, val clockHour: Double, val weight: Double)
 
@@ -75,28 +68,28 @@ private fun buildUnwrappedHours(anchors: List<CsfAnchor>, dayStart: Int, dayEnd:
     return RegressionResult(slope, intercept, unwrappedHours)
 }
 
-private fun correctSingleEdge(
+private fun correctEndEdge(
     states: MutableList<SmoothedState>,
     anchors: List<CsfAnchor>,
     segFirstDay: Int,
-    edge: EdgeType,
-    edgeLocalDay: Int,
+    lastDataLocalDay: Int,
     totalDays: Int,
+    smoothing: CsfSmoothingConfig,
 ) {
-    val fitRadius = 30
-    val dayStart: Int
-    val dayEnd: Int
-    if (edge == EdgeType.END) {
-        dayStart = segFirstDay + edgeLocalDay - fitRadius
-        dayEnd = segFirstDay + edgeLocalDay
-    } else {
-        dayStart = segFirstDay
-        dayEnd = segFirstDay + fitRadius
-    }
+    val lastDataDay = segFirstDay + lastDataLocalDay
+    val eligibleAnchors = anchors.filter { it.dayNumber <= lastDataDay }
+    if (eligibleAnchors.size < MIN_EDGE_ANCHORS) return
 
-    val regression = buildUnwrappedHours(anchors, dayStart, dayEnd) ?: return
-    val edgeEnd = if (edge == EdgeType.END) min(edgeLocalDay, totalDays) else EDGE_WINDOW - 1
-    val edgeStart = if (edge == EdgeType.END) max(0, edgeLocalDay - EDGE_WINDOW) else 0
+    val preferredStartDay = lastDataDay - smoothing.edgeRegressionLookbackDays
+    val minimumAnchorStartDay = eligibleAnchors[eligibleAnchors.size - MIN_EDGE_ANCHORS].dayNumber
+    val regression = buildUnwrappedHours(
+        anchors = anchors,
+        dayStart = min(preferredStartDay, minimumAnchorStartDay),
+        dayEnd = lastDataDay,
+    ) ?: return
+    val edgeStart = max(0, lastDataLocalDay - smoothing.edgeBlendDays)
+    val edgeEnd = min(lastDataLocalDay, totalDays)
+    val regressionTau = (24.0 + regression.slope).coerceIn(TAU_MIN, TAU_MAX)
 
     for (localD in edgeStart..edgeEnd) {
         val state = states.getOrNull(localD) ?: continue
@@ -106,38 +99,41 @@ private fun correctSingleEdge(
         var wSum = 0.0
         for (anchor in regression.unwrappedHours) {
             val dist = abs(anchor.dayNumber - globalD)
-            if (dist > ANCHOR_HALF_WINDOW) continue
-            val gw = exp(-0.5 * (dist / ANCHOR_SIGMA) * (dist / ANCHOR_SIGMA))
+            if (dist > smoothing.edgeAnchorRadiusDays) continue
+            val scaledDistance = dist / smoothing.edgeAnchorSigmaDays
+            val gw = exp(-0.5 * scaledDistance * scaledDistance)
             val w = gw * anchor.weight
             val trendAtAnchor = regression.slope * anchor.dayNumber + regression.intercept
             wResSum += w * (anchor.clockHour - trendAtAnchor)
             wSum += w
         }
 
-        if (wSum < 0.5) continue
-
-        val targetClockHour = regression.slope * globalD + regression.intercept + wResSum / wSum
-        val currentClockHour = normalizeAngle(state.smoothedPhase)
-        var correction = targetClockHour - currentClockHour
-        while (correction > 12.0) correction -= 24.0
-        while (correction < -12.0) correction += 24.0
-
-        val t = if (edge == EdgeType.END) {
-            (localD - edgeStart).toDouble() / EDGE_WINDOW
+        val phaseCorrection = if (wSum >= 0.5) {
+            val targetClockHour = regression.slope * globalD + regression.intercept + wResSum / wSum
+            val currentClockHour = normalizeAngle(state.smoothedPhase)
+            var correction = targetClockHour - currentClockHour
+            while (correction > 12.0) correction -= 24.0
+            while (correction < -12.0) correction += 24.0
+            correction
         } else {
-            1.0 - localD.toDouble() / EDGE_WINDOW
+            0.0
         }
+
+        val t = (localD - edgeStart).toDouble() / smoothing.edgeBlendDays
         val blendWeight = t * t
-        states[localD] = state.withSmoothed(smoothedPhase = state.smoothedPhase + blendWeight * correction)
+        states[localD] = state.withSmoothed(
+            smoothedPhase = state.smoothedPhase + blendWeight * phaseCorrection,
+            smoothedTau = state.smoothedTau + blendWeight * (regressionTau - state.smoothedTau),
+        )
     }
 
-    if (edge == EdgeType.END && edgeLocalDay < totalDays) {
-        val lastDataState = states.getOrNull(edgeLocalDay) ?: return
+    if (lastDataLocalDay < totalDays) {
+        val lastDataState = states.getOrNull(lastDataLocalDay) ?: return
         val lastDataClockHour = normalizeAngle(lastDataState.smoothedPhase)
 
-        for (localD in edgeLocalDay + 1..totalDays) {
+        for (localD in lastDataLocalDay + 1..totalDays) {
             val state = states.getOrNull(localD) ?: continue
-            val dist = localD - edgeLocalDay
+            val dist = localD - lastDataLocalDay
             val forecastClockHour = lastDataClockHour + regression.slope * dist
             val currentClockHour = normalizeAngle(state.smoothedPhase)
             var correction = forecastClockHour - currentClockHour
@@ -146,15 +142,18 @@ private fun correctSingleEdge(
 
             states[localD] = state.withSmoothed(
                 smoothedPhase = state.smoothedPhase + correction,
-                smoothedTau = 24.0 + regression.slope,
+                smoothedTau = regressionTau,
             )
         }
     }
 }
 
-private fun correctStartEdgeFromInterior(states: MutableList<SmoothedState>) {
-    val refStart = 15
-    val refEnd = 25
+private fun correctStartEdgeFromInterior(
+    states: MutableList<SmoothedState>,
+    smoothing: CsfSmoothingConfig,
+) {
+    val refStart = smoothing.startReferenceFirstDay
+    val refEnd = smoothing.startReferenceLastDay
     if (states.size <= refEnd) return
 
     val refPoints = (refStart..refEnd)
@@ -181,11 +180,11 @@ private fun correctStartEdgeFromInterior(states: MutableList<SmoothedState>) {
     val slope = (n * sumXY - sumX * sumY) / denom
     val intercept = (sumY - slope * sumX) / n
 
-    for (localD in 0 until min(EDGE_WINDOW, states.size)) {
+    for (localD in 0 until min(smoothing.edgeBlendDays, states.size)) {
         val state = states[localD]
         val targetPhase = slope * localD + intercept
         val correction = (targetPhase - state.smoothedPhase).coerceIn(-6.0, 6.0)
-        val t = 1.0 - localD.toDouble() / EDGE_WINDOW
+        val t = 1.0 - localD.toDouble() / smoothing.edgeBlendDays
         states[localD] = state.withSmoothed(smoothedPhase = state.smoothedPhase + t * t * correction)
     }
 }
@@ -196,18 +195,18 @@ fun correctEdges(
     segFirstDay: Int,
     lastDataLocalDay: Int,
     totalDays: Int,
+    smoothing: CsfSmoothingConfig,
 ) {
-    if (anchors.size < 3) return
-    if (lastDataLocalDay < EDGE_WINDOW) return
+    if (anchors.size < MIN_EDGE_ANCHORS) return
+    if (lastDataLocalDay < smoothing.edgeBlendDays) return
 
-    correctStartEdgeFromInterior(states)
-    correctSingleEdge(states, anchors, segFirstDay, EdgeType.END, lastDataLocalDay, totalDays)
+    correctStartEdgeFromInterior(states, smoothing)
+    correctEndEdge(states, anchors, segFirstDay, lastDataLocalDay, totalDays, smoothing)
 }
 
-fun smoothOutputPhase(
+fun smoothOutputStates(
     states: List<SmoothedState>,
-    sigmaDays: Double = 2.0,
-    halfWindow: Int = 3,
+    smoothing: CsfSmoothingConfig,
 ): List<SmoothedState> {
     if (states.size < 3) return states
 
@@ -217,9 +216,10 @@ fun smoothOutputPhase(
         var tauSum = 0.0
         var weightSum = 0.0
 
-        for (j in max(0, i - halfWindow)..min(states.lastIndex, i + halfWindow)) {
+        for (j in max(0, i - smoothing.outputRadiusDays)..min(states.lastIndex, i + smoothing.outputRadiusDays)) {
             val dist = abs(j - i)
-            val weight = exp(-0.5 * (dist / sigmaDays) * (dist / sigmaDays))
+            val scaledDistance = dist / smoothing.smoothingDays
+            val weight = exp(-0.5 * scaledDistance * scaledDistance)
             phaseSum += weight * states[j].smoothedPhase
             tauSum += weight * states[j].smoothedTau
             weightSum += weight

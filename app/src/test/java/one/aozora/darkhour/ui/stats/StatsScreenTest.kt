@@ -1,5 +1,6 @@
 package one.aozora.darkhour.ui.stats
 
+import one.aozora.darkhour.core.circadian.CircadianAlgorithmRegistry
 import one.aozora.darkhour.core.circadian.CircadianConfidence
 import one.aozora.darkhour.core.circadian.CircadianDay
 import one.aozora.darkhour.core.model.SleepRecord

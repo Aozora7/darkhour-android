@@ -1,5 +1,6 @@
 package one.aozora.darkhour.core.circadian.csf
 
+import one.aozora.darkhour.core.circadian.CircadianAlgorithmRegistry
 import one.aozora.darkhour.core.model.SleepRecord
 import one.aozora.darkhour.core.model.SleepStageInterval
 import one.aozora.darkhour.core.model.SleepStages
@@ -225,4 +226,18 @@ internal fun assertAnalysisTau(analysis: CsfAnalysis, expectedTau: Double, toler
     assertEquals(ALGORITHM_ID, analysis.algorithmId)
     assertTrue("Expected anchor count > 0", analysis.anchorCount > 0)
     assertTrue("Expected tau ${analysis.globalTau} near $expectedTau", abs(analysis.globalTau - expectedTau) < tolerance)
+}
+
+internal fun analyzeCircadianCsf(
+    records: List<SleepRecord>,
+    extraDays: Int = 0,
+): CsfAnalysis {
+    val smoothingDays = CircadianAlgorithmRegistry
+        .resolvedValues(CircadianAlgorithmRegistry.CSF_ID, emptyMap())
+        .getValue("smoothing_days")
+    return analyzeCircadianCsf(
+        records = records,
+        smoothing = CsfSmoothingConfig(smoothingDays),
+        extraDays = extraDays,
+    )
 }
