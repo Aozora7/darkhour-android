@@ -189,17 +189,17 @@ object CircadianAlgorithmRegistry {
         override val id = ADAPTIVE_KALMAN_ID
         override val displayName = "Adaptive Kalman (experimental)"
         override val parameters = listOf(
-            CircadianNumericParameter("drift_prior", "Daily drift prior", 0.51, -1.5, 3.0, 90, 2, "h/d"),
-            CircadianNumericParameter("phase_variance", "Phase variance", 0.49, 0.01, 0.50, 49, 2),
+            CircadianNumericParameter("drift_prior", "Daily drift prior", 0.52, -1.5, 3.0, 90, 2, "h/d"),
+            CircadianNumericParameter("phase_variance", "Phase variance", 0.50, 0.01, 0.50, 49, 2),
             CircadianNumericParameter("drift_variance", "Drift variance", 0.0001, 0.0001, 0.02, 99, 4),
-            CircadianNumericParameter("measurement_variance", "Measurement variance", 10.0, 0.25, 10.0, 39, 2),
-            CircadianNumericParameter("evidence_window_days", "Transition window", 26.0, 7.0, 42.0, 35, 0, "d"),
-            CircadianNumericParameter("evidence_min_anchors", "Transition anchors", 7.0, 5.0, 14.0, 9, 0),
-            CircadianNumericParameter("evidence_min_anchor_weight", "Minimum anchor weight", 0.23, 0.10, 0.90, 16, 2),
-            CircadianNumericParameter("evidence_min_drift_delta", "Transition drift delta", 0.50, 0.20, 1.00, 16, 2, "h/d"),
-            CircadianNumericParameter("evidence_fit_improvement", "Transition fit improvement", 2.4, 1.1, 5.0, 39, 1, "×"),
-            CircadianNumericParameter("transition_phase_variance", "Transition phase variance", 36.0, 0.50, 36.0, 71, 2),
-            CircadianNumericParameter("transition_drift_variance", "Transition drift variance", 0.01, 0.001, 0.10, 99, 3),
+            CircadianNumericParameter("measurement_variance", "Measurement variance", 9.77, 0.25, 10.0, 39, 2),
+            CircadianNumericParameter("evidence_window_days", "Transition window", 18.0, 7.0, 42.0, 35, 0, "d"),
+            CircadianNumericParameter("evidence_min_anchors", "Transition anchors", 12.0, 5.0, 14.0, 9, 0),
+            CircadianNumericParameter("evidence_min_anchor_weight", "Minimum anchor weight", 0.7, 0.10, 0.90, 16, 2),
+            CircadianNumericParameter("evidence_min_drift_delta", "Transition drift delta", 0.85, 0.20, 1.00, 16, 2, "h/d"),
+            CircadianNumericParameter("evidence_fit_improvement", "Transition fit improvement", 5.0, 1.1, 5.0, 39, 1, "×"),
+            CircadianNumericParameter("transition_phase_variance", "Transition phase variance", 17.23, 0.50, 36.0, 71, 2),
+            CircadianNumericParameter("transition_drift_variance", "Transition drift variance", 0.076, 0.001, 0.10, 99, 3),
             durationSmoothingParameter(),
         )
 
