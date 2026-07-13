@@ -30,7 +30,7 @@ internal fun runAdaptiveSmoother(
         transitions.filter(AdaptiveKalmanTransition::committed)
     }
     val resetConfig = transitionConfig
-    val states = fitUnwrappedKalmanTrendWithResets(
+    val baseStates = fitUnwrappedKalmanTrendWithResets(
         observations = observations.map { KalmanObservation(it.dayNumber, it.midpointHour, it.weight) },
         firstDay = firstDay,
         lastDay = lastDay,
@@ -46,6 +46,15 @@ internal fun runAdaptiveSmoother(
             )
         },
     )
+    val recentTrend = estimateRecentTrendObservation(
+        observations,
+        config,
+        notBeforeDay = committedTransitions.maxOfOrNull(AdaptiveKalmanTransition::boundaryDay),
+        referenceStates = baseStates,
+    )
+    val states = recentTrend?.let {
+        applyRecentTrendObservation(baseStates, it, config)
+    } ?: baseStates
     return states.map { state ->
         AdaptiveKalmanState(
             dayNumber = state.dayNumber,

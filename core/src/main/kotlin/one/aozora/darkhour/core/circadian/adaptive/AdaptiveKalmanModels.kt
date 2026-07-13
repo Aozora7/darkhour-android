@@ -15,6 +15,15 @@ data class AdaptiveKalmanConfig(
     val processDriftVariance: Double = 0.0001,
     val measurementVarianceAtUnitWeight: Double = 9.77,
     val gateStandardDeviations: Double = 6.0,
+    val recentSlopeWindowDays: Int = 30,
+    val recentSlopeMinimumAnchors: Int = 5,
+    val recentSlopeRecencySigmaDays: Double = 6.0,
+    val recentSlopeVarianceFloor: Double = 0.0004,
+    val recentSlopeVarianceScale: Double = 8.0,
+    val recentPhaseWindowDays: Int = 14,
+    val recentPhaseVarianceFloor: Double = 0.04,
+    val recentPhaseVarianceScale: Double = 1.0,
+    val recentPhaseCorrectionDays: Int = 10,
 ) {
     init {
         require(driftPrior.isFinite())
@@ -24,6 +33,17 @@ data class AdaptiveKalmanConfig(
         require(processDriftVariance > 0.0)
         require(measurementVarianceAtUnitWeight > 0.0)
         require(gateStandardDeviations > 0.0)
+        require(recentSlopeWindowDays >= 3)
+        require(recentSlopeMinimumAnchors >= 3)
+        require(recentSlopeMinimumAnchors <= recentSlopeWindowDays)
+        require(recentSlopeRecencySigmaDays > 0.0)
+        require(recentSlopeVarianceFloor > 0.0)
+        require(recentSlopeVarianceScale > 0.0)
+        require(recentPhaseWindowDays >= recentSlopeMinimumAnchors)
+        require(recentPhaseWindowDays <= recentSlopeWindowDays)
+        require(recentPhaseVarianceFloor > 0.0)
+        require(recentPhaseVarianceScale > 0.0)
+        require(recentPhaseCorrectionDays >= 2)
     }
 }
 

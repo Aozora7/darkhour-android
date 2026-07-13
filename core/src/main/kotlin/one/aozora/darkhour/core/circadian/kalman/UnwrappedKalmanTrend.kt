@@ -12,6 +12,13 @@ data class KalmanObservation(
     val weight: Double,
 )
 
+/** A direct, independently uncertain observation of daily phase velocity. */
+internal data class KalmanDriftObservation(
+    val dayNumber: Int,
+    val drift: Double,
+    val variance: Double,
+)
+
 /**
  * A compact linear-Gaussian model of unwrapped sleep timing.  Phase is in
  * hours; drift is the daily phase change in hours per calendar day.
@@ -80,9 +87,11 @@ internal fun fitUnwrappedKalmanTrendWithResets(
     config: KalmanConfig,
     initialState: KalmanInitialState? = null,
     resets: Map<Int, KalmanStateReset> = emptyMap(),
-): List<KalmanTrendState> = rtsSmooth(
-    runKalmanForward(observations, firstDay, lastDay, config, initialState, resets),
-)
+    terminalDriftObservation: KalmanDriftObservation? = null,
+): List<KalmanTrendState> {
+    val smoothed = rtsSmooth(runKalmanForward(observations, firstDay, lastDay, config, initialState, resets))
+    return terminalDriftObservation?.let { applyTerminalDriftObservation(smoothed, it, config) } ?: smoothed
+}
 
 internal fun runKalmanForward(
     observations: List<KalmanObservation>,
@@ -121,6 +130,64 @@ internal fun runKalmanForward(
         steps[index] = steps[index].copy(predictedNext = predictedNext)
     }
     return steps
+}
+
+internal fun applyTerminalDriftObservation(
+    states: List<KalmanTrendState>,
+    observation: KalmanDriftObservation,
+    config: KalmanConfig,
+): List<KalmanTrendState> {
+    val endpointIndex = states.indexOfFirst { it.dayNumber == observation.dayNumber }
+    if (endpointIndex < 0) return states
+    val endpoint = states[endpointIndex]
+    var projected = updateKalmanDrift(
+        FilterState(
+            phase = endpoint.phase,
+            drift = endpoint.drift,
+            covariance = Covariance(
+                endpoint.phaseVariance,
+                endpoint.phaseDriftCovariance,
+                endpoint.driftVariance,
+            ),
+        ),
+        observation,
+    )
+    val result = states.toMutableList()
+    for (index in endpointIndex..states.lastIndex) {
+        if (index > endpointIndex) projected = predictKalmanState(projected, config)
+        result[index] = KalmanTrendState(
+            dayNumber = states[index].dayNumber,
+            phase = projected.phase,
+            drift = projected.drift,
+            phaseVariance = projected.covariance.phase,
+            phaseDriftCovariance = projected.covariance.phaseDrift,
+            driftVariance = projected.covariance.drift,
+        )
+    }
+    return result
+}
+
+internal fun updateKalmanDrift(
+    state: FilterState,
+    observation: KalmanDriftObservation,
+): FilterState {
+    require(observation.variance > 0.0)
+    val p = state.covariance
+    val innovationVariance = p.drift + observation.variance
+    val driftGain = p.drift / innovationVariance
+    val innovation = observation.drift - state.drift
+    return FilterState(
+        // The slope observation is derived from the same phase anchors already
+        // assimilated above. Re-applying its phase cross-covariance would count
+        // those anchors twice and create a visible jump at the data boundary.
+        phase = state.phase,
+        drift = state.drift + driftGain * innovation,
+        covariance = Covariance(
+            phase = p.phase,
+            phaseDrift = (1.0 - driftGain) * p.phaseDrift,
+            drift = max(1e-9, (1.0 - driftGain) * p.drift),
+        ),
+    )
 }
 
 internal fun predictKalmanState(state: FilterState, config: KalmanConfig): FilterState {

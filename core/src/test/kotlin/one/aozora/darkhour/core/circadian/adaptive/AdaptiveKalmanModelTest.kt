@@ -6,19 +6,22 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import one.aozora.darkhour.core.circadian.kalman.KalmanConfig
 import one.aozora.darkhour.core.circadian.kalman.KalmanObservation
-import one.aozora.darkhour.core.circadian.kalman.fitUnwrappedKalmanTrend
+import one.aozora.darkhour.core.circadian.kalman.applyTerminalDriftObservation
+import one.aozora.darkhour.core.circadian.kalman.fitUnwrappedKalmanTrendWithResets
 
 class AdaptiveKalmanModelTest {
     @Test
-    fun ordinaryDynamicsMatchLegacyKalmanNumericallyWhenNoTransitionIsDetected() {
+    fun ordinaryDynamicsMatchSharedKalmanCoreNumericallyWhenNoTransitionIsDetected() {
         val config = AdaptiveKalmanConfig()
         val observations = (0 until 160).map { day ->
             observation(day, 4.0 + 0.75 * day + 0.4 * sin(day * 1.3))
         }
 
         val adaptive = fitAdaptiveKalman(observations, config = config)
-        val legacy = fitUnwrappedKalmanTrend(
+        val sharedBase = fitUnwrappedKalmanTrendWithResets(
             observations = observations.map { KalmanObservation(it.dayNumber, it.midpointHour, it.weight) },
+            firstDay = observations.first().dayNumber,
+            lastDay = observations.last().dayNumber,
             config = KalmanConfig(
                 driftPrior = config.driftPrior,
                 initialPhaseVariance = config.initialPhaseVariance,
@@ -29,9 +32,14 @@ class AdaptiveKalmanModelTest {
                 gateStandardDeviations = config.gateStandardDeviations,
             ),
         )
+        val sharedCore = applyRecentTrendObservation(
+            sharedBase,
+            checkNotNull(estimateRecentTrendObservation(observations, config, referenceStates = sharedBase)),
+            config,
+        )
 
         assertTrue(adaptive.transitions.isEmpty())
-        adaptive.states.zip(legacy).forEach { (actual, expected) ->
+        adaptive.states.zip(sharedCore).forEach { (actual, expected) ->
             assertTrue("day ${actual.dayNumber} phase differs", abs(actual.phase - expected.phase) < 1e-9)
             assertTrue("day ${actual.dayNumber} drift differs", abs(actual.drift - expected.drift) < 1e-9)
         }
@@ -61,6 +69,43 @@ class AdaptiveKalmanModelTest {
 
         assertTrue(states.none { it.transitionEvidence > 0.0 })
         assertTrue(states.drop(20).dropLast(20).all { abs(it.drift - 0.7) < 0.15 })
+    }
+
+    @Test
+    fun recentPhaseCorrectionIsTaperedInsteadOfJumpingAtDataEdge() {
+        val config = AdaptiveKalmanConfig()
+        val boundary = 90
+        val observations = (0 until 104).map { day ->
+            val phase = if (day < boundary) 3.0 + day else 3.0 + boundary
+            observation(day, phase)
+        }
+        val base = fitUnwrappedKalmanTrendWithResets(
+            observations = observations.map { KalmanObservation(it.dayNumber, it.midpointHour, it.weight) },
+            firstDay = 0,
+            lastDay = 117,
+            config = config.asKalmanConfig(),
+        )
+        val trend = checkNotNull(estimateRecentTrendObservation(observations, config, referenceStates = base))
+        val driftOnly = applyTerminalDriftObservation(base, trend.drift, config.asKalmanConfig())
+        val adjusted = applyRecentTrendObservation(base, trend, config)
+        val corrections = adjusted.zip(driftOnly) { corrected, original -> corrected.phase - original.phase }
+        val startIndex = adjusted.indexOfFirst { it.dayNumber == trend.correctionStartDay }
+        val endpointIndex = adjusted.indexOfFirst { it.dayNumber == trend.drift.dayNumber }
+        val totalCorrection = corrections[endpointIndex]
+        val largestStep = corrections.subList(startIndex, endpointIndex + 1)
+            .zipWithNext { first, second -> abs(second - first) }
+            .maxOrNull() ?: 0.0
+
+        assertTrue("phase correction was too small to exercise taper: $totalCorrection", abs(totalCorrection) > 0.5)
+        assertTrue("correction began with a jump: ${corrections[startIndex]}", abs(corrections[startIndex]) < 1e-9)
+        assertTrue(
+            "largest correction step $largestStep was too abrupt for total $totalCorrection",
+            largestStep < abs(totalCorrection) * 0.20,
+        )
+        assertTrue(
+            "forecast did not retain the endpoint phase correction",
+            corrections.drop(endpointIndex).all { abs(it - totalCorrection) < 1e-9 },
+        )
     }
 
     @Test
