@@ -31,7 +31,7 @@ tasks.register<JavaExec>("groundTruthScore") {
 
 tasks.register<JavaExec>("groundTruthTune") {
     group = "verification"
-    description = "Search circadian algorithm parameters against the optional private ground-truth fixtures."
+    description = "Search circadian parameters; use -PtuneUpdateResource=true to update tuned defaults."
     dependsOn(tasks.testClasses)
     classpath = sourceSets.test.get().runtimeClasspath + privateGroundTruthResources
     mainClass.set("one.aozora.darkhour.core.circadian.groundtruth.GroundTruthTuner")
@@ -47,6 +47,18 @@ tasks.register<JavaExec>("groundTruthTune") {
         "--parameters=${providers.gradleProperty("tuneParameters").getOrElse("")}",
         "--output=${layout.buildDirectory.dir("reports/ground-truth-tuning").get().asFile.absolutePath}",
     )
+
+    val updateResource = providers.gradleProperty("tuneUpdateResource").getOrElse("false")
+    require(updateResource == "true" || updateResource == "false") {
+        "tuneUpdateResource must be 'true' or 'false'"
+    }
+    if (updateResource.toBoolean()) {
+        args(
+            "--update-resource=${layout.projectDirectory.file(
+                "src/main/resources/one/aozora/darkhour/core/circadian/circadian-algorithm-parameters.tsv",
+            ).asFile.absolutePath}",
+        )
+    }
 }
 
 tasks.register<JavaExec>("groundTruthCausal") {

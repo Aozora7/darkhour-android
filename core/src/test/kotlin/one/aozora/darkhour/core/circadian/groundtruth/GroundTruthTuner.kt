@@ -13,7 +13,8 @@ import java.util.Locale
  *
  * Duration smoothing remains fixed. Search controls are exposed as the
  * tuneSamples, tuneGenerations, tunePopulation, tuneThreads, tuneSeed, and
- * tuneWindowDays Gradle properties. Reports are written below
+ * tuneWindowDays Gradle properties. Set tuneUpdateResource=true to replace
+ * tuned defaults in the source parameter resource. Reports are written below
  * core/build/reports/ground-truth-tuning.
  */
 object GroundTruthTuner {
@@ -38,6 +39,7 @@ object GroundTruthTuner {
             windowDays = options.getValue("window-days").toInt(),
         )
         val outputRoot = Path.of(options.getValue("output"))
+        val parameterResource = options["update-resource"]?.let(Path::of)
         val includedParameterKeys = options["parameters"]
             ?.takeIf(String::isNotBlank)
             ?.split(',')
@@ -69,6 +71,17 @@ object GroundTruthTuner {
             val output = outputRoot.resolve(algorithm.id)
             writeReports(output, algorithm, candidates, algorithmConfig)
             printResult(algorithm, candidates)
+            parameterResource?.let { path ->
+                val changedKeys = updateParameterDefaultsResource(
+                    path = path,
+                    algorithmId = algorithm.id,
+                    values = candidates.first().values,
+                )
+                println(
+                    "TUNEUPDATE\talgorithm=${algorithm.id}\tchanged=${changedKeys.size}" +
+                        "\tparameters=${changedKeys.joinToString(",")}\tpath=$path",
+                )
+            }
         }
     }
 }
