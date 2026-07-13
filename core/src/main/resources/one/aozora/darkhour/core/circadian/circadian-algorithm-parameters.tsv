@@ -1,0 +1,32 @@
+# algorithm_id	key	label	default	minimum	maximum	steps	decimal_places	unit
+csf-v1	tau_prior	Tau prior	25.23	22.0	27.0	100	2	h
+csf-v1	phase_noise	Phase noise	0.05	0.01	0.50	49	2
+csf-v1	tau_noise	Tau noise	0.0029	0.0001	0.02	99	4
+csf-v1	measurement_kappa	Observation weight	0.63	0.05	1.00	95	2
+csf-v1	smoothing_days	Phase and tau smoothing	5.0	2.0	14.0	24	1	d
+csf-v1	duration_smoothing_sigma	Duration smoothing	30.0	3.0	60.0	58	0	d
+unwrapped-kalman-v1	drift_prior	Daily drift prior	0.52	-1.5	3.0	90	2	h/d
+unwrapped-kalman-v1	phase_variance	Phase variance	0.50	0.01	0.50	49	2
+unwrapped-kalman-v1	drift_variance	Drift variance	0.0001	0.0001	0.02	99	4
+unwrapped-kalman-v1	measurement_variance	Measurement variance	9.77	0.25	10.0	39	2
+unwrapped-kalman-v1	duration_smoothing_sigma	Duration smoothing	30.0	3.0	60.0	58	0	d
+adaptive-kalman-v1	drift_prior	Daily drift prior	0.52	-1.5	3.0	90	2	h/d
+adaptive-kalman-v1	phase_variance	Phase variance	0.50	0.01	0.50	49	2
+adaptive-kalman-v1	drift_variance	Drift variance	0.0001	0.0001	0.02	99	4
+adaptive-kalman-v1	measurement_variance	Measurement variance	9.77	0.25	10.0	39	2
+adaptive-kalman-v1	evidence_window_days	Transition window	42.0	7.0	42.0	35	0	d
+adaptive-kalman-v1	evidence_min_anchors	Transition anchors	8.0	5.0	14.0	9	0
+adaptive-kalman-v1	evidence_min_anchor_weight	Minimum anchor weight	0.70	0.10	0.90	16	2
+adaptive-kalman-v1	evidence_min_drift_delta	Transition drift delta	0.50	0.20	1.00	16	2	h/d
+adaptive-kalman-v1	evidence_fit_improvement	Transition fit improvement	2.4	1.1	5.0	39	1	×
+adaptive-kalman-v1	evidence_max_mean_loss	Transition residual tolerance	0.25	0.005	1.0	199	3
+adaptive-kalman-v1	evidence_max_half_slope_difference	Transition half-slope tolerance	0.60	0.10	1.50	28	2	h/d
+adaptive-kalman-v1	evidence_max_anchor_gap_days	Transition maximum anchor gap	7.0	1.0	14.0	13	0	d
+adaptive-kalman-v1	minimum_regime_days	Minimum regime duration	45.0	14.0	120.0	106	0	d
+adaptive-kalman-v1	commit_min_drift_delta	Commit drift delta	0.85	0.50	1.50	20	2	h/d
+adaptive-kalman-v1	commit_fit_improvement	Commit fit improvement	5.0	2.0	10.0	32	1	×
+adaptive-kalman-v1	commit_max_mean_loss	Commit residual tolerance	0.008	0.005	0.10	95	3
+adaptive-kalman-v1	commit_max_half_slope_difference	Commit half-slope tolerance	0.30	0.10	0.80	28	2	h/d
+adaptive-kalman-v1	transition_phase_variance	Transition phase variance	36.0	0.50	36.0	71	2
+adaptive-kalman-v1	transition_drift_variance	Transition drift variance	0.01	0.001	0.10	99	3
+adaptive-kalman-v1	duration_smoothing_sigma	Duration smoothing	30.0	3.0	60.0	58	0	d

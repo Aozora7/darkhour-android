@@ -5,8 +5,40 @@ import one.aozora.darkhour.core.circadian.csf.generateSyntheticRecords
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.io.StringReader
 
 class CircadianAlgorithmRegistryTest {
+
+    @Test
+    fun loadsParametersFromTheResourceInDeclaredOrder() {
+        assertEquals(
+            listOf("tau_prior", "phase_noise", "tau_noise", "measurement_kappa", "smoothing_days", "duration_smoothing_sigma"),
+            CircadianAlgorithmRegistry.algorithm(CircadianAlgorithmRegistry.CSF_ID).parameters.map { it.key },
+        )
+        assertEquals(
+            listOf("drift_prior", "phase_variance", "drift_variance", "measurement_variance", "duration_smoothing_sigma"),
+            CircadianAlgorithmRegistry.algorithm(CircadianAlgorithmRegistry.KALMAN_ID).parameters.map { it.key },
+        )
+
+        CircadianAlgorithmRegistry.algorithms.forEach { definition ->
+            assertEquals(definition.parameters.size, definition.parameters.map { it.key }.toSet().size)
+            assertEquals(
+                DEFAULT_DURATION_SMOOTHING_SIGMA_DAYS,
+                definition.parameters.single { it.key == "duration_smoothing_sigma" }.defaultValue,
+                0.0,
+            )
+        }
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun rejectsDuplicateParameterKeysInAResource() {
+        CircadianAlgorithmParameters.parse(
+            StringReader(
+                "test-v1\ttau\tTau\t24.0\t22.0\t28.0\t60\t1\th\n" +
+                    "test-v1\ttau\tTau again\t25.0\t22.0\t28.0\t60\t1\th",
+            ),
+        )
+    }
 
     @Test
     fun clampsOverridesToTheParameterRange() {
