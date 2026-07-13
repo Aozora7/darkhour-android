@@ -19,6 +19,7 @@ class AdaptiveKalmanTransitionLatencyTest {
         println("ADAPTIVE_LATENCY\tfree-to-entrained\t${summary.format()}")
         println("LEGACY_LATENCY\tfree-to-entrained\t${baseline.format()}")
         assertTrue("detection rate was ${summary.detectionRate}", summary.detectionRate >= 0.90)
+        assertTrue("commit rate was ${summary.commitRate}", summary.commitRate >= 0.20)
         assertTrue("P90 confirmation latency was ${summary.p90LatencyDays} days", summary.p90LatencyDays <= 18)
         assertTrue("P90 boundary error was ${summary.p90BoundaryErrorDays} days", summary.p90BoundaryErrorDays <= 3)
         assertEquals(0, summary.earlyFalsePositives)
@@ -32,6 +33,7 @@ class AdaptiveKalmanTransitionLatencyTest {
         println("ADAPTIVE_LATENCY\tentrained-to-free\t${summary.format()}")
         println("LEGACY_LATENCY\tentrained-to-free\t${baseline.format()}")
         assertTrue("detection rate was ${summary.detectionRate}", summary.detectionRate >= 0.90)
+        assertTrue("commit rate was ${summary.commitRate}", summary.commitRate >= 0.20)
         assertTrue("P90 confirmation latency was ${summary.p90LatencyDays} days", summary.p90LatencyDays <= 18)
         assertTrue("P90 boundary error was ${summary.p90BoundaryErrorDays} days", summary.p90BoundaryErrorDays <= 3)
         assertEquals(0, summary.earlyFalsePositives)
@@ -43,6 +45,7 @@ class AdaptiveKalmanTransitionLatencyTest {
 
         println("ADAPTIVE_LATENCY\tsparse-free-to-entrained\t${summary.format()}")
         assertTrue("detection rate was ${summary.detectionRate}", summary.detectionRate >= 0.90)
+        assertTrue("commit rate was ${summary.commitRate}", summary.commitRate >= 0.20)
         assertTrue("P90 sparse confirmation latency was ${summary.p90LatencyDays} days", summary.p90LatencyDays <= 18)
         assertTrue("P90 sparse boundary error was ${summary.p90BoundaryErrorDays} days", summary.p90BoundaryErrorDays <= 3)
         assertEquals(0, summary.earlyFalsePositives)
@@ -101,18 +104,22 @@ class AdaptiveKalmanTransitionLatencyTest {
 private data class LatencySummary(
     val runs: Int,
     val detections: Int,
+    val commits: Int,
     val latencies: List<Int>,
     val boundaryErrors: List<Int>,
     val earlyFalsePositives: Int,
 ) {
     val detectionRate: Double get() = detections.toDouble() / runs
+    val commitRate: Double get() = commits.toDouble() / runs
     val medianLatencyDays: Int get() = percentile(latencies, 0.50)
     val p90LatencyDays: Int get() = percentile(latencies, 0.90)
     val medianBoundaryErrorDays: Int get() = percentile(boundaryErrors, 0.50)
     val p90BoundaryErrorDays: Int get() = percentile(boundaryErrors, 0.90)
 
     fun format(): String =
-        "runs=$runs\tdetected=$detections\trate=${"%.2f".format(java.util.Locale.ROOT, detectionRate)}" +
+        "runs=$runs\tdetected=$detections\tcommitted=$commits" +
+            "\trate=${"%.2f".format(java.util.Locale.ROOT, detectionRate)}" +
+            "\tcommit-rate=${"%.2f".format(java.util.Locale.ROOT, commitRate)}" +
             "\tlatency-median=${medianLatencyDays}d\tlatency-p90=${p90LatencyDays}d" +
             "\tboundary-median=${medianBoundaryErrorDays}d\tboundary-p90=${p90BoundaryErrorDays}d" +
             "\tearly-fp=$earlyFalsePositives"
@@ -122,17 +129,19 @@ private fun transitionBenchmark(fromDrift: Double, toDrift: Double): LatencySumm
     val latencies = mutableListOf<Int>()
     val boundaryErrors = mutableListOf<Int>()
     var earlyFalsePositives = 0
+    var commits = 0
     repeat(SEEDS) { seed ->
         val transitions = detectAdaptiveKalmanTransitions(
             syntheticObservations(seed, fromDrift, toDrift),
         )
         earlyFalsePositives += transitions.count { it.boundaryDay < TRANSITION_DAY - 3 }
         transitions.firstOrNull { it.confirmationDay >= TRANSITION_DAY }?.let { transition ->
+            if (transition.committed) commits++
             latencies += transition.confirmationDay - TRANSITION_DAY
             boundaryErrors += abs(transition.boundaryDay - TRANSITION_DAY)
         }
     }
-    return LatencySummary(SEEDS, latencies.size, latencies.sorted(), boundaryErrors.sorted(), earlyFalsePositives)
+    return LatencySummary(SEEDS, latencies.size, commits, latencies.sorted(), boundaryErrors.sorted(), earlyFalsePositives)
 }
 
 private fun legacyTransitionBenchmark(fromDrift: Double, toDrift: Double): LatencySummary {
@@ -153,24 +162,26 @@ private fun legacyTransitionBenchmark(fromDrift: Double, toDrift: Double): Laten
             boundaryErrors += abs(transition.dayNumber - TRANSITION_DAY)
         }
     }
-    return LatencySummary(SEEDS, latencies.size, latencies.sorted(), boundaryErrors.sorted(), earlyFalsePositives)
+    return LatencySummary(SEEDS, latencies.size, latencies.size, latencies.sorted(), boundaryErrors.sorted(), earlyFalsePositives)
 }
 
 private fun sparseTransitionBenchmark(fromDrift: Double, toDrift: Double): LatencySummary {
     val latencies = mutableListOf<Int>()
     val boundaryErrors = mutableListOf<Int>()
     var earlyFalsePositives = 0
+    var commits = 0
     repeat(SEEDS) { seed ->
         val observations = syntheticObservations(seed, fromDrift, toDrift)
             .filterNot { it.dayNumber % 3 == 1 }
         val transitions = detectAdaptiveKalmanTransitions(observations)
         earlyFalsePositives += transitions.count { it.boundaryDay < TRANSITION_DAY - 3 }
         transitions.firstOrNull { it.confirmationDay >= TRANSITION_DAY }?.let { transition ->
+            if (transition.committed) commits++
             latencies += transition.confirmationDay - TRANSITION_DAY
             boundaryErrors += abs(transition.boundaryDay - TRANSITION_DAY)
         }
     }
-    return LatencySummary(SEEDS, latencies.size, latencies.sorted(), boundaryErrors.sorted(), earlyFalsePositives)
+    return LatencySummary(SEEDS, latencies.size, commits, latencies.sorted(), boundaryErrors.sorted(), earlyFalsePositives)
 }
 
 private fun syntheticObservations(

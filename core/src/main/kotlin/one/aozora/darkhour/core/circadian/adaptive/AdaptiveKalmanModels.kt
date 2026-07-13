@@ -15,11 +15,19 @@ data class AdaptiveKalmanConfig(
     val processDriftVariance: Double = 0.0001,
     val measurementVarianceAtUnitWeight: Double = 9.77,
     val gateStandardDeviations: Double = 6.0,
-    val evidenceWindowDays: Int = 18,
+    val evidenceWindowDays: Int = 42,
     val evidenceMinAnchors: Int = 8,
     val evidenceMinAnchorWeight: Double = 0.70,
-    val evidenceMinDriftDelta: Double = 0.85,
-    val evidenceFitImprovement: Double = 5.0,
+    val evidenceMinDriftDelta: Double = 0.50,
+    val evidenceFitImprovement: Double = 2.4,
+    val evidenceMaxMeanHuberLoss: Double = 0.25,
+    val evidenceMaxHalfSlopeDifference: Double = 0.60,
+    val evidenceMaxAnchorGapDays: Int = 7,
+    val minimumRegimeDays: Int = 45,
+    val commitMinDriftDelta: Double = 0.85,
+    val commitFitImprovement: Double = 5.0,
+    val commitMaxMeanHuberLoss: Double = 0.008,
+    val commitMaxHalfSlopeDifference: Double = 0.30,
     val transitionPhaseVariance: Double = 36.0,
     val transitionDriftVariance: Double = 0.01,
 ) {
@@ -36,6 +44,14 @@ data class AdaptiveKalmanConfig(
         require(evidenceMinAnchorWeight > 0.0)
         require(evidenceMinDriftDelta > 0.0)
         require(evidenceFitImprovement > 1.0)
+        require(evidenceMaxMeanHuberLoss > 0.0)
+        require(evidenceMaxHalfSlopeDifference > 0.0)
+        require(evidenceMaxAnchorGapDays >= 1)
+        require(minimumRegimeDays >= evidenceMinAnchors)
+        require(commitMinDriftDelta > 0.0)
+        require(commitFitImprovement > 1.0)
+        require(commitMaxMeanHuberLoss > 0.0)
+        require(commitMaxHalfSlopeDifference > 0.0)
         require(transitionPhaseVariance > 0.0)
         require(transitionDriftVariance > 0.0)
     }
@@ -55,7 +71,9 @@ data class AdaptiveKalmanTransition(
     val confirmationDay: Int,
     val previousDrift: Double,
     val newDrift: Double,
+    val boundaryPhase: Double,
     val evidence: Double,
+    val committed: Boolean,
 ) {
     val confirmationLagDays: Int get() = confirmationDay - boundaryDay
 }

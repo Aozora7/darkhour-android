@@ -34,7 +34,9 @@ data class AdaptiveKalmanChangePoint(
     val confirmationDate: LocalDate,
     val previousDrift: Double,
     val newDrift: Double,
+    val boundaryPhase: Double,
     val evidence: Double,
+    val committed: Boolean,
 ) {
     val confirmationLagDays: Long get() = java.time.temporal.ChronoUnit.DAYS.between(date, confirmationDate)
 }
@@ -121,7 +123,9 @@ private fun analyzeSegment(
                 confirmationDate = globalFirstDate.plusDays(transition.confirmationDay.toLong()),
                 previousDrift = transition.previousDrift,
                 newDrift = transition.newDrift,
+                boundaryPhase = transition.boundaryPhase,
                 evidence = transition.evidence,
+                committed = transition.committed,
             )
         },
         days = states.mapIndexed { index, state ->

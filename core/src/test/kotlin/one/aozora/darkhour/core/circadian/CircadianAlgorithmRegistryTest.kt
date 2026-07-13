@@ -42,6 +42,28 @@ class CircadianAlgorithmRegistryTest {
             assertTrue(analysis.days.all { it.localTau.isFinite() && it.nightStartHour.isFinite() })
         }
     }
+
+    @Test
+    fun adaptiveDetectionAndCommitOverridesCanBeTunedIndependently() {
+        val records = generateSyntheticRecords(SyntheticOptions(days = 120, tau = 25.0, noise = 0.2))
+
+        val analysis = CircadianAlgorithmRegistry.analyze(
+            records = records,
+            algorithmId = CircadianAlgorithmRegistry.ADAPTIVE_KALMAN_ID,
+            overrides = mapOf(
+                "evidence_min_drift_delta" to 1.0,
+                "commit_min_drift_delta" to 0.5,
+                "evidence_fit_improvement" to 5.0,
+                "commit_fit_improvement" to 2.0,
+                "evidence_max_mean_loss" to 0.01,
+                "commit_max_mean_loss" to 0.10,
+                "evidence_max_half_slope_difference" to 0.20,
+                "commit_max_half_slope_difference" to 0.80,
+            ),
+        )
+
+        assertTrue(analysis.days.isNotEmpty())
+    }
 }
 
 private fun assertParameter(

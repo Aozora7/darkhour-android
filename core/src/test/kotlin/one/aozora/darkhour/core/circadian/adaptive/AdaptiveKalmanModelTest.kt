@@ -71,11 +71,13 @@ class AdaptiveKalmanModelTest {
             observation(day, phase + 0.08 * sin(day.toDouble()))
         }
 
-        val states = fitAdaptiveKalmanTrend(observations)
+        val fit = fitAdaptiveKalman(observations)
+        val states = fit.states
         val evidenceDays = states.filter { it.transitionEvidence > 0.0 }.map(AdaptiveKalmanState::dayNumber)
         val postDrift = states.takeLast(10).map(AdaptiveKalmanState::drift).average()
 
         assertTrue("no transition evidence", evidenceDays.isNotEmpty())
+        assertTrue("coherent transition was detected but not committed: ${fit.transitions}", fit.transitions.single().committed)
         assertTrue("evidence days were $evidenceDays", evidenceDays.first() in boundary - 2..boundary + 2)
         assertTrue("post-transition drift was $postDrift", abs(postDrift) < 0.25)
     }

@@ -27,6 +27,7 @@ class AdaptiveKalmanRegressionTest {
         assertEquals("unexpected transitions: $changes", 1, changes.size)
         val change = changes.single()
 
+        assertTrue("coherent transition was not committed: $change", change.committed)
         assertTrue("boundary was $change", dayDistance(change.date, START_DATE.plusDays(transitionDay.toLong())) <= 2)
         assertTrue("new drift was ${change.newDrift}", abs(change.newDrift) < 0.25)
         assertTrue("confirmation lag was ${change.confirmationLagDays}", change.confirmationLagDays <= 10)
@@ -46,6 +47,7 @@ class AdaptiveKalmanRegressionTest {
         assertEquals("unexpected transitions: $changes", 1, changes.size)
         val change = changes.single()
 
+        assertTrue("coherent transition was not committed: $change", change.committed)
         assertTrue("boundary was $change", dayDistance(change.date, START_DATE.plusDays(transitionDay.toLong())) <= 2)
         assertTrue("new drift was ${change.newDrift}", change.newDrift > 0.70)
         assertTrue("confirmation lag was ${change.confirmationLagDays}", change.confirmationLagDays <= 10)

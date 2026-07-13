@@ -2,6 +2,7 @@ package one.aozora.darkhour.core.circadian.adaptive
 
 import kotlin.math.abs
 import kotlin.math.max
+import kotlin.math.min
 import kotlin.math.sqrt
 import one.aozora.darkhour.core.circadian.kalman.Covariance
 import one.aozora.darkhour.core.circadian.kalman.FilterState
@@ -23,7 +24,9 @@ private data class TransitionCandidate(
     val evidence: Double,
     val previousDrift: Double,
     val drift: Double,
+    val boundaryPhase: Double,
     val boundaryDay: Int,
+    val committed: Boolean,
 )
 
 fun detectAdaptiveKalmanTransitions(
@@ -44,7 +47,6 @@ fun detectAdaptiveKalmanTransitions(
     )
     val history = mutableListOf<ResolvedObservation>()
     val transitions = mutableListOf<AdaptiveKalmanTransition>()
-    var lastConfirmationDay: Int? = null
     for (day in firstDay..lastDay) {
         var predicted = if (day == firstDay) state else predictKalmanState(state, kalmanConfig)
         val observation = byDay[day]
@@ -52,15 +54,20 @@ fun detectAdaptiveKalmanTransitions(
             val resolvedPhase = resolveKalmanAmbiguity(observation.midpointHour, predicted.phase)
             val resolved = ResolvedObservation(day, resolvedPhase, observation.weight, predicted.drift)
             var resolvedForHistory = resolved
-            val candidate = transitionCandidate(history + resolved, config)
-            val outsideCooldown = lastConfirmationDay?.let { day - it >= TRANSITION_COOLDOWN_DAYS } ?: true
-            if (candidate != null && outsideCooldown && day != firstDay) {
+            val initialRegimeIsLearned = day - firstDay >= 2 * config.evidenceWindowDays
+            val candidate = if (initialRegimeIsLearned) transitionCandidate(history + resolved, config) else null
+            val regimeIsPersistent = transitions.lastOrNull()
+                ?.let { day - it.boundaryDay >= config.minimumRegimeDays }
+                ?: true
+            if (candidate != null && regimeIsPersistent && day != firstDay) {
                 val transition = AdaptiveKalmanTransition(
                     boundaryDay = candidate.boundaryDay,
                     confirmationDay = day,
                     previousDrift = candidate.previousDrift,
                     newDrift = candidate.drift,
+                    boundaryPhase = candidate.boundaryPhase,
                     evidence = candidate.evidence,
+                    committed = candidate.committed,
                 )
                 AdaptiveKalmanDiagnostics.log(
                     "boundary=${transition.boundaryDay} confirmation=${transition.confirmationDay} " +
@@ -68,16 +75,20 @@ fun detectAdaptiveKalmanTransitions(
                         "oldDrift=${transition.previousDrift} newDrift=${transition.newDrift}",
                 )
                 transitions += transition
+                // The detector advances its regime hypothesis for every
+                // accepted event. Only strict committed events are injected
+                // into the separately run published smoother.
                 predicted = resetKalmanState(
                     predicted,
                     KalmanStateReset(
                         drift = transition.newDrift,
                         phaseVariance = transition.evidence * config.transitionPhaseVariance,
                         driftVariance = config.transitionDriftVariance,
+                        phase = transition.boundaryPhase,
+                        blend = transition.evidence,
                     ),
                     kalmanConfig,
                 )
-                lastConfirmationDay = day
                 // Evidence used to confirm one regime must not be reused to
                 // propose the reverse transition after the cooldown expires.
                 history.clear()
@@ -90,7 +101,7 @@ fun detectAdaptiveKalmanTransitions(
                 resolvedPhase,
             )
             history += resolvedForHistory
-            history.removeAll { it.dayNumber < day - config.evidenceWindowDays }
+            history.removeAll { it.dayNumber < day - 2 * config.evidenceWindowDays }
         } else {
             state = predicted
         }
@@ -102,13 +113,30 @@ private fun transitionCandidate(
     history: List<ResolvedObservation>,
     config: AdaptiveKalmanConfig,
 ): TransitionCandidate? {
+    // Treat commit settings as an additional gate even if independently
+    // tuned registry values cross. Detection must never become stricter than
+    // committing the resulting reset.
+    val commitMinDriftDelta = max(config.commitMinDriftDelta, config.evidenceMinDriftDelta)
+    val commitFitImprovement = max(config.commitFitImprovement, config.evidenceFitImprovement)
+    val commitMaxMeanHuberLoss = min(config.commitMaxMeanHuberLoss, config.evidenceMaxMeanHuberLoss)
+    val commitMaxHalfSlopeDifference = min(
+        config.commitMaxHalfSlopeDifference,
+        config.evidenceMaxHalfSlopeDifference,
+    )
     val eligible = history.filter { it.weight >= config.evidenceMinAnchorWeight }
     if (eligible.size < config.evidenceMinAnchors) return null
     var strongest: TransitionCandidate? = null
     for (start in 0..eligible.size - config.evidenceMinAnchors) {
         val suffix = eligible.subList(start, eligible.size)
         if (suffix.last().dayNumber - suffix.first().dayNumber > config.evidenceWindowDays) continue
-        val previousDrift = suffix.first().predictedDrift
+        if (suffix.zipWithNext().any { (previous, next) ->
+                next.dayNumber - previous.dayNumber > config.evidenceMaxAnchorGapDays
+            }
+        ) continue
+        val previousDrift = eligible
+            .lastOrNull { it.dayNumber <= suffix.first().dayNumber - config.evidenceMinAnchors }
+            ?.predictedDrift
+            ?: suffix.first().predictedDrift
         val fit = fitHuberLine(suffix, config.measurementVarianceAtUnitWeight)
         val delta = abs(fit.slope - previousDrift)
         if (delta < config.evidenceMinDriftDelta || !isEntrainmentBoundary(previousDrift, fit.slope)) continue
@@ -116,12 +144,11 @@ private fun transitionCandidate(
         val oldLoss = robustLoss(suffix, oldFit, config.measurementVarianceAtUnitWeight)
         val newLoss = robustLoss(suffix, fit, config.measurementVarianceAtUnitWeight)
         val ratio = oldLoss / max(newLoss, 1e-9)
-        if (ratio < config.evidenceFitImprovement || newLoss / suffix.size > MAX_MEAN_HUBER_LOSS) continue
+        if (ratio < config.evidenceFitImprovement || newLoss / suffix.size > config.evidenceMaxMeanHuberLoss) continue
         val halves = suffix.chunked((suffix.size + 1) / 2)
         if (halves.size < 2 || halves.any { it.size < 3 }) continue
-        if (halves.map { fitHuberLine(it, config.measurementVarianceAtUnitWeight).slope }
-                .any { abs(it - fit.slope) > MAX_HALF_SLOPE_DIFFERENCE }
-        ) continue
+        val halfSlopes = halves.map { fitHuberLine(it, config.measurementVarianceAtUnitWeight).slope }
+        if (halfSlopes.any { abs(it - fit.slope) > config.evidenceMaxHalfSlopeDifference }) continue
         val halfRatios = halves.map { half ->
             val halfOld = fitHuberFixedSlope(half, previousDrift, config.measurementVarianceAtUnitWeight)
             val halfNew = fitHuberFixedSlope(half, fit.slope, config.measurementVarianceAtUnitWeight)
@@ -137,9 +164,15 @@ private fun transitionCandidate(
             evidence = weightEvidence * (0.5 + 0.25 * ratioEvidence + 0.25 * deltaEvidence),
             previousDrift = previousDrift,
             drift = fit.slope,
+            boundaryPhase = fit.intercept + fit.slope * (suffix.first().dayNumber + 1),
             // The fitted slope governs the interval after the first suffix
             // midpoint, so the state reset belongs to the following day.
             boundaryDay = suffix.first().dayNumber + 1,
+            committed = delta >= commitMinDriftDelta &&
+                ratio >= commitFitImprovement &&
+                newLoss / suffix.size <= commitMaxMeanHuberLoss &&
+                halfSlopes.all { abs(it - fit.slope) <= commitMaxHalfSlopeDifference } &&
+                halfRatios.all { it >= commitFitImprovement },
         )
         if (candidate.evidence > (strongest?.evidence ?: 0.0)) strongest = candidate
     }
@@ -241,8 +274,5 @@ private fun isEntrainmentBoundary(previousDrift: Double, candidateDrift: Double)
 
 private const val HUBER_K = 1.345
 private const val ROBUST_FIT_ITERATIONS = 12
-private const val MAX_MEAN_HUBER_LOSS = 0.008
-private const val MAX_HALF_SLOPE_DIFFERENCE = 0.30
 private const val ENTRAINED_DRIFT_BAND = 0.25
 private const val MIN_FREE_RUNNING_DRIFT = 0.45
-private const val TRANSITION_COOLDOWN_DAYS = 14

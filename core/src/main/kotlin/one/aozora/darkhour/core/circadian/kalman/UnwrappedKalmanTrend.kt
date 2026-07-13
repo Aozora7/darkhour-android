@@ -60,6 +60,8 @@ internal data class KalmanStateReset(
     val drift: Double,
     val phaseVariance: Double,
     val driftVariance: Double,
+    val phase: Double? = null,
+    val blend: Double = 1.0,
 )
 internal data class FilterStep(
     val dayNumber: Int,
@@ -186,7 +188,8 @@ internal fun resetKalmanState(
     reset: KalmanStateReset,
     config: KalmanConfig,
 ): FilterState = state.copy(
-    drift = reset.drift,
+    phase = reset.phase?.let { state.phase + reset.blend * (it - state.phase) } ?: state.phase,
+    drift = state.drift + reset.blend * (reset.drift - state.drift),
     covariance = Covariance(
         phase = max(state.covariance.phase, reset.phaseVariance),
         phaseDrift = 0.0,
