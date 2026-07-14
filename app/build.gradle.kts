@@ -59,7 +59,7 @@ android {
         minSdk = 28
         targetSdk = 37
         versionCode = 15
-        versionName = "1.1.2"
+        versionName = "1.2.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         if (connectedGestureTestRequested) {
@@ -84,8 +84,10 @@ android {
             signingConfig = signingConfigs.getByName("release")
             buildConfigField("Boolean", "USE_DEMO_DATA", "false")
             optimization {
-                enable = false
+                enable = true
             }
+            isMinifyEnabled = true
+            isShrinkResources = true
         }
     }
     compileOptions {
