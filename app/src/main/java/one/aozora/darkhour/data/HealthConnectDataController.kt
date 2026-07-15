@@ -1,10 +1,13 @@
 package one.aozora.darkhour.data
 
 import android.content.Context
+import android.net.Uri
+import android.os.Build
 import androidx.health.connect.client.HealthConnectClient
 import androidx.health.connect.client.PermissionController
 import androidx.health.connect.client.permission.HealthPermission
 import androidx.health.connect.client.records.SleepSessionRecord
+import androidx.health.connect.client.time.TimeRangeFilter
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -17,6 +20,7 @@ import kotlinx.coroutines.withContext
 import one.aozora.darkhour.core.model.SleepRecord
 import java.time.Clock
 import java.time.Duration
+import java.time.Instant
 import java.time.ZoneId
 
 class HealthConnectDataController(
@@ -31,17 +35,118 @@ class HealthConnectDataController(
     private var recentImportDuration = initialImportDuration.coerceAtLeast(Duration.ofDays(1))
     private var refreshJob: Job? = null
     private var statsAllDataRefreshJob: Job? = null
+    private var fileOperationJob: Job? = null
     private val mutableState = MutableStateFlow(
-        HealthConnectUiState(dataRange = initialDataRange),
+        HealthConnectUiState(
+            dataRange = initialDataRange,
+            fileWriteSupported = isSleepFileWriteSupported,
+        ),
     )
 
     val state: StateFlow<HealthConnectUiState> = mutableState.asStateFlow()
+
+    val isFileWriteSupported: Boolean
+        get() = isSleepFileWriteSupported
 
     fun requiredPermissions(range: HealthDataRange = state.value.dataRange): Set<String> = buildSet {
         add(SLEEP_READ_PERMISSION)
         if (range.requiresHistoryPermission) {
             add(HealthPermission.PERMISSION_READ_HEALTH_DATA_HISTORY)
         }
+    }
+
+    suspend fun hasSleepWritePermission(): Boolean {
+        if (!isSleepFileWriteSupported) return false
+        if (HealthConnectClient.getSdkStatus(applicationContext) != HealthConnectClient.SDK_AVAILABLE) {
+            return false
+        }
+        return SLEEP_WRITE_PERMISSION in HealthConnectClient
+            .getOrCreate(applicationContext)
+            .permissionController
+            .getGrantedPermissions()
+    }
+
+    fun reportSleepWritePermissionDenied() {
+        mutableState.value = state.value.copy(
+            fileOperation = HealthConnectFileOperation.IDLE,
+            fileOperationErrorMessage = "Sleep write permission was not granted",
+        )
+    }
+
+    fun importSleepFiles(uris: List<Uri>) {
+        if (uris.isEmpty() || !beginFileOperation(HealthConnectFileOperation.IMPORTING)) return
+        fileOperationJob = scope.launch {
+            try {
+                val result = withContext(Dispatchers.IO) {
+                    importSleepFilesToHealthConnect(
+                        client = HealthConnectClient.getOrCreate(applicationContext),
+                        contentResolver = applicationContext.contentResolver,
+                        uris = uris,
+                        fallbackZoneId = ZoneId.systemDefault(),
+                    )
+                }
+                mutableState.value = state.value.copy(
+                    statsAllRecords = null,
+                    fileOperation = HealthConnectFileOperation.IDLE,
+                    fileImportResult = result,
+                    fileOperationMessage = result.summaryText(),
+                    fileOperationErrorMessage = result.errorMessage,
+                )
+                if (result.committedRecordCount > 0) refresh()
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (failure: Exception) {
+                finishFileOperationWithError(failure, "Sleep file import failed")
+            }
+        }
+    }
+
+    fun deleteOwnedSleepRecords() {
+        if (!beginFileOperation(HealthConnectFileOperation.DELETING)) return
+        fileOperationJob = scope.launch {
+            try {
+                withContext(Dispatchers.IO) {
+                    HealthConnectClient.getOrCreate(applicationContext).deleteRecords(
+                        SleepSessionRecord::class,
+                        TimeRangeFilter.before(Instant.MAX),
+                    )
+                }
+                mutableState.value = state.value.copy(
+                    statsAllRecords = null,
+                    fileImportedRecordCount = 0,
+                    totalHistoryDays = null,
+                    fileOperation = HealthConnectFileOperation.IDLE,
+                    fileImportResult = null,
+                    fileOperationMessage = "Deleted imported records",
+                    fileOperationErrorMessage = null,
+                )
+                refresh()
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (failure: Exception) {
+                finishFileOperationWithError(failure, "Imported record deletion failed")
+            }
+        }
+    }
+
+    private fun beginFileOperation(operation: HealthConnectFileOperation): Boolean {
+        if (!isSleepFileWriteSupported || state.value.fileOperation != HealthConnectFileOperation.IDLE) {
+            return false
+        }
+        mutableState.value = state.value.copy(
+            fileOperation = operation,
+            fileImportResult = null,
+            fileOperationMessage = null,
+            fileOperationErrorMessage = null,
+        )
+        return true
+    }
+
+    private fun finishFileOperationWithError(failure: Exception, fallback: String) {
+        mutableState.value = state.value.copy(
+            fileOperation = HealthConnectFileOperation.IDLE,
+            fileOperationErrorMessage = failure.message ?: fallback,
+        )
     }
 
     fun setDataRange(range: HealthDataRange) {
@@ -65,6 +170,7 @@ class HealthConnectDataController(
                             hasHistoryPermission = false,
                             isRefreshing = false,
                             importedRecordCount = 0,
+                            fileImportedRecordCount = 0,
                             expectedRecordCount = null,
                             isImportPartial = false,
                             importPhase = HealthImportPhase.IDLE,
@@ -80,6 +186,7 @@ class HealthConnectDataController(
                             hasHistoryPermission = false,
                             isRefreshing = false,
                             importedRecordCount = 0,
+                            fileImportedRecordCount = 0,
                             expectedRecordCount = null,
                             isImportPartial = false,
                             importPhase = HealthImportPhase.IDLE,
@@ -139,6 +246,7 @@ class HealthConnectDataController(
                 hasHistoryPermission = hasHistoryPermission,
                 isRefreshing = false,
                 importedRecordCount = 0,
+                fileImportedRecordCount = 0,
                 expectedRecordCount = null,
                 isImportPartial = false,
                 importPhase = HealthImportPhase.IDLE,
@@ -163,6 +271,7 @@ class HealthConnectDataController(
                     range = range,
                     now = clock.instant(),
                     zoneId = zoneId,
+                    ownedPackageName = applicationContext.packageName,
                     initialImportDuration = recentImportDuration,
                     readTotalHistoryDays = hasHistoryPermission,
                     onProgress = ::publishImportProgress,
@@ -181,6 +290,7 @@ class HealthConnectDataController(
                 access = HealthConnectAccess.CONNECTED,
                 isRefreshing = false,
                 importedRecordCount = imported.records.size,
+                fileImportedRecordCount = imported.fileImportedRecordCount,
                 expectedRecordCount = imported.records.size,
                 isImportPartial = false,
                 importPhase = HealthImportPhase.IDLE,
@@ -222,6 +332,7 @@ class HealthConnectDataController(
                     range = HealthDataRange.ENTIRE_HISTORY,
                     now = clock.instant(),
                     zoneId = zoneId,
+                    ownedPackageName = applicationContext.packageName,
                     initialImportDuration = recentImportDuration,
                     readTotalHistoryDays = true,
                 )
@@ -266,7 +377,15 @@ class HealthConnectDataController(
         val permissionContract
             get() = PermissionController.createRequestPermissionResultContract()
 
+        val sleepWritePermission: String
+            get() = SLEEP_WRITE_PERMISSION
+
         private val SLEEP_READ_PERMISSION =
             HealthPermission.getReadPermission(SleepSessionRecord::class)
+        private val SLEEP_WRITE_PERMISSION =
+            HealthPermission.getWritePermission(SleepSessionRecord::class)
     }
 }
+
+internal val isSleepFileWriteSupported: Boolean
+    get() = Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE

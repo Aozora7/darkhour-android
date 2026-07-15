@@ -11,6 +11,8 @@ import one.aozora.darkhour.core.periodogram.PeriodogramResult
 import one.aozora.darkhour.data.HealthConnectAccess
 import one.aozora.darkhour.data.HealthDataRange
 import one.aozora.darkhour.data.HealthImportPhase
+import one.aozora.darkhour.data.HealthConnectFileOperation
+import one.aozora.darkhour.data.SleepFileImportResult
 import one.aozora.darkhour.ui.actogram.ActogramDisplayOptions
 import one.aozora.darkhour.ui.actogram.ActogramLayout
 import one.aozora.darkhour.ui.schedule.ScheduleEntry
@@ -88,10 +90,18 @@ data class HealthConnectState(
     val importError: String?,
     val statsAllDataError: String?,
     val totalHistoryDays: Int?,
+    val fileWriteSupported: Boolean,
+    val fileImportedRecordCount: Int,
+    val fileOperation: HealthConnectFileOperation,
+    val fileImportResult: SleepFileImportResult?,
+    val fileOperationMessage: String?,
+    val fileOperationError: String?,
     val onRequestHealthPermissions: () -> Unit,
     val onRequestHistoryPermission: () -> Unit,
     val onRequestStatsAllData: () -> Unit,
     val onDataRangeChange: (HealthDataRange) -> Unit,
+    val onImportSleepFiles: () -> Unit,
+    val onDeleteOwnedSleepRecords: () -> Unit,
 )
 
 val LocalSleepAnalysis = staticCompositionLocalOf<SleepAnalysisState> {

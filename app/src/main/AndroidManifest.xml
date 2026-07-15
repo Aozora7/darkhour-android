@@ -6,6 +6,8 @@
         tools:ignore="HealthConnectPolicy" />
     <uses-permission android:name="android.permission.health.READ_HEALTH_DATA_HISTORY"
         tools:ignore="HealthConnectPolicy" />
+    <uses-permission android:name="android.permission.health.WRITE_SLEEP"
+        tools:ignore="HealthConnectPolicy" />
 
     <uses-feature android:name="android.hardware.touchscreen" android:required="true" />
 

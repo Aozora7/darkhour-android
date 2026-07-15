@@ -51,6 +51,19 @@ class HealthConnectSleepDeduplicationTest {
     }
 
     @Test
+    fun sameDarkHourOriginWithDifferentIdsUsesOverlapDeduplication() {
+        val result = resolveImportedSleepRecords(
+            listOf(
+                imported(0, 120, "one.aozora.darkhour.debug", "darkhour:file:fitbit:1"),
+                imported(20, 120, "one.aozora.darkhour.debug", "darkhour:file:google-health:2"),
+            ),
+        )
+
+        assertEquals(1, result.records.size)
+        assertEquals(1, result.analysisRecords.size)
+    }
+
+    @Test
     fun eightyPercentOverlapCollapsesButJustUnderRemainsVisible() {
         val atThreshold = resolveImportedSleepRecords(
             listOf(
@@ -106,7 +119,7 @@ class HealthConnectSleepDeduplicationTest {
     }
 
     @Test
-    fun sameUnknownAdjacentAndNonOverlappingSourcesStayIndependent() {
+    fun sameAndUnknownSourceOverlapsConsolidateWhileAdjacentRecordsStayIndependent() {
         val sameSource = resolveImportedSleepRecords(
             listOf(
                 imported(0, 180, "app.a", "a1"),
@@ -127,8 +140,8 @@ class HealthConnectSleepDeduplicationTest {
             ),
         )
 
-        assertEquals(2, sameSource.analysisRecords.size)
-        assertEquals(2, unknownSource.analysisRecords.size)
+        assertEquals(1, sameSource.analysisRecords.size)
+        assertEquals(1, unknownSource.analysisRecords.size)
         assertEquals(3, adjacent.analysisRecords.size)
     }
 

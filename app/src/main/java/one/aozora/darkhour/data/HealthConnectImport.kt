@@ -13,6 +13,7 @@ internal fun importSleepRecords(
     now: Instant,
     zoneId: ZoneId,
     totalHistoryComplete: Boolean = true,
+    ownedPackageName: String? = null,
 ): ImportedSleepRecords {
     val totalHistoryDays = if (totalHistoryComplete) {
         totalHistoryDaysFromOldest(rawRecords.minOfOrNull { it.startTime }, now, zoneId)
@@ -29,6 +30,7 @@ internal fun importSleepRecords(
         records = resolved.records,
         analysisRecords = resolved.analysisRecords,
         totalHistoryDays = totalHistoryDays,
+        fileImportedRecordCount = imported.countFileImportsOwnedBy(ownedPackageName),
     )
 }
 
@@ -36,6 +38,7 @@ internal data class ImportedSleepRecords(
     val records: List<ImportedSleepRecord>,
     val analysisRecords: List<ImportedSleepRecord>,
     val totalHistoryDays: Int?,
+    val fileImportedRecordCount: Int = 0,
 )
 
 internal data class HealthImportProgress(
@@ -49,11 +52,15 @@ internal data class HealthImportProgress(
 
 internal class ImportedSleepAccumulator(
     private val zoneId: ZoneId,
+    private val ownedPackageName: String? = null,
 ) {
     private val recordsByIdentity = LinkedHashMap<Any, ImportedSleepRecord>()
 
     val size: Int
         get() = resolvedRecords().records.size
+
+    val fileImportedRecordCount: Int
+        get() = recordsByIdentity.values.countFileImportsOwnedBy(ownedPackageName)
 
     fun add(rawRecords: List<SleepSessionRecord>) {
         rawRecords.forEach { rawRecord ->
@@ -69,6 +76,16 @@ internal class ImportedSleepAccumulator(
         resolveImportedSleepRecords(recordsByIdentity.values.toList())
 
     fun sortedRecords(): List<ImportedSleepRecord> = resolvedRecords().records
+}
+
+internal fun Iterable<ImportedSleepRecord>.countFileImportsOwnedBy(
+    ownedPackageName: String?,
+): Int {
+    if (ownedPackageName == null) return 0
+    return count { record ->
+        record.sourcePackageName == ownedPackageName &&
+            record.sourceClientRecordId?.startsWith(SLEEP_FILE_CLIENT_RECORD_PREFIX) == true
+    }
 }
 
 internal fun totalHistoryDaysFromOldest(

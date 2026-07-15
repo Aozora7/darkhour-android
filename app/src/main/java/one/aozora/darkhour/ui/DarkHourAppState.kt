@@ -17,6 +17,8 @@ import one.aozora.darkhour.core.periodogram.computePeriodogram
 import one.aozora.darkhour.data.HealthConnectAccess
 import one.aozora.darkhour.data.HealthDataRange
 import one.aozora.darkhour.data.HealthImportPhase
+import one.aozora.darkhour.data.HealthConnectFileOperation
+import one.aozora.darkhour.data.SleepFileImportResult
 import one.aozora.darkhour.ui.actogram.ActogramDisplayOptions
 import one.aozora.darkhour.ui.actogram.ActogramLayout
 import one.aozora.darkhour.ui.actogram.ActogramLayoutEngine
@@ -58,10 +60,18 @@ fun rememberDarkHourAppState(
     importError: String?,
     statsAllDataError: String?,
     totalHistoryDays: Int?,
+    fileWriteSupported: Boolean,
+    fileImportedRecordCount: Int,
+    fileOperation: HealthConnectFileOperation,
+    fileImportResult: SleepFileImportResult?,
+    fileOperationMessage: String?,
+    fileOperationError: String?,
     onRequestHealthPermissions: () -> Unit,
     onRequestHistoryPermission: () -> Unit,
     onRequestStatsAllData: () -> Unit,
     onHealthDataRangeChange: (HealthDataRange) -> Unit,
+    onImportSleepFiles: () -> Unit,
+    onDeleteOwnedSleepRecords: () -> Unit,
 ): DarkHourAppState {
     var options by remember { mutableStateOf(initialDisplayOptions) }
     var settings by remember { mutableStateOf(initialSettings) }
@@ -280,10 +290,18 @@ fun rememberDarkHourAppState(
             importError = importError,
             statsAllDataError = statsAllDataError,
             totalHistoryDays = totalHistoryDays,
+            fileWriteSupported = fileWriteSupported,
+            fileImportedRecordCount = fileImportedRecordCount,
+            fileOperation = fileOperation,
+            fileImportResult = fileImportResult,
+            fileOperationMessage = fileOperationMessage,
+            fileOperationError = fileOperationError,
             onRequestHealthPermissions = onRequestHealthPermissions,
             onRequestHistoryPermission = onRequestHistoryPermission,
             onRequestStatsAllData = onRequestStatsAllData,
             onDataRangeChange = onHealthDataRangeChange,
+            onImportSleepFiles = onImportSleepFiles,
+            onDeleteOwnedSleepRecords = onDeleteOwnedSleepRecords,
         ),
     )
 }

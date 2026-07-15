@@ -1,0 +1,35 @@
+{
+  "sleep": [
+    {
+      "name": "users/0000000000000000000/dataTypes/sleep/dataPoints/synthetic-manual-001",
+      "dataSource": {
+        "recordingMethod": "MANUAL",
+        "device": {
+          "displayName": "Synthetic Tracker"
+        },
+        "platform": "FITBIT"
+      },
+      "sleep": {
+        "interval": {
+          "startTime": "2026-01-01T20:00:00Z",
+          "startUtcOffset": "10800s",
+          "endTime": "2026-01-01T22:00:00Z",
+          "endUtcOffset": "10800s"
+        },
+        "stages": [
+          {
+            "startTime": "2026-01-01T20:00:00Z",
+            "endTime": "2026-01-01T21:00:00Z",
+            "type": "ASLEEP"
+          },
+          {
+            "startTime": "2026-01-01T21:00:00Z",
+            "endTime": "2026-01-01T22:00:00Z",
+            "type": "RESTLESS"
+          }
+        ],
+        "updateTime": "2026-01-02T01:00:00Z"
+      }
+    }
+  ]
+}

@@ -46,7 +46,6 @@ internal fun resolveImportedSleepRecords(
         }
         for (activeIndex in active) {
             val other = records[activeIndex]
-            if (!current.hasDifferentKnownSource(other)) continue
             val overlapMillis = overlapMillis(current.record, other.record)
             if (overlapMillis <= 0L) continue
 
@@ -277,12 +276,6 @@ private fun ImportedSleepRecord.recordingMethodRank(): Int = when (sourceRecordi
     Metadata.RECORDING_METHOD_UNKNOWN -> 1
     Metadata.RECORDING_METHOD_MANUAL_ENTRY -> 0
     else -> 1
-}
-
-private fun ImportedSleepRecord.hasDifferentKnownSource(other: ImportedSleepRecord): Boolean {
-    val packageName = sourcePackageName ?: return false
-    val otherPackageName = other.sourcePackageName ?: return false
-    return packageName != otherPackageName
 }
 
 private fun ImportedSleepRecord.stableIdentity(): String =

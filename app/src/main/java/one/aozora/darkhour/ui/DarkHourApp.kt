@@ -20,6 +20,8 @@ import kotlinx.coroutines.launch
 import one.aozora.darkhour.data.HealthConnectAccess
 import one.aozora.darkhour.data.HealthDataRange
 import one.aozora.darkhour.data.HealthImportPhase
+import one.aozora.darkhour.data.HealthConnectFileOperation
+import one.aozora.darkhour.data.SleepFileImportResult
 import one.aozora.darkhour.core.model.SleepRecord
 import one.aozora.darkhour.ui.actogram.ActogramDisplayOptions
 import one.aozora.darkhour.ui.schedule.ScheduleEntry
@@ -49,10 +51,18 @@ fun DarkHourApp(
     importError: String? = null,
     statsAllDataError: String? = null,
     totalHistoryDays: Int? = null,
+    fileWriteSupported: Boolean = false,
+    fileImportedRecordCount: Int = 0,
+    fileOperation: HealthConnectFileOperation = HealthConnectFileOperation.IDLE,
+    fileImportResult: SleepFileImportResult? = null,
+    fileOperationMessage: String? = null,
+    fileOperationError: String? = null,
     onRequestHealthPermissions: () -> Unit = {},
     onRequestHistoryPermission: () -> Unit = {},
     onRequestStatsAllData: () -> Unit = {},
     onHealthDataRangeChange: (HealthDataRange) -> Unit = {},
+    onImportSleepFiles: () -> Unit = {},
+    onDeleteOwnedSleepRecords: () -> Unit = {},
     analysisRecords: List<SleepRecord> = records,
 ) {
     var actogramTransforming by remember { mutableStateOf(false) }
@@ -78,10 +88,18 @@ fun DarkHourApp(
         importError = importError,
         statsAllDataError = statsAllDataError,
         totalHistoryDays = totalHistoryDays,
+        fileWriteSupported = fileWriteSupported,
+        fileImportedRecordCount = fileImportedRecordCount,
+        fileOperation = fileOperation,
+        fileImportResult = fileImportResult,
+        fileOperationMessage = fileOperationMessage,
+        fileOperationError = fileOperationError,
         onRequestHealthPermissions = onRequestHealthPermissions,
         onRequestHistoryPermission = onRequestHistoryPermission,
         onRequestStatsAllData = onRequestStatsAllData,
         onHealthDataRangeChange = onHealthDataRangeChange,
+        onImportSleepFiles = onImportSleepFiles,
+        onDeleteOwnedSleepRecords = onDeleteOwnedSleepRecords,
     )
 
     val pagerState = rememberPagerState(initialPage = 0, pageCount = { DestinationItems.size })

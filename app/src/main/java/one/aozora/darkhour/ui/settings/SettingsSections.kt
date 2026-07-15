@@ -1,18 +1,30 @@
 package one.aozora.darkhour.ui.settings
 
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Row
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.UriHandler
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.unit.dp
 import one.aozora.darkhour.data.HealthConnectAccess
+import one.aozora.darkhour.data.HealthConnectFileOperation
 import one.aozora.darkhour.data.HealthDataRange
 import one.aozora.darkhour.ui.HealthConnectState
 import kotlin.math.roundToInt
@@ -131,6 +143,126 @@ internal fun DataSettingsSection(
 }
 
 @Composable
+internal fun ImportSettingsSection(
+    healthConnect: HealthConnectState,
+) {
+    var showDeleteConfirmation by remember { mutableStateOf(false) }
+    SettingsSection("Import") {
+        if (!healthConnect.fileWriteSupported) {
+            Text(
+                "File import requires Android 14 or later.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.testTag("sleep_file_import_unsupported"),
+            )
+        } else {
+            val providerAvailable = healthConnect.access != HealthConnectAccess.UNAVAILABLE &&
+                healthConnect.access != HealthConnectAccess.UPDATE_REQUIRED
+            val operationIdle = healthConnect.fileOperation == HealthConnectFileOperation.IDLE
+            Text(
+                "Imported records in selected range: ${healthConnect.fileImportedRecordCount}",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.testTag("imported_sleep_record_count"),
+            )
+            OutlinedButton(
+                onClick = healthConnect.onImportSleepFiles,
+                enabled = providerAvailable && operationIdle,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("import_sleep_files"),
+                shape = MaterialTheme.shapes.medium,
+            ) {
+                Text("Import sleep files")
+            }
+            OutlinedButton(
+                onClick = { showDeleteConfirmation = true },
+                enabled = providerAvailable && operationIdle,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("delete_imported_records"),
+                shape = MaterialTheme.shapes.medium,
+                colors = ButtonDefaults.outlinedButtonColors(
+                    contentColor = MaterialTheme.colorScheme.error,
+                ),
+            ) {
+                Text("Delete imported records")
+            }
+            when (healthConnect.fileOperation) {
+                HealthConnectFileOperation.IMPORTING -> FileOperationProgress("Importing sleep files…")
+                HealthConnectFileOperation.DELETING -> FileOperationProgress("Deleting imported records…")
+                HealthConnectFileOperation.IDLE -> Unit
+            }
+            healthConnect.fileOperationMessage?.let { message ->
+                Text(
+                    message,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.testTag("sleep_file_operation_message"),
+                )
+            }
+            healthConnect.fileOperationError?.let { error ->
+                Text(
+                    error,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.testTag("sleep_file_operation_error"),
+                )
+            }
+            healthConnect.fileImportResult?.issues?.firstOrNull()?.let { issue ->
+                Text(
+                    issue,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
+
+    if (showDeleteConfirmation) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirmation = false },
+            title = { Text("Delete imported records?") },
+            text = {
+                Text(
+                    "This permanently deletes every sleep record imported by this Dark Hour app " +
+                        "from Health Connect. Records owned by other apps are not affected.",
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showDeleteConfirmation = false
+                        healthConnect.onDeleteOwnedSleepRecords()
+                    },
+                    modifier = Modifier.testTag("confirm_delete_imported_records"),
+                ) {
+                    Text("Delete", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { showDeleteConfirmation = false },
+                    modifier = Modifier.testTag("cancel_delete_imported_records"),
+                ) {
+                    Text("Cancel")
+                }
+            },
+        )
+    }
+}
+
+@Composable
+private fun FileOperationProgress(label: String) {
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        CircularProgressIndicator()
+        Text(label, style = MaterialTheme.typography.bodyMedium)
+    }
+}
+
+@Composable
 internal fun PrivacySettingsSection(
     uriHandler: UriHandler,
 ) {
@@ -145,7 +277,7 @@ internal fun PrivacySettingsSection(
             Text("Open privacy policy")
         }
         Text(
-            "Updated June 18, 2026",
+            "Updated July 15, 2026",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )

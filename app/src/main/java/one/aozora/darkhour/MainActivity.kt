@@ -5,10 +5,12 @@ import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
 import one.aozora.darkhour.data.HealthConnectDataController
 import one.aozora.darkhour.data.HealthDataRange
 import one.aozora.darkhour.data.settings.AppSettingsStore
@@ -24,10 +26,29 @@ import kotlin.math.ceil
 class MainActivity : ComponentActivity() {
     private lateinit var healthConnect: HealthConnectDataController
     private lateinit var appSettings: AppSettingsStore
+    private var pendingSleepWriteAction: SleepWriteAction? = null
     private val requestHealthPermissions = registerForActivityResult(
         HealthConnectDataController.permissionContract,
     ) {
         healthConnect.refresh()
+    }
+    private val openSleepFiles = registerForActivityResult(
+        ActivityResultContracts.OpenMultipleDocuments(),
+    ) { uris ->
+        if (::healthConnect.isInitialized && uris.isNotEmpty()) {
+            healthConnect.importSleepFiles(uris)
+        }
+    }
+    private val requestSleepWritePermission = registerForActivityResult(
+        HealthConnectDataController.permissionContract,
+    ) { granted ->
+        val action = pendingSleepWriteAction
+        pendingSleepWriteAction = null
+        if (HealthConnectDataController.sleepWritePermission in granted && action != null) {
+            runSleepWriteAction(action)
+        } else if (::healthConnect.isInitialized) {
+            healthConnect.reportSleepWritePermissionDenied()
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -85,6 +106,12 @@ class MainActivity : ComponentActivity() {
                     importError = if (BuildConfig.USE_DEMO_DATA) null else healthState.errorMessage,
                     statsAllDataError = if (BuildConfig.USE_DEMO_DATA) null else healthState.statsAllDataErrorMessage,
                     totalHistoryDays = healthState.totalHistoryDays,
+                    fileWriteSupported = !BuildConfig.USE_DEMO_DATA && healthState.fileWriteSupported,
+                    fileImportedRecordCount = healthState.fileImportedRecordCount,
+                    fileOperation = healthState.fileOperation,
+                    fileImportResult = healthState.fileImportResult,
+                    fileOperationMessage = healthState.fileOperationMessage,
+                    fileOperationError = healthState.fileOperationErrorMessage,
                     onRequestHealthPermissions = {
                         if (!BuildConfig.USE_DEMO_DATA) {
                             requestHealthPermissions.launch(healthConnect.requiredPermissions())
@@ -114,6 +141,12 @@ class MainActivity : ComponentActivity() {
                             }
                         }
                     },
+                    onImportSleepFiles = {
+                        beginSleepWriteAction(SleepWriteAction.IMPORT)
+                    },
+                    onDeleteOwnedSleepRecords = {
+                        beginSleepWriteAction(SleepWriteAction.DELETE)
+                    },
                 )
             }
         }
@@ -132,6 +165,38 @@ class MainActivity : ComponentActivity() {
         }
         super.onDestroy()
     }
+
+    private fun beginSleepWriteAction(action: SleepWriteAction) {
+        if (
+            BuildConfig.USE_DEMO_DATA ||
+            !::healthConnect.isInitialized ||
+            !healthConnect.isFileWriteSupported
+        ) {
+            return
+        }
+        lifecycleScope.launch {
+            if (healthConnect.hasSleepWritePermission()) {
+                runSleepWriteAction(action)
+            } else {
+                pendingSleepWriteAction = action
+                requestSleepWritePermission.launch(
+                    setOf(HealthConnectDataController.sleepWritePermission),
+                )
+            }
+        }
+    }
+
+    private fun runSleepWriteAction(action: SleepWriteAction) {
+        when (action) {
+            SleepWriteAction.IMPORT -> openSleepFiles.launch(arrayOf("*/*"))
+            SleepWriteAction.DELETE -> healthConnect.deleteOwnedSleepRecords()
+        }
+    }
+}
+
+private enum class SleepWriteAction {
+    IMPORT,
+    DELETE,
 }
 
 private fun ComponentActivity.initialVisibleImportDuration(

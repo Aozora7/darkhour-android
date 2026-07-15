@@ -1,6 +1,6 @@
 # Privacy Policy
 
-Last updated: June 18, 2026
+Last updated: July 15, 2026
 
 Dark Hour Android app (the "application") is a free and open-source Android application for inspecting
 sleep, circadian timing, and schedule alignment from Health Connect sleep data.
@@ -22,8 +22,10 @@ Privacy contact: aozora@aozora.one
 - No sleep data is sold or shared with third parties.
 - Health Connect sleep data is read only after the user grants the relevant
   Android permissions.
-- Health Connect sleep data is read into memory on launch or refresh and is not
-  saved by the application.
+- On Android 14 or later, selected sleep export files can be processed locally
+  and their sleep sessions written to Health Connect only after the user grants
+  sleep write permission.
+- Selected files are not uploaded or retained by the application.
 
 ## Data The Application Accesses
 
@@ -34,6 +36,13 @@ available, stage information such as awake, light, deep, and REM sleep.
 The application only accesses the Health Connect data needed for its sleep,
 circadian, and schedule-alignment features.
 
+On Android 14 or later, the user can choose one or more sleep export files with
+Android's system file picker. The application reads only files the user selects,
+detects supported sleep export formats from their contents, and extracts sleep
+sessions, stage intervals, source identifiers, timestamps, and available device
+or platform metadata needed to create Health Connect sleep records. File import
+and deletion are not offered on earlier Android versions.
+
 ## How Data Is Used
 
 The application uses this data only to display the actogram, show sleep details,
@@ -43,6 +52,13 @@ By default, the application reads the recent Health Connect sleep range (30 days
 user chooses the all-history range, the application requests the additional
 Health Connect history permission so older sleep records can be shown and
 analyzed.
+
+When the user starts a file import and grants Health Connect sleep write
+permission, the application writes supported sleep sessions to Health Connect.
+Source-provided record identifiers are stored as Health Connect client record
+identifiers so re-importing the same source record can update it instead of
+creating another copy. The selected source files and parsed exports are processed
+locally and are not copied into the application's private storage.
 
 The application does not use sleep data for advertising, profiling, credit
 decisions, insurance decisions, employment decisions, or any purpose unrelated to
@@ -75,19 +91,30 @@ device as part of standard Android app backup or device transfer features if the
 user has enabled those operating-system features.
 
 Health Connect remains the source of truth for sleep data. The application reads
-sleep data from Health Connect, displays and analyzes it locally, and does not
-save imported sleep records.
+sleep data from Health Connect and displays and analyzes it locally. Sleep
+sessions imported from selected files are saved only to Health Connect, not to
+the application's private storage. Health Connect controls its own storage,
+backup, retention, permissions, and deletion behavior.
 
 ## Data Retention And Deletion
 
-Health Connect sleep data is retained only in memory while the application is
-running. It is cleared when the application process ends, when Health Connect
-permission is missing, or when Health Connect is refreshed with no available
-records.
+Sleep data read from Health Connect for display and analysis is retained only in
+application memory while the application is running. It is cleared when the
+application process ends, when Health Connect permission is missing, or when
+Health Connect is refreshed with no available records.
+
+Sleep sessions imported from files remain in Health Connect according to the
+user's Health Connect settings and retention controls. On Android 14 or later,
+the application provides a confirmed action to delete all Health Connect sleep
+records owned by the current Dark Hour application package. This action is
+irreversible and does not delete sleep records owned by other applications.
 
 The user can revoke permissions at any time from Android Settings or Health
 Connect settings. After permissions are revoked, the application can no longer
 access the revoked Health Connect data.
+
+The user can also review or delete Health Connect data through Health Connect's
+own controls.
 
 Local preferences and schedule entries remain on the device until the user
 changes them, clears application storage, uninstalls the application, or removes
@@ -95,9 +122,9 @@ restored backup data through Android system settings or backup controls.
 
 ## Security
 
-The application relies on Android and Health Connect permission controls to
-protect access to sleep data. Health Connect access is available only after the
-user grants the relevant permissions.
+The application relies on Android's system file picker and Health Connect
+permission controls to protect access to sleep data. Health Connect read and
+write access is available only after the user grants the relevant permissions.
 
 Because the application works locally and does not upload sleep data to a
 server, there is no cloud account or cloud sleep-data store operated by the

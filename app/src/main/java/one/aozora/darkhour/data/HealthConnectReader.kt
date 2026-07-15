@@ -14,6 +14,7 @@ internal suspend fun HealthConnectClient.readSleepRecords(
     range: HealthDataRange,
     now: Instant,
     zoneId: ZoneId,
+    ownedPackageName: String,
     initialImportDuration: Duration = DEFAULT_HISTORY_DURATION,
     readTotalHistoryDays: Boolean = range == HealthDataRange.EntireHistory,
     onProgress: (HealthImportProgress) -> Unit = {},
@@ -22,6 +23,7 @@ internal suspend fun HealthConnectClient.readSleepRecords(
         range = range,
         now = now,
         zoneId = zoneId,
+        ownedPackageName = ownedPackageName,
         initialImportDuration = initialImportDuration,
         readTotalHistoryDays = readTotalHistoryDays,
         onProgress = onProgress,
@@ -32,11 +34,12 @@ internal suspend fun HealthConnectClient.readSleepRecordsRecentFirst(
     range: HealthDataRange,
     now: Instant,
     zoneId: ZoneId,
+    ownedPackageName: String,
     initialImportDuration: Duration = DEFAULT_HISTORY_DURATION,
     readTotalHistoryDays: Boolean = range == HealthDataRange.EntireHistory,
     onProgress: (HealthImportProgress) -> Unit = {},
 ): ImportedSleepRecords {
-    val accumulator = ImportedSleepAccumulator(zoneId)
+    val accumulator = ImportedSleepAccumulator(zoneId, ownedPackageName)
 
     val recentRange = healthConnectInitialReadRange(range, now, initialImportDuration)
     val recentRecords = readSleepRecordsPageRange(recentRange.start, recentRange.end)
@@ -91,6 +94,7 @@ internal suspend fun HealthConnectClient.readSleepRecordsRecentFirst(
         records = resolved.records,
         analysisRecords = resolved.analysisRecords,
         totalHistoryDays = totalHistoryDaysFromOldest(oldestAvailableStart, now, zoneId),
+        fileImportedRecordCount = accumulator.fileImportedRecordCount,
     )
 }
 

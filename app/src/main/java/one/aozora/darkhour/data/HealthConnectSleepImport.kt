@@ -28,6 +28,7 @@ data class ImportedSleepRecord(
     val sourceLastModifiedTime: Instant = Instant.EPOCH,
     val specificStageSeconds: Long = -1,
     val usableStageSeconds: Long = -1,
+    val sourceClientRecordId: String? = null,
 )
 
 internal fun SleepSessionRecord.toImportedSleepRecord(
@@ -93,6 +94,7 @@ internal fun SleepSessionRecord.toImportedSleepRecord(
         sourceLastModifiedTime = metadata.lastModifiedTime,
         specificStageSeconds = specificStageSeconds,
         usableStageSeconds = mappedStages.sumOf { it.seconds.toLong().coerceAtLeast(0) },
+        sourceClientRecordId = metadata.clientRecordId,
     )
 }
 

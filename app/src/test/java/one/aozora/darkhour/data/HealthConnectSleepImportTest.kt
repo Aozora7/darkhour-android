@@ -165,6 +165,32 @@ class HealthConnectSleepImportTest {
     }
 
     @Test
+    fun countsOnlyFileImportsOwnedByCurrentPackage() {
+        val start = Instant.parse("2026-06-10T21:00:00Z")
+        val record = SleepSessionRecord(
+            startTime = start,
+            startZoneOffset = ZoneOffset.UTC,
+            endTime = start.plusSeconds(8 * 60 * 60),
+            endZoneOffset = ZoneOffset.UTC,
+            metadata = Metadata.manualEntry(
+                clientRecordId = "darkhour:file:fitbit:synthetic-1",
+            ),
+            stages = emptyList(),
+        )
+        val imported = record.toImportedSleepRecord(ZoneId.of("UTC"))
+        val ownedFileImport = imported.copy(sourcePackageName = "one.aozora.darkhour.debug")
+        val otherPackage = ownedFileImport.copy(sourcePackageName = "example.other")
+        val ownedNonFileRecord = ownedFileImport.copy(sourceClientRecordId = "manual:1")
+
+        assertEquals("darkhour:file:fitbit:synthetic-1", imported.sourceClientRecordId)
+        assertEquals(
+            1,
+            listOf(ownedFileImport, otherPackage, ownedNonFileRecord)
+                .countFileImportsOwnedBy("one.aozora.darkhour.debug"),
+        )
+    }
+
+    @Test
     fun crossMidnightSessionUsesLocalStartDateForAlgorithmParity() {
         val start = Instant.parse("2026-06-10T21:00:00Z")
         val record = SleepSessionRecord(

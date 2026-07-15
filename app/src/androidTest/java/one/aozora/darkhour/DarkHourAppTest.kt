@@ -12,6 +12,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
@@ -253,6 +254,71 @@ class DarkHourAppTest {
         composeRule.runOnIdle {
             assertTrue(requested)
         }
+    }
+
+    @Test
+    fun sleepFileImportIsHiddenBehindAndroidVersionSupportState() {
+        composeRule.setContent {
+            DarkHourTheme {
+                DarkHourApp(
+                    records = DemoData.records,
+                    fileWriteSupported = false,
+                )
+            }
+        }
+
+        composeRule.onNodeWithTag("destination_settings").performClick()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("sleep_file_import_unsupported").performScrollTo().assertIsDisplayed()
+        composeRule.onAllNodesWithTag("import_sleep_files").assertCountEquals(0)
+        composeRule.onAllNodesWithTag("delete_imported_records").assertCountEquals(0)
+    }
+
+    @Test
+    fun sleepFileImportUsesSingleSettingsCallback() {
+        var imports = 0
+        composeRule.setContent {
+            DarkHourTheme {
+                DarkHourApp(
+                    records = DemoData.records,
+                    fileWriteSupported = true,
+                    onImportSleepFiles = { imports += 1 },
+                )
+            }
+        }
+
+        composeRule.onNodeWithTag("destination_settings").performClick()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("import_sleep_files").performScrollTo().performClick()
+
+        composeRule.runOnIdle { assertTrue(imports == 1) }
+    }
+
+    @Test
+    fun ownedSleepDeletionRequiresConfirmation() {
+        var deletions = 0
+        composeRule.setContent {
+            DarkHourTheme {
+                DarkHourApp(
+                    records = DemoData.records,
+                    fileWriteSupported = true,
+                    fileImportedRecordCount = 7,
+                    onDeleteOwnedSleepRecords = { deletions += 1 },
+                )
+            }
+        }
+
+        composeRule.onNodeWithTag("destination_settings").performClick()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("imported_sleep_record_count").performScrollTo()
+            .assertTextEquals("Imported records in selected range: 7")
+        composeRule.onNodeWithTag("delete_imported_records").performClick()
+        composeRule.onNodeWithTag("cancel_delete_imported_records").performClick()
+        composeRule.runOnIdle { assertTrue(deletions == 0) }
+
+        composeRule.onNodeWithTag("delete_imported_records").performClick()
+        composeRule.onNodeWithTag("confirm_delete_imported_records").performClick()
+        composeRule.runOnIdle { assertTrue(deletions == 1) }
     }
 
     @Test
