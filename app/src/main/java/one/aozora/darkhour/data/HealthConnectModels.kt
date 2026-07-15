@@ -56,6 +56,7 @@ data class HealthConnectUiState(
     val errorMessage: String? = null,
     val statsAllDataErrorMessage: String? = null,
     val fileWriteSupported: Boolean = false,
+    val fileDeletionSupported: Boolean = fileWriteSupported,
     val fileImportedRecordCount: Int = 0,
     val fileOperation: HealthConnectFileOperation = HealthConnectFileOperation.IDLE,
     val fileImportResult: SleepFileImportResult? = null,

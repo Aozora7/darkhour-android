@@ -120,6 +120,7 @@ internal suspend fun HealthConnectClient.readSleepRecordsPageRange(
     dataOriginFilter: Set<DataOrigin> = emptySet(),
 ): List<SleepSessionRecord> {
     val rawRecords = mutableListOf<SleepSessionRecord>()
+    val seenPageTokens = mutableSetOf<String>()
     var pageToken: String? = null
     do {
         val response = readRecordsWithRateLimitRetry(
@@ -133,7 +134,7 @@ internal suspend fun HealthConnectClient.readSleepRecordsPageRange(
             ),
         )
         rawRecords += response.records
-        pageToken = response.pageToken
+        pageToken = nextHealthConnectPageToken(response.pageToken, seenPageTokens)
     } while (pageToken != null)
     return rawRecords
 }

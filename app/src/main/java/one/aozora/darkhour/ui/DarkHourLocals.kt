@@ -94,6 +94,7 @@ data class HealthConnectState(
     val statsAllDataError: String?,
     val totalHistoryDays: Int?,
     val fileWriteSupported: Boolean,
+    val fileDeletionSupported: Boolean,
     val fileImportedRecordCount: Int,
     val fileOperation: HealthConnectFileOperation,
     val fileImportResult: SleepFileImportResult?,

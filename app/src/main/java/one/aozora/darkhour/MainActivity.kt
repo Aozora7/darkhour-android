@@ -116,6 +116,7 @@ class MainActivity : ComponentActivity() {
             scope = lifecycleScope,
             initialDataRange = appSettings.readHealthDataRange(),
             initialImportDuration = initialVisibleImportDuration(startupDisplayOptions),
+            allowLegacyFileImport = BuildConfig.DEBUG,
         )
         enableEdgeToEdge()
         setContent {
@@ -158,6 +159,7 @@ class MainActivity : ComponentActivity() {
                     statsAllDataError = if (BuildConfig.USE_DEMO_DATA) null else healthState.statsAllDataErrorMessage,
                     totalHistoryDays = healthState.totalHistoryDays,
                     fileWriteSupported = !BuildConfig.USE_DEMO_DATA && healthState.fileWriteSupported,
+                    fileDeletionSupported = !BuildConfig.USE_DEMO_DATA && healthState.fileDeletionSupported,
                     fileImportedRecordCount = healthState.fileImportedRecordCount,
                     fileOperation = healthState.fileOperation,
                     fileImportResult = healthState.fileImportResult,
@@ -234,11 +236,14 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun beginSleepWriteAction(action: SleepWriteAction) {
+        if (BuildConfig.USE_DEMO_DATA || !::healthConnect.isInitialized) return
+        val actionSupported = when (action) {
+            SleepWriteAction.IMPORT -> healthConnect.isFileWriteSupported
+            SleepWriteAction.DELETE -> healthConnect.isFileDeletionSupported
+        }
         if (
-            BuildConfig.USE_DEMO_DATA ||
-            !::healthConnect.isInitialized ||
             !healthConnect.isProviderAvailable ||
-            !healthConnect.isFileWriteSupported
+            !actionSupported
         ) {
             return
         }

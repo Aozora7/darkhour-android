@@ -394,6 +394,25 @@ class DarkHourAppTest {
     }
 
     @Test
+    fun legacyDebugImportIsShownWithoutDeletion() {
+        composeRule.setContent {
+            DarkHourTheme {
+                DarkHourApp(
+                    records = DemoData.records,
+                    fileWriteSupported = true,
+                    fileDeletionSupported = false,
+                )
+            }
+        }
+
+        composeRule.onNodeWithTag("destination_settings").performClick()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("import_sleep_files").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithTag("legacy_debug_sleep_import_note").performScrollTo().assertIsDisplayed()
+        composeRule.onAllNodesWithTag("delete_imported_records").assertCountEquals(0)
+    }
+
+    @Test
     fun ownedSleepDeletionRequiresConfirmation() {
         var deletions = 0
         composeRule.setContent {

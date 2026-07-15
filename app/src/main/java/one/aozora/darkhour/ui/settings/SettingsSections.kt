@@ -232,18 +232,28 @@ internal fun ImportExportSettingsSection(
             ) {
                 Text("Import sleep files")
             }
-            OutlinedButton(
-                onClick = { showDeleteConfirmation = true },
-                enabled = providerAvailable && operationIdle,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .testTag("delete_imported_records"),
-                shape = MaterialTheme.shapes.medium,
-                colors = ButtonDefaults.outlinedButtonColors(
-                    contentColor = MaterialTheme.colorScheme.error,
-                ),
-            ) {
-                Text("Delete imported records")
+            if (healthConnect.fileDeletionSupported) {
+                OutlinedButton(
+                    onClick = { showDeleteConfirmation = true },
+                    enabled = providerAvailable && operationIdle,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("delete_imported_records"),
+                    shape = MaterialTheme.shapes.medium,
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = MaterialTheme.colorScheme.error,
+                    ),
+                ) {
+                    Text("Delete imported records")
+                }
+            } else {
+                Text(
+                    "Debug import mode: files are upserted directly without checking existing " +
+                        "Health Connect records.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.testTag("legacy_debug_sleep_import_note"),
+                )
             }
             when (healthConnect.fileOperation) {
                 HealthConnectFileOperation.PREPARING_EXPORT -> FileOperationProgress("Preparing sleep export…")
@@ -312,7 +322,7 @@ internal fun ImportExportSettingsSection(
         )
     }
 
-    if (showDeleteConfirmation) {
+    if (showDeleteConfirmation && healthConnect.fileDeletionSupported) {
         AlertDialog(
             onDismissRequest = { showDeleteConfirmation = false },
             title = { Text("Delete imported records?") },

@@ -129,6 +129,7 @@ private suspend fun HealthConnectClient.forEachSleepRecordPage(
     origins: Set<DataOrigin>,
     consume: (List<SleepSessionRecord>) -> Unit,
 ) {
+    val seenPageTokens = mutableSetOf<String>()
     var pageToken: String? = null
     do {
         val response = readRecordsWithRateLimitRetry(
@@ -142,7 +143,7 @@ private suspend fun HealthConnectClient.forEachSleepRecordPage(
             ),
         )
         consume(response.records)
-        pageToken = response.pageToken
+        pageToken = nextHealthConnectPageToken(response.pageToken, seenPageTokens)
     } while (pageToken != null)
 }
 

@@ -29,9 +29,15 @@ class HealthConnectDataController(
     private val clock: Clock = Clock.systemUTC(),
     initialDataRange: HealthDataRange = HealthDataRange.DEFAULT_PERIOD,
     initialImportDuration: Duration = DEFAULT_HISTORY_DURATION,
+    allowLegacyFileImport: Boolean = false,
 ) {
     private val applicationContext = context.applicationContext
     private val zoneId = ZoneId.systemDefault()
+    private val legacyDirectFileImport = isLegacyDirectFileImportSupported(
+        allowLegacyFileImport = allowLegacyFileImport,
+        sdkInt = Build.VERSION.SDK_INT,
+    )
+    private val fileImportSupported = isSleepFileWriteSupported || legacyDirectFileImport
     private var recentImportDuration = initialImportDuration.coerceAtLeast(Duration.ofDays(1))
     private var refreshJob: Job? = null
     private var statsAllDataRefreshJob: Job? = null
@@ -40,13 +46,17 @@ class HealthConnectDataController(
     private val mutableState = MutableStateFlow(
         HealthConnectUiState(
             dataRange = initialDataRange,
-            fileWriteSupported = isSleepFileWriteSupported,
+            fileWriteSupported = fileImportSupported,
+            fileDeletionSupported = isSleepFileWriteSupported,
         ),
     )
 
     val state: StateFlow<HealthConnectUiState> = mutableState.asStateFlow()
 
     val isFileWriteSupported: Boolean
+        get() = fileImportSupported
+
+    val isFileDeletionSupported: Boolean
         get() = isSleepFileWriteSupported
 
     val isProviderAvailable: Boolean
@@ -60,7 +70,7 @@ class HealthConnectDataController(
     }
 
     suspend fun hasSleepWritePermission(): Boolean {
-        if (!isSleepFileWriteSupported) return false
+        if (!fileImportSupported) return false
         if (HealthConnectClient.getSdkStatus(applicationContext) != HealthConnectClient.SDK_AVAILABLE) {
             return false
         }
@@ -125,6 +135,7 @@ class HealthConnectDataController(
                         uris = uris,
                         fallbackZoneId = ZoneId.systemDefault(),
                         callingPackageName = applicationContext.packageName,
+                        verifyExistingHealthConnectRecords = !legacyDirectFileImport,
                     )
                 }
                 mutableState.value = state.value.copy(
@@ -257,8 +268,13 @@ class HealthConnectDataController(
         operation: HealthConnectFileOperation,
         requiresWriteSupport: Boolean = true,
     ): Boolean {
+        val operationWriteSupported = when (operation) {
+            HealthConnectFileOperation.IMPORTING -> fileImportSupported
+            HealthConnectFileOperation.DELETING -> isSleepFileWriteSupported
+            else -> true
+        }
         if (!isProviderAvailable ||
-            (requiresWriteSupport && !isSleepFileWriteSupported) ||
+            (requiresWriteSupport && !operationWriteSupported) ||
             state.value.fileOperation != HealthConnectFileOperation.IDLE
         ) {
             return false
@@ -541,6 +557,12 @@ class HealthConnectDataController(
  */
 internal val MAX_HEALTH_CONNECT_EPOCH_MILLI_INSTANT: Instant =
     Instant.ofEpochMilli(Long.MAX_VALUE)
+
+internal fun isLegacyDirectFileImportSupported(
+    allowLegacyFileImport: Boolean,
+    sdkInt: Int,
+): Boolean = allowLegacyFileImport &&
+    sdkInt in Build.VERSION_CODES.P until Build.VERSION_CODES.UPSIDE_DOWN_CAKE
 
 internal val isSleepFileWriteSupported: Boolean
     get() = Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE

@@ -1,5 +1,6 @@
 package one.aozora.darkhour.data
 
+import android.os.Build
 import androidx.health.connect.client.HealthConnectClient
 import org.junit.Assert.assertEquals
 import org.junit.Test
@@ -54,6 +55,18 @@ class HealthConnectProviderTest {
                 providerAvailable = true,
                 resumedAfterSetup = true,
             ),
+        )
+    }
+
+    @Test
+    fun directImportCompatibilityIsDebugOptInForAndroidNineThroughThirteen() {
+        assertEquals(false, isLegacyDirectFileImportSupported(false, Build.VERSION_CODES.P))
+        assertEquals(false, isLegacyDirectFileImportSupported(true, Build.VERSION_CODES.O_MR1))
+        assertEquals(true, isLegacyDirectFileImportSupported(true, Build.VERSION_CODES.P))
+        assertEquals(true, isLegacyDirectFileImportSupported(true, Build.VERSION_CODES.TIRAMISU))
+        assertEquals(
+            false,
+            isLegacyDirectFileImportSupported(true, Build.VERSION_CODES.UPSIDE_DOWN_CAKE),
         )
     }
 }

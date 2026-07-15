@@ -18,6 +18,7 @@ internal suspend fun importSleepFilesToHealthConnect(
     fallbackZoneId: ZoneId,
     callingPackageName: String? = null,
     registry: SleepFileDecoderRegistry = SleepFileDecoderRegistry(),
+    verifyExistingHealthConnectRecords: Boolean = true,
 ): SleepFileImportResult {
     var recognizedFiles = 0
     var processedRecords = 0
@@ -53,24 +54,24 @@ internal suspend fun importSleepFilesToHealthConnect(
             issues += "$displayName: $location${issue.reason}"
         }
 
-        val sessionsToWrite = if (decoder === HealthConnectSleepFileDecoder) {
-            val existing = runCatching {
-                client.readExistingSourceMatches(decoded.sessions)
-            }.getOrElse { failure ->
-                return SleepFileImportResult(
-                    selectedFileCount = uris.size,
-                    recognizedFileCount = recognizedFiles,
-                    processedRecordCount = processedRecords,
-                    committedRecordCount = committedRecords,
-                    skippedRecordCount = skippedRecords,
-                    fallbackZoneRecordCount = fallbackZoneRecords,
-                    issues = issues.take(MAX_IMPORT_RESULT_ISSUES),
-                    errorMessage = failure.message ?: "Could not verify existing Health Connect records",
-                )
-            }
-            decoded.sessions.filterNot(existing::contains)
-        } else {
-            decoded.sessions
+        val sessionsToWrite = runCatching {
+            selectSleepSessionsForImport(
+                sessions = decoded.sessions,
+                isHealthConnectExport = decoder === HealthConnectSleepFileDecoder,
+                verifyExistingHealthConnectRecords = verifyExistingHealthConnectRecords,
+                readExisting = client::readExistingSourceMatches,
+            )
+        }.getOrElse { failure ->
+            return SleepFileImportResult(
+                selectedFileCount = uris.size,
+                recognizedFileCount = recognizedFiles,
+                processedRecordCount = processedRecords,
+                committedRecordCount = committedRecords,
+                skippedRecordCount = skippedRecords,
+                fallbackZoneRecordCount = fallbackZoneRecords,
+                issues = issues.take(MAX_IMPORT_RESULT_ISSUES),
+                errorMessage = failure.message ?: "Could not verify existing Health Connect records",
+            )
         }
         val existingInFile = decoded.sessions.size - sessionsToWrite.size
         skippedRecords += existingInFile
@@ -110,6 +111,17 @@ internal suspend fun importSleepFilesToHealthConnect(
         existingRecordCount = existingRecords,
         issues = issues.take(MAX_IMPORT_RESULT_ISSUES),
     )
+}
+
+internal suspend fun selectSleepSessionsForImport(
+    sessions: List<DecodedSleepSession>,
+    isHealthConnectExport: Boolean,
+    verifyExistingHealthConnectRecords: Boolean,
+    readExisting: suspend (List<DecodedSleepSession>) -> Set<DecodedSleepSession>,
+): List<DecodedSleepSession> {
+    if (!isHealthConnectExport || !verifyExistingHealthConnectRecords) return sessions
+    val existing = readExisting(sessions)
+    return sessions.filterNot(existing::contains)
 }
 
 internal suspend fun writeSleepRecordsInBatches(

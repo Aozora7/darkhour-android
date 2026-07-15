@@ -273,6 +273,38 @@ class SleepFileDecoderTest {
     }
 
     @Test
+    fun directImportReturnsEverySessionWithoutReadingExistingRecords() {
+        val session = DecodedSleepSession(
+            formatKey = HEALTH_CONNECT_FORMAT_KEY,
+            formatName = "Health Connect",
+            sourceId = "source-id",
+            clientRecordVersion = 1,
+            startTime = Instant.parse("2026-01-01T00:00:00Z"),
+            startZoneOffset = ZoneOffset.UTC,
+            endTime = Instant.parse("2026-01-01T01:00:00Z"),
+            endZoneOffset = ZoneOffset.UTC,
+            stages = emptyList(),
+            recordingMethod = SleepFileRecordingMethod.UNKNOWN,
+        )
+        var existingReadCount = 0
+
+        val selected = runBlocking {
+            selectSleepSessionsForImport(
+                sessions = listOf(session),
+                isHealthConnectExport = true,
+                verifyExistingHealthConnectRecords = false,
+                readExisting = {
+                    existingReadCount += 1
+                    setOf(session)
+                },
+            )
+        }
+
+        assertEquals(listOf(session), selected)
+        assertEquals(0, existingReadCount)
+    }
+
+    @Test
     fun writerUsesHundredRecordBatchesAndStopsAfterFailure() {
         val records = List(205) { index ->
             DecodedSleepSession(
