@@ -104,7 +104,7 @@ internal suspend fun HealthConnectClient.readOldestSleepRecord(
     end: Instant,
 ): SleepSessionRecord? {
     if (start >= end) return null
-    return readRecords(
+    return readRecordsWithRateLimitRetry(
         ReadRecordsRequest(
             recordType = SleepSessionRecord::class,
             timeRangeFilter = TimeRangeFilter.between(start, end),
@@ -122,7 +122,7 @@ internal suspend fun HealthConnectClient.readSleepRecordsPageRange(
     val rawRecords = mutableListOf<SleepSessionRecord>()
     var pageToken: String? = null
     do {
-        val response = readRecords(
+        val response = readRecordsWithRateLimitRetry(
             ReadRecordsRequest(
                 recordType = SleepSessionRecord::class,
                 timeRangeFilter = TimeRangeFilter.between(start, end),

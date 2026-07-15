@@ -131,7 +131,7 @@ private suspend fun HealthConnectClient.forEachSleepRecordPage(
 ) {
     var pageToken: String? = null
     do {
-        val response = readRecords(
+        val response = readRecordsWithRateLimitRetry(
             ReadRecordsRequest(
                 recordType = SleepSessionRecord::class,
                 timeRangeFilter = TimeRangeFilter.between(range.startInstant, range.endExclusiveInstant),
