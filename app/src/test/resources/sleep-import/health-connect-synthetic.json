@@ -1,0 +1,45 @@
+{
+  "format": "one.aozora.darkhour.health-connect.sleep",
+  "schemaVersion": 1,
+  "exportedAt": "2026-07-15T12:00:00Z",
+  "zoneId": "Europe/Riga",
+  "startDate": "2026-07-14",
+  "endDate": "2026-07-15",
+  "sleep": [
+    {
+      "startTime": "2026-07-14T20:00:00Z",
+      "startZoneOffset": "+03:00",
+      "endTime": "2026-07-15T04:00:00Z",
+      "endZoneOffset": null,
+      "title": "Synthetic source title",
+      "notes": "Synthetic source notes",
+      "stages": [
+        {
+          "startTime": "2026-07-14T20:00:00Z",
+          "endTime": "2026-07-14T21:00:00Z",
+          "stage": 7
+        },
+        {
+          "startTime": "2026-07-14T21:00:00Z",
+          "endTime": "2026-07-15T04:00:00Z",
+          "stage": 5
+        }
+      ],
+      "metadata": {
+        "id": "synthetic-health-connect-id",
+        "dataOrigin": {
+          "packageName": "com.example.synthetic.health"
+        },
+        "lastModifiedTime": "2026-07-15T05:00:00Z",
+        "clientRecordId": "synthetic-portable-id",
+        "clientRecordVersion": 42,
+        "recordingMethod": 1,
+        "device": {
+          "type": 3,
+          "manufacturer": "Synthetic Manufacturer",
+          "model": "Synthetic Model"
+        }
+      }
+    }
+  ]
+}

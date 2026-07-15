@@ -66,10 +66,34 @@ class HealthConnectDataController(
             .getGrantedPermissions()
     }
 
+    suspend fun hasPermissions(permissions: Set<String>): Boolean {
+        if (HealthConnectClient.getSdkStatus(applicationContext) != HealthConnectClient.SDK_AVAILABLE) {
+            return false
+        }
+        return HealthConnectClient.getOrCreate(applicationContext)
+            .permissionController
+            .getGrantedPermissions()
+            .containsAll(permissions)
+    }
+
+    fun exportPermissions(range: SleepExportRange): Set<String> = buildSet {
+        add(SLEEP_READ_PERMISSION)
+        if (range.startInstant < clock.instant().minus(DEFAULT_HISTORY_DURATION)) {
+            add(HealthPermission.PERMISSION_READ_HEALTH_DATA_HISTORY)
+        }
+    }
+
     fun reportSleepWritePermissionDenied() {
         mutableState.value = state.value.copy(
             fileOperation = HealthConnectFileOperation.IDLE,
             fileOperationErrorMessage = "Sleep write permission was not granted",
+        )
+    }
+
+    fun reportSleepExportPermissionDenied() {
+        mutableState.value = state.value.copy(
+            fileOperation = HealthConnectFileOperation.IDLE,
+            fileOperationErrorMessage = "Health Connect history permission was not granted",
         )
     }
 
@@ -83,6 +107,7 @@ class HealthConnectDataController(
                         contentResolver = applicationContext.contentResolver,
                         uris = uris,
                         fallbackZoneId = ZoneId.systemDefault(),
+                        callingPackageName = applicationContext.packageName,
                     )
                 }
                 mutableState.value = state.value.copy(
@@ -101,6 +126,87 @@ class HealthConnectDataController(
         }
     }
 
+    fun prepareSleepExport(range: SleepExportRange) {
+        if (state.value.fileOperation == HealthConnectFileOperation.EXPORTING ||
+            state.value.fileOperation == HealthConnectFileOperation.IMPORTING ||
+            state.value.fileOperation == HealthConnectFileOperation.DELETING
+        ) {
+            return
+        }
+        fileOperationJob?.cancel()
+        mutableState.value = state.value.copy(
+            fileOperation = HealthConnectFileOperation.PREPARING_EXPORT,
+            exportPreparation = null,
+            exportResult = null,
+            fileOperationMessage = null,
+            fileOperationErrorMessage = null,
+        )
+        fileOperationJob = scope.launch {
+            try {
+                val preparation = withContext(Dispatchers.IO) {
+                    HealthConnectClient.getOrCreate(applicationContext).prepareSleepExport(
+                        range = range,
+                        packageDisplayName = ::packageDisplayName,
+                    )
+                }
+                mutableState.value = state.value.copy(
+                    fileOperation = HealthConnectFileOperation.IDLE,
+                    exportPreparation = preparation,
+                )
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (failure: Exception) {
+                finishFileOperationWithError(failure, "Could not prepare sleep export")
+            }
+        }
+    }
+
+    fun cancelSleepExport() {
+        if (state.value.fileOperation == HealthConnectFileOperation.PREPARING_EXPORT) {
+            fileOperationJob?.cancel()
+        }
+        mutableState.value = state.value.copy(
+            fileOperation = HealthConnectFileOperation.IDLE,
+            exportPreparation = null,
+        )
+    }
+
+    fun exportSleepRecords(uri: Uri, packageNames: Set<String>) {
+        val preparation = state.value.exportPreparation ?: return
+        if (packageNames.isEmpty() || !beginFileOperation(
+                HealthConnectFileOperation.EXPORTING,
+                requiresWriteSupport = false,
+            )
+        ) {
+            return
+        }
+        fileOperationJob = scope.launch {
+            try {
+                val result = withContext(Dispatchers.IO) {
+                    HealthConnectClient.getOrCreate(applicationContext).writeSleepExport(
+                        contentResolver = applicationContext.contentResolver,
+                        uri = uri,
+                        range = preparation.range,
+                        packageNames = packageNames,
+                        clock = clock,
+                    )
+                }
+                mutableState.value = state.value.copy(
+                    fileOperation = HealthConnectFileOperation.IDLE,
+                    exportPreparation = null,
+                    exportResult = result,
+                    fileOperationMessage = result.summaryText(),
+                    fileOperationErrorMessage = null,
+                )
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (failure: Exception) {
+                runCatching { applicationContext.contentResolver.delete(uri, null, null) }
+                finishFileOperationWithError(failure, "Sleep export failed")
+            }
+        }
+    }
+
     fun deleteOwnedSleepRecords() {
         if (!beginFileOperation(HealthConnectFileOperation.DELETING)) return
         fileOperationJob = scope.launch {
@@ -108,7 +214,7 @@ class HealthConnectDataController(
                 withContext(Dispatchers.IO) {
                     HealthConnectClient.getOrCreate(applicationContext).deleteRecords(
                         SleepSessionRecord::class,
-                        TimeRangeFilter.before(Instant.MAX),
+                        TimeRangeFilter.before(MAX_HEALTH_CONNECT_EPOCH_MILLI_INSTANT),
                     )
                 }
                 mutableState.value = state.value.copy(
@@ -129,13 +235,19 @@ class HealthConnectDataController(
         }
     }
 
-    private fun beginFileOperation(operation: HealthConnectFileOperation): Boolean {
-        if (!isSleepFileWriteSupported || state.value.fileOperation != HealthConnectFileOperation.IDLE) {
+    private fun beginFileOperation(
+        operation: HealthConnectFileOperation,
+        requiresWriteSupport: Boolean = true,
+    ): Boolean {
+        if ((requiresWriteSupport && !isSleepFileWriteSupported) ||
+            state.value.fileOperation != HealthConnectFileOperation.IDLE
+        ) {
             return false
         }
         mutableState.value = state.value.copy(
             fileOperation = operation,
             fileImportResult = null,
+            exportResult = null,
             fileOperationMessage = null,
             fileOperationErrorMessage = null,
         )
@@ -148,6 +260,11 @@ class HealthConnectDataController(
             fileOperationErrorMessage = failure.message ?: fallback,
         )
     }
+
+    private fun packageDisplayName(packageName: String): String = runCatching {
+        val info = applicationContext.packageManager.getApplicationInfo(packageName, 0)
+        applicationContext.packageManager.getApplicationLabel(info).toString()
+    }.getOrDefault(packageName)
 
     fun setDataRange(range: HealthDataRange) {
         if (range == state.value.dataRange) return
@@ -386,6 +503,13 @@ class HealthConnectDataController(
             HealthPermission.getWritePermission(SleepSessionRecord::class)
     }
 }
+
+/**
+ * Health Connect transports instant bounds as epoch milliseconds. [Instant.MAX] cannot be
+ * represented by a [Long] in that form and causes `long overflow` before the provider is called.
+ */
+internal val MAX_HEALTH_CONNECT_EPOCH_MILLI_INSTANT: Instant =
+    Instant.ofEpochMilli(Long.MAX_VALUE)
 
 internal val isSleepFileWriteSupported: Boolean
     get() = Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE

@@ -30,6 +30,11 @@ import one.aozora.darkhour.ui.theme.DarkHourTheme
 import one.aozora.darkhour.ui.settings.AppSettings
 import one.aozora.darkhour.data.HealthConnectAccess
 import one.aozora.darkhour.data.HealthDataRange
+import one.aozora.darkhour.data.SleepExportPackage
+import one.aozora.darkhour.data.SleepExportPreparation
+import one.aozora.darkhour.data.SleepExportRange
+import java.time.LocalDate
+import java.time.ZoneId
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -270,8 +275,47 @@ class DarkHourAppTest {
         composeRule.onNodeWithTag("destination_settings").performClick()
         composeRule.waitForIdle()
         composeRule.onNodeWithTag("sleep_file_import_unsupported").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithTag("export_sleep_records").assertIsDisplayed()
         composeRule.onAllNodesWithTag("import_sleep_files").assertCountEquals(0)
         composeRule.onAllNodesWithTag("delete_imported_records").assertCountEquals(0)
+    }
+
+    @Test
+    fun sleepExportSelectsAllAvailablePackages() {
+        var exportedPackages: Set<String> = emptySet()
+        val range = SleepExportRange(
+            LocalDate.parse("2026-07-01"),
+            LocalDate.parse("2026-07-15"),
+            ZoneId.of("UTC"),
+        )
+        composeRule.setContent {
+            DarkHourTheme {
+                DarkHourApp(
+                    records = DemoData.records,
+                    fileWriteSupported = false,
+                    exportPreparation = SleepExportPreparation(
+                        range = range,
+                        packages = listOf(
+                            SleepExportPackage("example.one", "Example One", 4),
+                            SleepExportPackage("example.two", "Example Two", 3),
+                        ),
+                    ),
+                    onPrepareSleepExport = {},
+                    onCreateSleepExportDocument = { exportedPackages = it },
+                )
+            }
+        }
+
+        composeRule.onNodeWithTag("destination_settings").performClick()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("export_sleep_records").performScrollTo().performClick()
+        composeRule.onNodeWithText("Example One").assertIsDisplayed()
+        composeRule.onNodeWithText("Example Two").assertIsDisplayed()
+        composeRule.onNodeWithTag("confirm_sleep_export").performClick()
+
+        composeRule.runOnIdle {
+            assertTrue(exportedPackages == setOf("example.one", "example.two"))
+        }
     }
 
     @Test

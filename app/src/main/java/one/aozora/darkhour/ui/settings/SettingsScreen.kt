@@ -71,7 +71,10 @@ fun SettingsScreen(
             visibleRecordCount = recordCount,
             onPendingCustomDaysChange = { pendingCustomDays = it },
         )
-        ImportSettingsSection(healthConnect = healthConnect)
+        ImportExportSettingsSection(
+            healthConnect = healthConnect,
+            customDays = pendingCustomDays.toInt(),
+        )
         PrivacySettingsSection(uriHandler = uriHandler)
     }
 }

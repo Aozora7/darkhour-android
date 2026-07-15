@@ -26,6 +26,9 @@ Privacy contact: aozora@aozora.one
   and their sleep sessions written to Health Connect only after the user grants
   sleep write permission.
 - Selected files are not uploaded or retained by the application.
+- The user can export selected Health Connect sleep records to a local JSON
+  document chosen through Android's system file picker. Exported files are not
+  uploaded by the application.
 
 ## Data The Application Accesses
 
@@ -43,6 +46,11 @@ sessions, stage intervals, source identifiers, timestamps, and available device
 or platform metadata needed to create Health Connect sleep records. File import
 and deletion are not offered on earlier Android versions.
 
+When the user chooses to export data, the application reads sleep records for
+the selected dates and source applications. The exported document can include
+sleep times, stages, titles, notes, source package names, Health Connect record
+identifiers and versions, recording method, and available device metadata.
+
 ## How Data Is Used
 
 The application uses this data only to display the actogram, show sleep details,
@@ -59,6 +67,11 @@ Source-provided record identifiers are stored as Health Connect client record
 identifiers so re-importing the same source record can update it instead of
 creating another copy. The selected source files and parsed exports are processed
 locally and are not copied into the application's private storage.
+
+Health Connect exports are written only to the document location selected by
+the user. The application does not retain another copy. The resulting file is
+controlled by the user and may be shared, backed up, or synchronized by the
+selected document provider according to that provider's settings.
 
 The application does not use sleep data for advertising, profiling, credit
 decisions, insurance decisions, employment decisions, or any purpose unrelated to
@@ -125,6 +138,8 @@ restored backup data through Android system settings or backup controls.
 The application relies on Android's system file picker and Health Connect
 permission controls to protect access to sleep data. Health Connect read and
 write access is available only after the user grants the relevant permissions.
+Export requires Health Connect read access and may require history access for
+older dates; it does not require Health Connect write access.
 
 Because the application works locally and does not upload sleep data to a
 server, there is no cloud account or cloud sleep-data store operated by the

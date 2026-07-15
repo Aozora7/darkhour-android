@@ -22,6 +22,9 @@ import one.aozora.darkhour.data.HealthDataRange
 import one.aozora.darkhour.data.HealthImportPhase
 import one.aozora.darkhour.data.HealthConnectFileOperation
 import one.aozora.darkhour.data.SleepFileImportResult
+import one.aozora.darkhour.data.SleepExportPreparation
+import one.aozora.darkhour.data.SleepExportRange
+import one.aozora.darkhour.data.SleepExportResult
 import one.aozora.darkhour.core.model.SleepRecord
 import one.aozora.darkhour.ui.actogram.ActogramDisplayOptions
 import one.aozora.darkhour.ui.schedule.ScheduleEntry
@@ -55,6 +58,8 @@ fun DarkHourApp(
     fileImportedRecordCount: Int = 0,
     fileOperation: HealthConnectFileOperation = HealthConnectFileOperation.IDLE,
     fileImportResult: SleepFileImportResult? = null,
+    exportPreparation: SleepExportPreparation? = null,
+    exportResult: SleepExportResult? = null,
     fileOperationMessage: String? = null,
     fileOperationError: String? = null,
     onRequestHealthPermissions: () -> Unit = {},
@@ -63,6 +68,9 @@ fun DarkHourApp(
     onHealthDataRangeChange: (HealthDataRange) -> Unit = {},
     onImportSleepFiles: () -> Unit = {},
     onDeleteOwnedSleepRecords: () -> Unit = {},
+    onPrepareSleepExport: (SleepExportRange) -> Unit = {},
+    onCreateSleepExportDocument: (Set<String>) -> Unit = {},
+    onCancelSleepExport: () -> Unit = {},
     analysisRecords: List<SleepRecord> = records,
 ) {
     var actogramTransforming by remember { mutableStateOf(false) }
@@ -92,6 +100,8 @@ fun DarkHourApp(
         fileImportedRecordCount = fileImportedRecordCount,
         fileOperation = fileOperation,
         fileImportResult = fileImportResult,
+        exportPreparation = exportPreparation,
+        exportResult = exportResult,
         fileOperationMessage = fileOperationMessage,
         fileOperationError = fileOperationError,
         onRequestHealthPermissions = onRequestHealthPermissions,
@@ -100,6 +110,9 @@ fun DarkHourApp(
         onHealthDataRangeChange = onHealthDataRangeChange,
         onImportSleepFiles = onImportSleepFiles,
         onDeleteOwnedSleepRecords = onDeleteOwnedSleepRecords,
+        onPrepareSleepExport = onPrepareSleepExport,
+        onCreateSleepExportDocument = onCreateSleepExportDocument,
+        onCancelSleepExport = onCancelSleepExport,
     )
 
     val pagerState = rememberPagerState(initialPage = 0, pageCount = { DestinationItems.size })

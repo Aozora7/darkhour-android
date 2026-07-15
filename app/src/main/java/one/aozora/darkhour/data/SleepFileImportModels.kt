@@ -6,6 +6,7 @@ import java.time.ZoneId
 import java.time.ZoneOffset
 
 internal enum class SleepFileRecordingMethod {
+    ACTIVE,
     AUTOMATIC,
     MANUAL,
     UNKNOWN,
@@ -31,6 +32,7 @@ internal data class SleepFileStage(
     val type: SleepFileStageType,
     val priority: Int = 0,
     val sourceOrder: Int = 0,
+    val healthConnectStageType: Int? = null,
 )
 
 internal data class DecodedSleepSession(
@@ -39,13 +41,19 @@ internal data class DecodedSleepSession(
     val sourceId: String?,
     val clientRecordVersion: Long,
     val startTime: Instant,
-    val startZoneOffset: ZoneOffset,
+    val startZoneOffset: ZoneOffset?,
     val endTime: Instant,
-    val endZoneOffset: ZoneOffset,
+    val endZoneOffset: ZoneOffset?,
     val stages: List<SleepFileStage>,
     val recordingMethod: SleepFileRecordingMethod,
     val device: SleepFileDevice? = null,
     val usedFallbackZone: Boolean = false,
+    val title: String? = null,
+    val notes: String? = null,
+    val sourcePackageName: String? = null,
+    val sourceHealthConnectRecordId: String? = null,
+    val sourceClientRecordId: String? = null,
+    val sourceClientRecordVersion: Long? = null,
 )
 
 internal data class SleepFileIssue(
@@ -79,6 +87,7 @@ internal class SleepFileDecoderRegistry(
     private val decoders: List<SleepFileDecoder> = listOf(
         FitbitSleepFileDecoder,
         GoogleHealthSleepFileDecoder,
+        HealthConnectSleepFileDecoder,
     ),
 ) {
     fun decoderFor(source: SleepFileSource): SleepFileDecoder? = decoders.singleOrNull { decoder ->
@@ -88,6 +97,8 @@ internal class SleepFileDecoderRegistry(
 
 enum class HealthConnectFileOperation {
     IDLE,
+    PREPARING_EXPORT,
+    EXPORTING,
     IMPORTING,
     DELETING,
 }
@@ -99,10 +110,15 @@ data class SleepFileImportResult(
     val committedRecordCount: Int,
     val skippedRecordCount: Int,
     val fallbackZoneRecordCount: Int,
+    val existingRecordCount: Int = 0,
     val issues: List<String>,
     val errorMessage: String? = null,
 ) {
     fun summaryText(): String = buildString {
+        if (processedRecordCount > 0 && existingRecordCount == processedRecordCount) {
+            append("All $processedRecordCount sleep records already exist")
+            return@buildString
+        }
         append("Processed $processedRecordCount sleep records from ")
         append("$recognizedFileCount of $selectedFileCount files")
         if (skippedRecordCount > 0) append("; skipped $skippedRecordCount")
@@ -112,6 +128,7 @@ data class SleepFileImportResult(
         if (committedRecordCount != processedRecordCount) {
             append("; committed $committedRecordCount")
         }
+        if (existingRecordCount > 0) append("; already present $existingRecordCount")
     }
 }
 
@@ -145,7 +162,12 @@ internal fun normalizeSleepFileStages(
             )
             ?: return@forEach
         val previous = normalized.lastOrNull()
-        if (previous != null && previous.type == winner.type && previous.endTime == start) {
+        if (
+            previous != null &&
+            previous.type == winner.type &&
+            previous.healthConnectStageType == winner.healthConnectStageType &&
+            previous.endTime == start
+        ) {
             normalized[normalized.lastIndex] = previous.copy(endTime = end)
         } else {
             normalized += winner.copy(startTime = start, endTime = end)

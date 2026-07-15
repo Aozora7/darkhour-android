@@ -2,6 +2,7 @@ package one.aozora.darkhour.data
 
 import androidx.health.connect.client.records.SleepSessionRecord
 import androidx.health.connect.client.records.metadata.Metadata
+import com.google.gson.stream.JsonWriter
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -11,9 +12,12 @@ import org.junit.Assert.assertThrows
 import org.junit.Test
 import java.io.ByteArrayInputStream
 import java.io.IOException
+import java.io.StringWriter
+import java.time.Duration
 import java.time.Instant
 import java.time.ZoneId
 import java.time.ZoneOffset
+import java.time.LocalDate
 
 class SleepFileDecoderTest {
     @Test
@@ -104,6 +108,134 @@ class SleepFileDecoderTest {
         )
         assertEquals(Metadata.RECORDING_METHOD_MANUAL_ENTRY, healthRecord.metadata.recordingMethod)
         assertEquals("Synthetic Tracker", healthRecord.metadata.device?.model)
+    }
+
+    @Test
+    fun healthConnectExportPreservesSchemaAndPortableIdentity() {
+        val source = resourceSource("misleading.txt", "health-connect-synthetic.json")
+
+        val decoder = SleepFileDecoderRegistry().decoderFor(source)
+        val decoded = HealthConnectSleepFileDecoder.decode(
+            resourceStream("health-connect-synthetic.json"),
+            ZoneId.of("UTC"),
+        )
+
+        assertEquals("Health Connect", decoder?.formatName)
+        val session = decoded.sessions.single()
+        assertEquals("com.example.synthetic.health", session.sourcePackageName)
+        assertEquals("synthetic-health-connect-id", session.sourceHealthConnectRecordId)
+        assertEquals("synthetic-portable-id", session.sourceClientRecordId)
+        assertEquals(42L, session.sourceClientRecordVersion)
+        assertEquals(SleepFileRecordingMethod.ACTIVE, session.recordingMethod)
+        assertEquals(7, session.stages.first().healthConnectStageType)
+        assertNull(session.endZoneOffset)
+
+        val restored = session.toHealthConnectRecord("one.aozora.darkhour.debug")
+        assertTrue(
+            restored.metadata.clientRecordId
+                ?.startsWith("darkhour:file:health-connect:sha256:") == true,
+        )
+        assertEquals(Instant.parse("2026-07-15T05:00:00Z").toEpochMilli(), restored.metadata.clientRecordVersion)
+        assertEquals(Metadata.RECORDING_METHOD_ACTIVELY_RECORDED, restored.metadata.recordingMethod)
+        assertEquals("Synthetic source title", restored.title)
+        assertEquals("Synthetic source notes", restored.notes)
+        assertEquals(SleepSessionRecord.STAGE_TYPE_AWAKE_IN_BED, restored.stages.first().stage)
+    }
+
+    @Test
+    fun healthConnectOwnedRecordsPreserveClientIdentityAndVersion() {
+        val session = HealthConnectSleepFileDecoder.decode(
+            resourceStream("health-connect-synthetic.json"),
+            ZoneId.of("UTC"),
+        ).sessions.single().copy(sourcePackageName = "one.aozora.darkhour.debug")
+
+        val restored = session.toHealthConnectRecord("one.aozora.darkhour.debug")
+
+        assertEquals("synthetic-portable-id", restored.metadata.clientRecordId)
+        assertEquals(42, restored.metadata.clientRecordVersion)
+    }
+
+    @Test
+    fun healthConnectRestoreMatchesOnlySamePackageExactIdentitiesOrTimes() {
+        val session = HealthConnectSleepFileDecoder.decode(
+            resourceStream("health-connect-synthetic.json"),
+            ZoneId.of("UTC"),
+        ).sessions.single()
+        fun existing(
+            packageName: String = checkNotNull(session.sourcePackageName),
+            recordId: String? = null,
+            clientRecordId: String? = null,
+            startTime: Instant = session.startTime.plusSeconds(1),
+            endTime: Instant = session.endTime,
+        ) = ExistingHealthConnectSourceRecord(
+            packageName,
+            recordId,
+            clientRecordId,
+            startTime,
+            endTime,
+        )
+
+        assertTrue(session.matchesExistingSourceRecord(existing(recordId = "synthetic-health-connect-id")))
+        assertTrue(session.matchesExistingSourceRecord(existing(clientRecordId = "synthetic-portable-id")))
+        assertTrue(session.matchesExistingSourceRecord(existing(startTime = session.startTime)))
+        assertFalse(session.matchesExistingSourceRecord(existing(packageName = "example.other", startTime = session.startTime)))
+        assertFalse(session.matchesExistingSourceRecord(existing()))
+    }
+
+    @Test
+    fun healthConnectUnsupportedSchemaIsRecognizedButRejected() {
+        val unsupported = resourceText("health-connect-synthetic.json")
+            .replace("\"schemaVersion\": 1", "\"schemaVersion\": 99")
+        val source = source("future.json", unsupported)
+
+        assertEquals("Health Connect", SleepFileDecoderRegistry().decoderFor(source)?.formatName)
+        val decoded = HealthConnectSleepFileDecoder.decode(unsupported.byteInputStream(), ZoneId.of("UTC"))
+        assertTrue(decoded.sessions.isEmpty())
+        assertTrue(decoded.issues.any { "Unsupported" in it.reason })
+    }
+
+    @Test
+    fun healthConnectSerializerWritesRecordFieldsAndExactStageType() {
+        val start = Instant.parse("2026-07-14T20:00:00Z")
+        val record = SleepSessionRecord(
+            startTime = start,
+            startZoneOffset = ZoneOffset.ofHours(3),
+            endTime = start.plusSeconds(3600),
+            endZoneOffset = null,
+            title = "Synthetic title",
+            notes = "Synthetic notes",
+            metadata = Metadata.manualEntry(
+                clientRecordId = "synthetic-client",
+                clientRecordVersion = 3,
+            ),
+            stages = listOf(
+                SleepSessionRecord.Stage(
+                    startTime = start,
+                    endTime = start.plusSeconds(3600),
+                    stage = SleepSessionRecord.STAGE_TYPE_OUT_OF_BED,
+                ),
+            ),
+        )
+        val output = StringWriter()
+        JsonWriter(output).use { writer -> writer.writeSleepSession(record) }
+
+        val json = output.toString()
+        assertTrue("\"title\":\"Synthetic title\"" in json)
+        assertTrue("\"notes\":\"Synthetic notes\"" in json)
+        assertTrue("\"stage\":3" in json)
+        assertTrue("\"clientRecordId\":\"synthetic-client\"" in json)
+        assertTrue("\"endZoneOffset\":null" in json)
+    }
+
+    @Test
+    fun exportRangeUsesInclusiveLocalDatesAcrossDst() {
+        val range = SleepExportRange(
+            startDate = LocalDate.parse("2026-03-29"),
+            endDate = LocalDate.parse("2026-03-29"),
+            zoneId = ZoneId.of("Europe/Riga"),
+        )
+
+        assertEquals(23, Duration.between(range.startInstant, range.endExclusiveInstant).toHours())
     }
 
     @Test
@@ -200,4 +332,6 @@ class SleepFileDecoderTest {
     private fun resourceStream(name: String) = checkNotNull(
         javaClass.getResourceAsStream("/sleep-import/$name"),
     ) { "Missing synthetic test resource: $name" }
+
+    private fun resourceText(name: String): String = resourceStream(name).bufferedReader().use { it.readText() }
 }

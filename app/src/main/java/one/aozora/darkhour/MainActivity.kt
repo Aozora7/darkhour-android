@@ -13,6 +13,7 @@ import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.launch
 import one.aozora.darkhour.data.HealthConnectDataController
 import one.aozora.darkhour.data.HealthDataRange
+import one.aozora.darkhour.data.SleepExportRange
 import one.aozora.darkhour.data.settings.AppSettingsStore
 import one.aozora.darkhour.core.circadian.adaptive.AdaptiveKalmanDiagnostics
 import one.aozora.darkhour.ui.DarkHourApp
@@ -27,9 +28,20 @@ class MainActivity : ComponentActivity() {
     private lateinit var healthConnect: HealthConnectDataController
     private lateinit var appSettings: AppSettingsStore
     private var pendingSleepWriteAction: SleepWriteAction? = null
+    private var pendingSleepExportRange: SleepExportRange? = null
+    private var pendingSleepExportPackages: Set<String>? = null
     private val requestHealthPermissions = registerForActivityResult(
         HealthConnectDataController.permissionContract,
-    ) {
+    ) { granted ->
+        val exportRange = pendingSleepExportRange
+        pendingSleepExportRange = null
+        if (exportRange != null) {
+            if (granted.containsAll(healthConnect.exportPermissions(exportRange))) {
+                healthConnect.prepareSleepExport(exportRange)
+            } else {
+                healthConnect.reportSleepExportPermissionDenied()
+            }
+        }
         healthConnect.refresh()
     }
     private val openSleepFiles = registerForActivityResult(
@@ -48,6 +60,17 @@ class MainActivity : ComponentActivity() {
             runSleepWriteAction(action)
         } else if (::healthConnect.isInitialized) {
             healthConnect.reportSleepWritePermissionDenied()
+        }
+    }
+    private val createSleepExport = registerForActivityResult(
+        ActivityResultContracts.CreateDocument("application/json"),
+    ) { uri ->
+        val packages = pendingSleepExportPackages
+        pendingSleepExportPackages = null
+        if (uri != null && !packages.isNullOrEmpty()) {
+            healthConnect.exportSleepRecords(uri, packages)
+        } else if (::healthConnect.isInitialized) {
+            healthConnect.cancelSleepExport()
         }
     }
 
@@ -110,6 +133,8 @@ class MainActivity : ComponentActivity() {
                     fileImportedRecordCount = healthState.fileImportedRecordCount,
                     fileOperation = healthState.fileOperation,
                     fileImportResult = healthState.fileImportResult,
+                    exportPreparation = healthState.exportPreparation,
+                    exportResult = healthState.exportResult,
                     fileOperationMessage = healthState.fileOperationMessage,
                     fileOperationError = healthState.fileOperationErrorMessage,
                     onRequestHealthPermissions = {
@@ -147,6 +172,12 @@ class MainActivity : ComponentActivity() {
                     onDeleteOwnedSleepRecords = {
                         beginSleepWriteAction(SleepWriteAction.DELETE)
                     },
+                    onPrepareSleepExport = ::beginSleepExportPreparation,
+                    onCreateSleepExportDocument = { packages ->
+                        pendingSleepExportPackages = packages
+                        createSleepExport.launch("darkhour-health-connect-sleep-${java.time.LocalDate.now()}.json")
+                    },
+                    onCancelSleepExport = healthConnect::cancelSleepExport,
                 )
             }
         }
@@ -190,6 +221,20 @@ class MainActivity : ComponentActivity() {
         when (action) {
             SleepWriteAction.IMPORT -> openSleepFiles.launch(arrayOf("*/*"))
             SleepWriteAction.DELETE -> healthConnect.deleteOwnedSleepRecords()
+        }
+    }
+
+    private fun beginSleepExportPreparation(range: SleepExportRange) {
+        if (BuildConfig.USE_DEMO_DATA || !::healthConnect.isInitialized) return
+        lifecycleScope.launch {
+            val permissions = healthConnect.exportPermissions(range)
+            if (healthConnect.hasPermissions(permissions)) {
+                healthConnect.prepareSleepExport(range)
+            } else {
+                healthConnect.cancelSleepExport()
+                pendingSleepExportRange = range
+                requestHealthPermissions.launch(permissions)
+            }
         }
     }
 }

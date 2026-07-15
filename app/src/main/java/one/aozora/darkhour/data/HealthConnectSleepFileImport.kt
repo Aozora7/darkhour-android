@@ -16,6 +16,7 @@ internal suspend fun importSleepFilesToHealthConnect(
     contentResolver: ContentResolver,
     uris: List<Uri>,
     fallbackZoneId: ZoneId,
+    callingPackageName: String? = null,
     registry: SleepFileDecoderRegistry = SleepFileDecoderRegistry(),
 ): SleepFileImportResult {
     var recognizedFiles = 0
@@ -23,6 +24,7 @@ internal suspend fun importSleepFilesToHealthConnect(
     var committedRecords = 0
     var skippedRecords = 0
     var fallbackZoneRecords = 0
+    var existingRecords = 0
     val issues = mutableListOf<String>()
 
     for (uri in uris) {
@@ -51,7 +53,31 @@ internal suspend fun importSleepFilesToHealthConnect(
             issues += "$displayName: $location${issue.reason}"
         }
 
-        val records = decoded.sessions.map(DecodedSleepSession::toHealthConnectRecord)
+        val sessionsToWrite = if (decoder === HealthConnectSleepFileDecoder) {
+            val existing = runCatching {
+                client.readExistingSourceMatches(decoded.sessions)
+            }.getOrElse { failure ->
+                return SleepFileImportResult(
+                    selectedFileCount = uris.size,
+                    recognizedFileCount = recognizedFiles,
+                    processedRecordCount = processedRecords,
+                    committedRecordCount = committedRecords,
+                    skippedRecordCount = skippedRecords,
+                    fallbackZoneRecordCount = fallbackZoneRecords,
+                    issues = issues.take(MAX_IMPORT_RESULT_ISSUES),
+                    errorMessage = failure.message ?: "Could not verify existing Health Connect records",
+                )
+            }
+            decoded.sessions.filterNot(existing::contains)
+        } else {
+            decoded.sessions
+        }
+        val existingInFile = decoded.sessions.size - sessionsToWrite.size
+        skippedRecords += existingInFile
+        existingRecords += existingInFile
+        val records = sessionsToWrite.map { session ->
+            session.toHealthConnectRecord(callingPackageName)
+        }
         val failure = runCatching {
             writeSleepRecordsInBatches(
                 records = records,
@@ -67,6 +93,7 @@ internal suspend fun importSleepFilesToHealthConnect(
                 committedRecordCount = committedRecords,
                 skippedRecordCount = skippedRecords,
                 fallbackZoneRecordCount = fallbackZoneRecords,
+                existingRecordCount = existingRecords,
                 issues = issues.take(MAX_IMPORT_RESULT_ISSUES),
                 errorMessage = failure.message ?: "Health Connect rejected a write batch",
             )
@@ -80,6 +107,7 @@ internal suspend fun importSleepFilesToHealthConnect(
         committedRecordCount = committedRecords,
         skippedRecordCount = skippedRecords,
         fallbackZoneRecordCount = fallbackZoneRecords,
+        existingRecordCount = existingRecords,
         issues = issues.take(MAX_IMPORT_RESULT_ISSUES),
     )
 }
@@ -95,8 +123,10 @@ internal suspend fun writeSleepRecordsInBatches(
     }
 }
 
-internal fun DecodedSleepSession.toHealthConnectRecord(): SleepSessionRecord {
-    val clientRecordId = "$SLEEP_FILE_CLIENT_RECORD_PREFIX$formatKey:${sourceId ?: canonicalFingerprint()}"
+internal fun DecodedSleepSession.toHealthConnectRecord(
+    callingPackageName: String? = null,
+): SleepSessionRecord {
+    val clientRecordId = targetClientRecordId(callingPackageName)
     val healthDevice = device?.let { source ->
         Device(
             type = source.type,
@@ -105,19 +135,29 @@ internal fun DecodedSleepSession.toHealthConnectRecord(): SleepSessionRecord {
         )
     }
     val metadata = when (recordingMethod) {
+        SleepFileRecordingMethod.ACTIVE -> healthDevice?.let { activeDevice ->
+            Metadata.activelyRecorded(
+                device = activeDevice,
+                clientRecordId = clientRecordId,
+                clientRecordVersion = targetClientRecordVersion(callingPackageName),
+            )
+        } ?: Metadata.unknownRecordingMethod(
+            clientRecordId = clientRecordId,
+            clientRecordVersion = targetClientRecordVersion(callingPackageName),
+        )
         SleepFileRecordingMethod.AUTOMATIC -> Metadata.autoRecorded(
             device = healthDevice ?: Device(type = Device.TYPE_UNKNOWN),
             clientRecordId = clientRecordId,
-            clientRecordVersion = clientRecordVersion,
+            clientRecordVersion = targetClientRecordVersion(callingPackageName),
         )
         SleepFileRecordingMethod.MANUAL -> Metadata.manualEntry(
             clientRecordId = clientRecordId,
-            clientRecordVersion = clientRecordVersion,
+            clientRecordVersion = targetClientRecordVersion(callingPackageName),
             device = healthDevice,
         )
         SleepFileRecordingMethod.UNKNOWN -> Metadata.unknownRecordingMethod(
             clientRecordId = clientRecordId,
-            clientRecordVersion = clientRecordVersion,
+            clientRecordVersion = targetClientRecordVersion(callingPackageName),
             device = healthDevice,
         )
     }
@@ -127,13 +167,13 @@ internal fun DecodedSleepSession.toHealthConnectRecord(): SleepSessionRecord {
         endTime = endTime,
         endZoneOffset = endZoneOffset,
         metadata = metadata,
-        title = "Imported from $formatName",
-        notes = null,
+        title = if (formatKey == HEALTH_CONNECT_FORMAT_KEY) title else "Imported from $formatName",
+        notes = if (formatKey == HEALTH_CONNECT_FORMAT_KEY) notes else null,
         stages = stages.map { stage ->
             SleepSessionRecord.Stage(
                 startTime = stage.startTime,
                 endTime = stage.endTime,
-                stage = when (stage.type) {
+                stage = stage.healthConnectStageType ?: when (stage.type) {
                     SleepFileStageType.AWAKE -> SleepSessionRecord.STAGE_TYPE_AWAKE
                     SleepFileStageType.SLEEPING -> SleepSessionRecord.STAGE_TYPE_SLEEPING
                     SleepFileStageType.LIGHT -> SleepSessionRecord.STAGE_TYPE_LIGHT
@@ -145,14 +185,42 @@ internal fun DecodedSleepSession.toHealthConnectRecord(): SleepSessionRecord {
     )
 }
 
+private fun DecodedSleepSession.targetClientRecordVersion(callingPackageName: String?): Long =
+    if (formatKey == HEALTH_CONNECT_FORMAT_KEY && sourcePackageName == callingPackageName) {
+        sourceClientRecordVersion ?: clientRecordVersion
+    } else {
+        clientRecordVersion
+    }
+
+private fun DecodedSleepSession.targetClientRecordId(callingPackageName: String?): String {
+    if (
+        formatKey == HEALTH_CONNECT_FORMAT_KEY &&
+        sourcePackageName == callingPackageName &&
+        !sourceClientRecordId.isNullOrBlank()
+    ) {
+        return checkNotNull(sourceClientRecordId)
+    }
+    if (formatKey == HEALTH_CONNECT_FORMAT_KEY) {
+        val sourceIdentity = sourceClientRecordId?.takeIf(String::isNotBlank)
+            ?: sourceHealthConnectRecordId?.takeIf(String::isNotBlank)
+            ?: canonicalFingerprint()
+        val digest = MessageDigest.getInstance("SHA-256").digest(
+            "${sourcePackageName.orEmpty()}\u0000$sourceIdentity".toByteArray(StandardCharsets.UTF_8),
+        )
+        return "$SLEEP_FILE_CLIENT_RECORD_PREFIX$HEALTH_CONNECT_FORMAT_KEY:sha256:" +
+            digest.joinToString("") { byte -> "%02x".format(byte) }
+    }
+    return "$SLEEP_FILE_CLIENT_RECORD_PREFIX$formatKey:${sourceId ?: canonicalFingerprint()}"
+}
+
 internal const val SLEEP_FILE_CLIENT_RECORD_PREFIX = "darkhour:file:"
 
 private fun DecodedSleepSession.canonicalFingerprint(): String {
     val canonical = buildString {
         append(startTime.toEpochMilli()).append('|')
-        append(startZoneOffset.totalSeconds).append('|')
+        append(startZoneOffset?.totalSeconds).append('|')
         append(endTime.toEpochMilli()).append('|')
-        append(endZoneOffset.totalSeconds)
+        append(endZoneOffset?.totalSeconds)
         stages.forEach { stage ->
             append('|').append(stage.startTime.toEpochMilli())
             append(':').append(stage.endTime.toEpochMilli())

@@ -12,7 +12,7 @@ fun analyzeCircadianCsf(
     config: CsfConfig = CsfConfig.Default,
 ): CsfAnalysis {
     if (records.isEmpty()) {
-        return mergeSegmentResults(emptyList(), LocalDate.EPOCH)
+        return mergeSegmentResults(emptyList(), LocalDate.ofEpochDay(0))
     }
 
     val sorted = records.sortedBy { it.startTime }

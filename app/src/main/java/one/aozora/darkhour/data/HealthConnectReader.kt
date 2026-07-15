@@ -2,6 +2,7 @@ package one.aozora.darkhour.data
 
 import androidx.health.connect.client.HealthConnectClient
 import androidx.health.connect.client.records.SleepSessionRecord
+import androidx.health.connect.client.records.metadata.DataOrigin
 import androidx.health.connect.client.request.ReadRecordsRequest
 import androidx.health.connect.client.time.TimeRangeFilter
 import kotlinx.coroutines.currentCoroutineContext
@@ -116,6 +117,7 @@ internal suspend fun HealthConnectClient.readOldestSleepRecord(
 internal suspend fun HealthConnectClient.readSleepRecordsPageRange(
     start: Instant,
     end: Instant,
+    dataOriginFilter: Set<DataOrigin> = emptySet(),
 ): List<SleepSessionRecord> {
     val rawRecords = mutableListOf<SleepSessionRecord>()
     var pageToken: String? = null
@@ -124,6 +126,7 @@ internal suspend fun HealthConnectClient.readSleepRecordsPageRange(
             ReadRecordsRequest(
                 recordType = SleepSessionRecord::class,
                 timeRangeFilter = TimeRangeFilter.between(start, end),
+                dataOriginFilter = dataOriginFilter,
                 ascendingOrder = true,
                 pageSize = PAGE_SIZE,
                 pageToken = pageToken,

@@ -19,6 +19,9 @@ import one.aozora.darkhour.data.HealthDataRange
 import one.aozora.darkhour.data.HealthImportPhase
 import one.aozora.darkhour.data.HealthConnectFileOperation
 import one.aozora.darkhour.data.SleepFileImportResult
+import one.aozora.darkhour.data.SleepExportPreparation
+import one.aozora.darkhour.data.SleepExportRange
+import one.aozora.darkhour.data.SleepExportResult
 import one.aozora.darkhour.ui.actogram.ActogramDisplayOptions
 import one.aozora.darkhour.ui.actogram.ActogramLayout
 import one.aozora.darkhour.ui.actogram.ActogramLayoutEngine
@@ -64,6 +67,8 @@ fun rememberDarkHourAppState(
     fileImportedRecordCount: Int,
     fileOperation: HealthConnectFileOperation,
     fileImportResult: SleepFileImportResult?,
+    exportPreparation: SleepExportPreparation?,
+    exportResult: SleepExportResult?,
     fileOperationMessage: String?,
     fileOperationError: String?,
     onRequestHealthPermissions: () -> Unit,
@@ -72,6 +77,9 @@ fun rememberDarkHourAppState(
     onHealthDataRangeChange: (HealthDataRange) -> Unit,
     onImportSleepFiles: () -> Unit,
     onDeleteOwnedSleepRecords: () -> Unit,
+    onPrepareSleepExport: (SleepExportRange) -> Unit,
+    onCreateSleepExportDocument: (Set<String>) -> Unit,
+    onCancelSleepExport: () -> Unit,
 ): DarkHourAppState {
     var options by remember { mutableStateOf(initialDisplayOptions) }
     var settings by remember { mutableStateOf(initialSettings) }
@@ -294,6 +302,8 @@ fun rememberDarkHourAppState(
             fileImportedRecordCount = fileImportedRecordCount,
             fileOperation = fileOperation,
             fileImportResult = fileImportResult,
+            exportPreparation = exportPreparation,
+            exportResult = exportResult,
             fileOperationMessage = fileOperationMessage,
             fileOperationError = fileOperationError,
             onRequestHealthPermissions = onRequestHealthPermissions,
@@ -302,6 +312,9 @@ fun rememberDarkHourAppState(
             onDataRangeChange = onHealthDataRangeChange,
             onImportSleepFiles = onImportSleepFiles,
             onDeleteOwnedSleepRecords = onDeleteOwnedSleepRecords,
+            onPrepareSleepExport = onPrepareSleepExport,
+            onCreateSleepExportDocument = onCreateSleepExportDocument,
+            onCancelSleepExport = onCancelSleepExport,
         ),
     )
 }
