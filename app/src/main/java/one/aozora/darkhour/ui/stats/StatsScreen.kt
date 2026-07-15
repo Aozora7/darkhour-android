@@ -47,6 +47,7 @@ fun StatsScreen(
     var dataScope by rememberSaveable { mutableStateOf(StatsDataScope.SelectedPeriod) }
     val statsAllRecords = healthConnect.statsAllRecords
     val showDataScopeToggle = healthConnect.dataRange != HealthDataRange.ENTIRE_HISTORY
+    val providerAvailable = healthConnect.access.providerAvailable
     LaunchedEffect(showDataScopeToggle) {
         if (!showDataScopeToggle) {
             dataScope = StatsDataScope.SelectedPeriod
@@ -55,12 +56,14 @@ fun StatsScreen(
     LaunchedEffect(
         dataScope,
         showDataScopeToggle,
+        providerAvailable,
         healthConnect.hasHistoryPermission,
         statsAllRecords,
         healthConnect.isStatsAllDataRefreshing,
     ) {
         if (
             showDataScopeToggle &&
+            providerAvailable &&
             dataScope == StatsDataScope.AllAvailable &&
             healthConnect.hasHistoryPermission &&
             statsAllRecords == null &&
@@ -142,6 +145,7 @@ fun StatsScreen(
         else -> null
     }
     fun selectDataScope(scope: StatsDataScope) {
+        if (scope == StatsDataScope.AllAvailable && !providerAvailable) return
         dataScope = scope
         if (scope == StatsDataScope.AllAvailable) {
             if (
@@ -175,6 +179,7 @@ fun StatsScreen(
                         scopeSummary = scopeSummary,
                         dataScope = dataScope,
                         showDataScopeToggle = showDataScopeToggle,
+                        allAvailableEnabled = providerAvailable,
                         statusMessage = statusMessage,
                         onDataScopeChange = ::selectDataScope,
                     )
@@ -248,6 +253,7 @@ fun StatsScreen(
                     scopeSummary = scopeSummary,
                     dataScope = dataScope,
                     showDataScopeToggle = showDataScopeToggle,
+                    allAvailableEnabled = providerAvailable,
                     statusMessage = statusMessage,
                     onDataScopeChange = ::selectDataScope,
                 )

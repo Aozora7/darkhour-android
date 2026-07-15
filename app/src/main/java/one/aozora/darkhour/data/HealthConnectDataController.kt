@@ -36,6 +36,7 @@ class HealthConnectDataController(
     private var refreshJob: Job? = null
     private var statsAllDataRefreshJob: Job? = null
     private var fileOperationJob: Job? = null
+    private var setupRequired = false
     private val mutableState = MutableStateFlow(
         HealthConnectUiState(
             dataRange = initialDataRange,
@@ -47,6 +48,9 @@ class HealthConnectDataController(
 
     val isFileWriteSupported: Boolean
         get() = isSleepFileWriteSupported
+
+    val isProviderAvailable: Boolean
+        get() = HealthConnectClient.getSdkStatus(applicationContext) == HealthConnectClient.SDK_AVAILABLE
 
     fun requiredPermissions(range: HealthDataRange = state.value.dataRange): Set<String> = buildSet {
         add(SLEEP_READ_PERMISSION)
@@ -97,6 +101,19 @@ class HealthConnectDataController(
         )
     }
 
+    fun reportSetupRequired() {
+        setupRequired = true
+        mutableState.value = state.value.copy(
+            access = HealthConnectAccess.SETUP_REQUIRED,
+            isRefreshing = false,
+            errorMessage = null,
+        )
+    }
+
+    fun clearSetupRequired() {
+        setupRequired = false
+    }
+
     fun importSleepFiles(uris: List<Uri>) {
         if (uris.isEmpty() || !beginFileOperation(HealthConnectFileOperation.IMPORTING)) return
         fileOperationJob = scope.launch {
@@ -127,7 +144,8 @@ class HealthConnectDataController(
     }
 
     fun prepareSleepExport(range: SleepExportRange) {
-        if (state.value.fileOperation == HealthConnectFileOperation.EXPORTING ||
+        if (!isProviderAvailable ||
+            state.value.fileOperation == HealthConnectFileOperation.EXPORTING ||
             state.value.fileOperation == HealthConnectFileOperation.IMPORTING ||
             state.value.fileOperation == HealthConnectFileOperation.DELETING
         ) {
@@ -239,7 +257,8 @@ class HealthConnectDataController(
         operation: HealthConnectFileOperation,
         requiresWriteSupport: Boolean = true,
     ): Boolean {
-        if ((requiresWriteSupport && !isSleepFileWriteSupported) ||
+        if (!isProviderAvailable ||
+            (requiresWriteSupport && !isSleepFileWriteSupported) ||
             state.value.fileOperation != HealthConnectFileOperation.IDLE
         ) {
             return false
@@ -277,8 +296,9 @@ class HealthConnectDataController(
         refreshJob = scope.launch {
             try {
                 val range = state.value.dataRange
-                when (HealthConnectClient.getSdkStatus(applicationContext)) {
+                when (val sdkStatus = HealthConnectClient.getSdkStatus(applicationContext)) {
                     HealthConnectClient.SDK_UNAVAILABLE -> {
+                        setupRequired = false
                         mutableState.value = state.value.copy(
                             records = emptyList(),
                             analysisRecords = emptyList(),
@@ -295,10 +315,11 @@ class HealthConnectDataController(
                         )
                     }
                     HealthConnectClient.SDK_UNAVAILABLE_PROVIDER_UPDATE_REQUIRED -> {
+                        setupRequired = false
                         mutableState.value = state.value.copy(
                             records = emptyList(),
                             analysisRecords = emptyList(),
-                            access = HealthConnectAccess.UPDATE_REQUIRED,
+                            access = healthConnectAccess(applicationContext, sdkStatus),
                             totalHistoryDays = null,
                             hasHistoryPermission = false,
                             isRefreshing = false,
@@ -310,7 +331,17 @@ class HealthConnectDataController(
                             errorMessage = null,
                         )
                     }
-                    HealthConnectClient.SDK_AVAILABLE -> refreshAvailableClient(range)
+                    HealthConnectClient.SDK_AVAILABLE -> {
+                        if (setupRequired) {
+                            mutableState.value = state.value.copy(
+                                access = HealthConnectAccess.SETUP_REQUIRED,
+                                isRefreshing = false,
+                                errorMessage = null,
+                            )
+                        } else {
+                            refreshAvailableClient(range)
+                        }
+                    }
                 }
             } catch (cancelled: CancellationException) {
                 throw cancelled

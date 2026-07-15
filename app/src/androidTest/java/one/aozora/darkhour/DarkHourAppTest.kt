@@ -220,6 +220,61 @@ class DarkHourAppTest {
     }
 
     @Test
+    fun missingProviderOffersInstallation() {
+        var installRequested = false
+        composeRule.setContent {
+            DarkHourTheme {
+                DarkHourApp(
+                    records = emptyList(),
+                    healthConnectAccess = HealthConnectAccess.INSTALL_REQUIRED,
+                    onInstallHealthConnect = { installRequested = true },
+                )
+            }
+        }
+
+        composeRule.onNodeWithTag("install_health_connect").assertIsDisplayed().performClick()
+
+        composeRule.runOnIdle { assertTrue(installRequested) }
+    }
+
+    @Test
+    fun missingProviderDisablesHealthConnectSettings() {
+        composeRule.setContent {
+            DarkHourTheme {
+                DarkHourApp(
+                    records = emptyList(),
+                    healthConnectAccess = HealthConnectAccess.INSTALL_REQUIRED,
+                    hasHistoryPermission = false,
+                )
+            }
+        }
+
+        composeRule.onNodeWithTag("destination_settings").performClick()
+        composeRule.onNodeWithTag("health_range_history").assertIsNotEnabled()
+        composeRule.onAllNodesWithTag("request_history_permission").assertCountEquals(0)
+        composeRule.onNodeWithTag("export_sleep_records").performScrollTo().assertIsNotEnabled()
+    }
+
+    @Test
+    fun incompleteProviderSetupOffersHealthConnectOnboarding() {
+        var openRequested = false
+        composeRule.setContent {
+            DarkHourTheme {
+                DarkHourApp(
+                    records = emptyList(),
+                    healthConnectAccess = HealthConnectAccess.SETUP_REQUIRED,
+                    onOpenHealthConnect = { openRequested = true },
+                )
+            }
+        }
+
+        composeRule.onNodeWithText("Set up Health Connect").assertIsDisplayed()
+        composeRule.onNodeWithTag("open_health_connect").assertIsDisplayed().performClick()
+
+        composeRule.runOnIdle { assertTrue(openRequested) }
+    }
+
+    @Test
     fun healthConnectRangeCanBeChangedInSettings() {
         var selectedRange by mutableStateOf(HealthDataRange.DEFAULT_PERIOD)
         composeRule.setContent {

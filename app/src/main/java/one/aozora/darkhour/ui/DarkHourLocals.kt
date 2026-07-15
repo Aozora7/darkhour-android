@@ -103,6 +103,8 @@ data class HealthConnectState(
     val fileOperationError: String?,
     val onRequestHealthPermissions: () -> Unit,
     val onRequestHistoryPermission: () -> Unit,
+    val onInstallHealthConnect: () -> Unit,
+    val onOpenHealthConnect: () -> Unit,
     val onRequestStatsAllData: () -> Unit,
     val onDataRangeChange: (HealthDataRange) -> Unit,
     val onImportSleepFiles: () -> Unit,

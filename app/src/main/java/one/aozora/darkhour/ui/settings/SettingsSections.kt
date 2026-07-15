@@ -96,6 +96,7 @@ internal fun DataSettingsSection(
     visibleRecordCount: Int,
     onPendingCustomDaysChange: (Float) -> Unit,
 ) {
+    val providerAvailable = healthConnect.access.providerAvailable
     SettingsSection("Data") {
         Text("Health Connect", style = MaterialTheme.typography.titleMedium)
         SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
@@ -108,6 +109,7 @@ internal fun DataSettingsSection(
                             option.toRange(pendingCustomDays.roundToInt()),
                         )
                     },
+                    enabled = providerAvailable,
                     shape = SegmentedButtonDefaults.itemShape(index, HealthDataRangeOptions.size),
                     modifier = Modifier.testTag(option.testTag),
                 ) {
@@ -129,6 +131,7 @@ internal fun DataSettingsSection(
                     valueRange = HealthDataRange.MINIMUM_CUSTOM_DAYS.toFloat()..maxCustomDays.toFloat(),
                     steps = (maxCustomDays - HealthDataRange.MINIMUM_CUSTOM_DAYS - 1).coerceAtLeast(0),
                     modifier = Modifier.testTag("health_range_custom_days"),
+                    enabled = providerAvailable,
                 )
             }
         }
@@ -142,8 +145,7 @@ internal fun DataSettingsSection(
         )
         if (
             !healthConnect.hasHistoryPermission &&
-            healthConnect.access != HealthConnectAccess.UNAVAILABLE &&
-            healthConnect.access != HealthConnectAccess.UPDATE_REQUIRED
+            providerAvailable
         ) {
             OutlinedButton(
                 onClick = healthConnect.onRequestHistoryPermission,
@@ -169,8 +171,7 @@ internal fun ImportExportSettingsSection(
     var exportStartDate by remember { mutableStateOf(today.minusDays(29)) }
     var exportEndDate by remember { mutableStateOf(today) }
     var selectedPackages by remember { mutableStateOf<Set<String>>(emptySet()) }
-    val providerAvailable = healthConnect.access != HealthConnectAccess.UNAVAILABLE &&
-        healthConnect.access != HealthConnectAccess.UPDATE_REQUIRED
+    val providerAvailable = healthConnect.access.providerAvailable
     val operationIdle = healthConnect.fileOperation == HealthConnectFileOperation.IDLE
 
     LaunchedEffect(healthConnect.exportPreparation) {
@@ -511,8 +512,12 @@ private fun settingsImportStatusText(
         healthConnect.importError != null -> healthConnect.importError
         healthConnect.access == HealthConnectAccess.PERMISSION_REQUIRED ->
             "Permission required"
+        healthConnect.access == HealthConnectAccess.SETUP_REQUIRED ->
+            "Health Connect setup required"
         healthConnect.access == HealthConnectAccess.UPDATE_REQUIRED ->
             "Provider update required"
+        healthConnect.access == HealthConnectAccess.INSTALL_REQUIRED ->
+            "Health Connect is not installed"
         healthConnect.access == HealthConnectAccess.UNAVAILABLE ->
             "Unavailable on this device"
         healthConnect.isRefreshing -> importStatusText(

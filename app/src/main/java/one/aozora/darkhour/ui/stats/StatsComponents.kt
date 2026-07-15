@@ -22,6 +22,7 @@ internal fun HeaderText(
     scopeSummary: String,
     dataScope: StatsDataScope,
     showDataScopeToggle: Boolean,
+    allAvailableEnabled: Boolean,
     statusMessage: String?,
     onDataScopeChange: (StatsDataScope) -> Unit,
 ) {
@@ -35,6 +36,7 @@ internal fun HeaderText(
         if (showDataScopeToggle) {
             StatsScopeToggle(
                 selectedScope = dataScope,
+                allAvailableEnabled = allAvailableEnabled,
                 onSelected = onDataScopeChange,
             )
         }
@@ -51,6 +53,7 @@ internal fun HeaderText(
 @Composable
 private fun StatsScopeToggle(
     selectedScope: StatsDataScope,
+    allAvailableEnabled: Boolean,
     onSelected: (StatsDataScope) -> Unit,
 ) {
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -58,6 +61,7 @@ private fun StatsScopeToggle(
             FilterChip(
                 selected = selectedScope == scope,
                 onClick = { onSelected(scope) },
+                enabled = scope != StatsDataScope.AllAvailable || allAvailableEnabled,
                 label = { Text(scope.label) },
                 modifier = Modifier.testTag(scope.testTag),
             )

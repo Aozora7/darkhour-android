@@ -24,8 +24,13 @@ sealed class HealthDataRange {
 enum class HealthConnectAccess {
     CONNECTED,
     PERMISSION_REQUIRED,
+    SETUP_REQUIRED,
     UNAVAILABLE,
-    UPDATE_REQUIRED,
+    INSTALL_REQUIRED,
+    UPDATE_REQUIRED;
+
+    val providerAvailable: Boolean
+        get() = this == CONNECTED || this == PERMISSION_REQUIRED
 }
 
 enum class HealthImportPhase {

@@ -35,6 +35,8 @@ internal fun HealthConnectGate(
     access: HealthConnectAccess,
     dataRangeRequiresHistoryPermission: Boolean,
     onRequestPermissions: () -> Unit,
+    onInstallHealthConnect: () -> Unit,
+    onOpenHealthConnect: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Box(
@@ -50,6 +52,8 @@ internal fun HealthConnectGate(
             Text(
                 text = when (access) {
                     HealthConnectAccess.PERMISSION_REQUIRED -> "Connect Health Connect"
+                    HealthConnectAccess.SETUP_REQUIRED -> "Set up Health Connect"
+                    HealthConnectAccess.INSTALL_REQUIRED -> "Install Health Connect"
                     HealthConnectAccess.UPDATE_REQUIRED -> "Update Health Connect"
                     HealthConnectAccess.UNAVAILABLE -> "Health Connect unavailable"
                     HealthConnectAccess.CONNECTED -> ""
@@ -64,8 +68,12 @@ internal fun HealthConnectGate(
                     } else {
                         "Allow sleep access to show your last 30 days in the actogram."
                     }
+                    HealthConnectAccess.SETUP_REQUIRED ->
+                        "Finish setup in Health Connect, then return to allow access."
                     HealthConnectAccess.UPDATE_REQUIRED ->
                         "Install the available Health Connect update, then return to Dark Hour."
+                    HealthConnectAccess.INSTALL_REQUIRED ->
+                        "Install the Health Connect provider, then return to Dark Hour."
                     HealthConnectAccess.UNAVAILABLE ->
                         "This device does not provide Health Connect."
                     HealthConnectAccess.CONNECTED -> ""
@@ -79,6 +87,31 @@ internal fun HealthConnectGate(
                     modifier = Modifier.testTag("request_health_permissions"),
                 ) {
                     Text("Allow access")
+                }
+            } else if (access == HealthConnectAccess.SETUP_REQUIRED) {
+                Spacer(Modifier.height(18.dp))
+                Button(
+                    onClick = onOpenHealthConnect,
+                    modifier = Modifier.testTag("open_health_connect"),
+                ) {
+                    Text("Open Health Connect")
+                }
+            } else if (
+                access == HealthConnectAccess.INSTALL_REQUIRED ||
+                access == HealthConnectAccess.UPDATE_REQUIRED
+            ) {
+                Spacer(Modifier.height(18.dp))
+                Button(
+                    onClick = onInstallHealthConnect,
+                    modifier = Modifier.testTag("install_health_connect"),
+                ) {
+                    Text(
+                        if (access == HealthConnectAccess.INSTALL_REQUIRED) {
+                            "Install Health Connect"
+                        } else {
+                            "Update Health Connect"
+                        },
+                    )
                 }
             }
         }

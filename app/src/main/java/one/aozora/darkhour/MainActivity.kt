@@ -1,5 +1,7 @@
 package one.aozora.darkhour
 
+import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import android.util.Log
 import androidx.activity.ComponentActivity
@@ -9,11 +11,14 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.health.connect.client.HealthConnectClient
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.launch
 import one.aozora.darkhour.data.HealthConnectDataController
 import one.aozora.darkhour.data.HealthDataRange
+import one.aozora.darkhour.data.HEALTH_CONNECT_PROVIDER_PACKAGE_NAME
 import one.aozora.darkhour.data.SleepExportRange
+import one.aozora.darkhour.data.shouldOfferHealthConnectSetup
 import one.aozora.darkhour.data.settings.AppSettingsStore
 import one.aozora.darkhour.core.circadian.adaptive.AdaptiveKalmanDiagnostics
 import one.aozora.darkhour.ui.DarkHourApp
@@ -30,19 +35,32 @@ class MainActivity : ComponentActivity() {
     private var pendingSleepWriteAction: SleepWriteAction? = null
     private var pendingSleepExportRange: SleepExportRange? = null
     private var pendingSleepExportPackages: Set<String>? = null
+    private var lastHealthPermissionRequest: PendingHealthPermissionRequest? = null
+    private var resumePermissionRequestAfterSetup: PendingHealthPermissionRequest? = null
     private val requestHealthPermissions = registerForActivityResult(
         HealthConnectDataController.permissionContract,
     ) { granted ->
-        val exportRange = pendingSleepExportRange
-        pendingSleepExportRange = null
-        if (exportRange != null) {
-            if (granted.containsAll(healthConnect.exportPermissions(exportRange))) {
-                healthConnect.prepareSleepExport(exportRange)
-            } else {
-                healthConnect.reportSleepExportPermissionDenied()
+        if (shouldOfferHealthConnectSetup(
+                grantedPermissions = granted,
+                providerAvailable = healthConnect.isProviderAvailable,
+                resumedAfterSetup = lastHealthPermissionRequest?.resumedAfterSetup == true,
+            )
+        ) {
+            healthConnect.reportSetupRequired()
+        } else {
+            lastHealthPermissionRequest = null
+            val exportRange = pendingSleepExportRange
+            pendingSleepExportRange = null
+            if (exportRange != null) {
+                if (granted.containsAll(healthConnect.exportPermissions(exportRange))) {
+                    healthConnect.prepareSleepExport(exportRange)
+                } else {
+                    healthConnect.reportSleepExportPermissionDenied()
+                }
             }
+            healthConnect.clearSetupRequired()
+            healthConnect.refresh()
         }
-        healthConnect.refresh()
     }
     private val openSleepFiles = registerForActivityResult(
         ActivityResultContracts.OpenMultipleDocuments(),
@@ -55,10 +73,20 @@ class MainActivity : ComponentActivity() {
         HealthConnectDataController.permissionContract,
     ) { granted ->
         val action = pendingSleepWriteAction
-        pendingSleepWriteAction = null
         if (HealthConnectDataController.sleepWritePermission in granted && action != null) {
+            pendingSleepWriteAction = null
+            lastHealthPermissionRequest = null
             runSleepWriteAction(action)
+        } else if (shouldOfferHealthConnectSetup(
+                grantedPermissions = granted,
+                providerAvailable = healthConnect.isProviderAvailable,
+                resumedAfterSetup = lastHealthPermissionRequest?.resumedAfterSetup == true,
+            )
+        ) {
+            healthConnect.reportSetupRequired()
         } else if (::healthConnect.isInitialized) {
+            pendingSleepWriteAction = null
+            lastHealthPermissionRequest = null
             healthConnect.reportSleepWritePermissionDenied()
         }
     }
@@ -139,30 +167,32 @@ class MainActivity : ComponentActivity() {
                     fileOperationError = healthState.fileOperationErrorMessage,
                     onRequestHealthPermissions = {
                         if (!BuildConfig.USE_DEMO_DATA) {
-                            requestHealthPermissions.launch(healthConnect.requiredPermissions())
+                            launchHealthConnectPermissions(healthState.dataRange)
                         }
                     },
                     onRequestHistoryPermission = {
                         if (!BuildConfig.USE_DEMO_DATA) {
-                            requestHealthPermissions.launch(
-                                healthConnect.requiredPermissions(HealthDataRange.ENTIRE_HISTORY),
-                            )
+                            launchHealthConnectPermissions(HealthDataRange.ENTIRE_HISTORY)
                         }
                     },
+                    onInstallHealthConnect = ::openHealthConnectProviderListing,
+                    onOpenHealthConnect = ::openHealthConnect,
                     onRequestStatsAllData = {
                         if (!BuildConfig.USE_DEMO_DATA) {
                             healthConnect.refreshStatsAllData()
                         }
                     },
                     onHealthDataRangeChange = { range ->
-                        appSettings.writeHealthDataRange(range)
-                        if (!BuildConfig.USE_DEMO_DATA) {
+                        if (BuildConfig.USE_DEMO_DATA) {
+                            appSettings.writeHealthDataRange(range)
+                        } else if (healthConnect.isProviderAvailable) {
+                            appSettings.writeHealthDataRange(range)
                             healthConnect.setDataRange(range)
                             if (
                                 range.requiresHistoryPermission &&
                                 range != healthState.dataRange
                             ) {
-                                requestHealthPermissions.launch(healthConnect.requiredPermissions(range))
+                                launchHealthConnectPermissions(range)
                             }
                         }
                     },
@@ -174,8 +204,10 @@ class MainActivity : ComponentActivity() {
                     },
                     onPrepareSleepExport = ::beginSleepExportPreparation,
                     onCreateSleepExportDocument = { packages ->
-                        pendingSleepExportPackages = packages
-                        createSleepExport.launch("darkhour-health-connect-sleep-${java.time.LocalDate.now()}.json")
+                        if (BuildConfig.USE_DEMO_DATA || healthConnect.isProviderAvailable) {
+                            pendingSleepExportPackages = packages
+                            createSleepExport.launch("darkhour-health-connect-sleep-${java.time.LocalDate.now()}.json")
+                        }
                     },
                     onCancelSleepExport = healthConnect::cancelSleepExport,
                 )
@@ -187,6 +219,10 @@ class MainActivity : ComponentActivity() {
         super.onResume()
         if (::healthConnect.isInitialized && !BuildConfig.USE_DEMO_DATA) {
             healthConnect.refresh()
+            resumePermissionRequestAfterSetup?.let { request ->
+                resumePermissionRequestAfterSetup = null
+                launchHealthPermissionRequest(request.copy(resumedAfterSetup = true))
+            }
         }
     }
 
@@ -201,6 +237,7 @@ class MainActivity : ComponentActivity() {
         if (
             BuildConfig.USE_DEMO_DATA ||
             !::healthConnect.isInitialized ||
+            !healthConnect.isProviderAvailable ||
             !healthConnect.isFileWriteSupported
         ) {
             return
@@ -208,10 +245,13 @@ class MainActivity : ComponentActivity() {
         lifecycleScope.launch {
             if (healthConnect.hasSleepWritePermission()) {
                 runSleepWriteAction(action)
-            } else {
+            } else if (healthConnect.isProviderAvailable) {
                 pendingSleepWriteAction = action
-                requestSleepWritePermission.launch(
-                    setOf(HealthConnectDataController.sleepWritePermission),
+                launchHealthPermissionRequest(
+                    PendingHealthPermissionRequest(
+                        permissions = setOf(HealthConnectDataController.sleepWritePermission),
+                        kind = HealthPermissionRequestKind.SLEEP_WRITE,
+                    ),
                 )
             }
         }
@@ -225,7 +265,13 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun beginSleepExportPreparation(range: SleepExportRange) {
-        if (BuildConfig.USE_DEMO_DATA || !::healthConnect.isInitialized) return
+        if (
+            BuildConfig.USE_DEMO_DATA ||
+            !::healthConnect.isInitialized ||
+            !healthConnect.isProviderAvailable
+        ) {
+            return
+        }
         lifecycleScope.launch {
             val permissions = healthConnect.exportPermissions(range)
             if (healthConnect.hasPermissions(permissions)) {
@@ -233,8 +279,71 @@ class MainActivity : ComponentActivity() {
             } else {
                 healthConnect.cancelSleepExport()
                 pendingSleepExportRange = range
-                requestHealthPermissions.launch(permissions)
+                launchHealthConnectPermissions(permissions)
             }
+        }
+    }
+
+    private fun launchHealthConnectPermissions(range: HealthDataRange) {
+        launchHealthConnectPermissions(healthConnect.requiredPermissions(range))
+    }
+
+    private fun launchHealthConnectPermissions(permissions: Set<String>) {
+        launchHealthPermissionRequest(
+            PendingHealthPermissionRequest(
+                permissions = permissions,
+                kind = HealthPermissionRequestKind.GENERAL,
+            ),
+        )
+    }
+
+    private fun launchHealthPermissionRequest(request: PendingHealthPermissionRequest) {
+        if (!::healthConnect.isInitialized || !healthConnect.isProviderAvailable) {
+            if (::healthConnect.isInitialized) healthConnect.refresh()
+            return
+        }
+        lastHealthPermissionRequest = request
+        runCatching {
+            when (request.kind) {
+                HealthPermissionRequestKind.GENERAL ->
+                    requestHealthPermissions.launch(request.permissions)
+                HealthPermissionRequestKind.SLEEP_WRITE ->
+                    requestSleepWritePermission.launch(request.permissions)
+            }
+        }.onFailure {
+            lastHealthPermissionRequest = null
+            when (request.kind) {
+                HealthPermissionRequestKind.GENERAL -> pendingSleepExportRange = null
+                HealthPermissionRequestKind.SLEEP_WRITE -> pendingSleepWriteAction = null
+            }
+            healthConnect.refresh()
+        }
+    }
+
+    private fun openHealthConnectProviderListing() {
+        val marketUri = Uri.parse("market://details?id=$HEALTH_CONNECT_PROVIDER_PACKAGE_NAME")
+        val webUri = Uri.parse(
+            "https://play.google.com/store/apps/details?id=$HEALTH_CONNECT_PROVIDER_PACKAGE_NAME",
+        )
+        val marketIntent = Intent(Intent.ACTION_VIEW, marketUri).apply {
+            setPackage(GOOGLE_PLAY_PACKAGE_NAME)
+        }
+        if (runCatching { startActivity(marketIntent) }.isFailure) {
+            runCatching { startActivity(Intent(Intent.ACTION_VIEW, webUri)) }
+        }
+    }
+
+    private fun openHealthConnect() {
+        val intent = Intent(HealthConnectClient.ACTION_HEALTH_CONNECT_SETTINGS).apply {
+            if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                setPackage(HEALTH_CONNECT_PROVIDER_PACKAGE_NAME)
+            }
+        }
+        if (runCatching { startActivity(intent) }.isSuccess) {
+            resumePermissionRequestAfterSetup = lastHealthPermissionRequest
+            healthConnect.clearSetupRequired()
+        } else {
+            openHealthConnectProviderListing()
         }
     }
 }
@@ -242,6 +351,17 @@ class MainActivity : ComponentActivity() {
 private enum class SleepWriteAction {
     IMPORT,
     DELETE,
+}
+
+private data class PendingHealthPermissionRequest(
+    val permissions: Set<String>,
+    val kind: HealthPermissionRequestKind,
+    val resumedAfterSetup: Boolean = false,
+)
+
+private enum class HealthPermissionRequestKind {
+    GENERAL,
+    SLEEP_WRITE,
 }
 
 private fun ComponentActivity.initialVisibleImportDuration(
@@ -266,3 +386,4 @@ private fun ComponentActivity.initialVisibleImportDuration(
 
 private const val ACTOGRAM_AXIS_HEIGHT_DP = 30f
 private const val ADAPTIVE_KALMAN_LOG_TAG = "DarkHourAdaptiveKalman"
+private const val GOOGLE_PLAY_PACKAGE_NAME = "com.android.vending"

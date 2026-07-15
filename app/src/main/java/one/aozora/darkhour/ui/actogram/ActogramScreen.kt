@@ -55,6 +55,8 @@ fun ActogramScreen(
             access = healthConnect.access,
             dataRangeRequiresHistoryPermission = healthConnect.dataRange.requiresHistoryPermission,
             onRequestPermissions = healthConnect.onRequestHealthPermissions,
+            onInstallHealthConnect = healthConnect.onInstallHealthConnect,
+            onOpenHealthConnect = healthConnect.onOpenHealthConnect,
             modifier = modifier,
         )
         return
