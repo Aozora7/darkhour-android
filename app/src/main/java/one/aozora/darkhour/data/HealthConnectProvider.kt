@@ -3,9 +3,7 @@ package one.aozora.darkhour.data
 import android.content.Context
 import android.content.pm.PackageManager
 import androidx.health.connect.client.HealthConnectClient
-
-internal const val HEALTH_CONNECT_PROVIDER_PACKAGE_NAME =
-    "com.google.android.apps.healthdata"
+import one.aozora.darkhour.R
 
 internal fun healthConnectAccess(
     context: Context,
@@ -39,7 +37,7 @@ internal fun shouldOfferHealthConnectSetup(
 
 private fun Context.isHealthConnectProviderInstalled(): Boolean = try {
     @Suppress("DEPRECATION")
-    packageManager.getPackageInfo(HEALTH_CONNECT_PROVIDER_PACKAGE_NAME, 0)
+    packageManager.getPackageInfo(getString(R.string.health_connect_provider_package_name), 0)
     true
 } catch (_: PackageManager.NameNotFoundException) {
     false

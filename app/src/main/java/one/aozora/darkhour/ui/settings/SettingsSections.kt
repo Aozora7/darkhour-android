@@ -31,7 +31,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.UriHandler
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import one.aozora.darkhour.R
 import one.aozora.darkhour.data.HealthConnectAccess
 import one.aozora.darkhour.data.HealthConnectFileOperation
 import one.aozora.darkhour.data.HealthDataRange
@@ -496,9 +498,10 @@ internal fun fileOperationProgressLabel(
 internal fun PrivacySettingsSection(
     uriHandler: UriHandler,
 ) {
+    val privacyPolicyUrl = stringResource(R.string.privacy_policy_url)
     SettingsSection("Privacy") {
         OutlinedButton(
-            onClick = { uriHandler.openUri(PRIVACY_POLICY_URL) },
+            onClick = { uriHandler.openUri(privacyPolicyUrl) },
             modifier = Modifier
                 .fillMaxWidth()
                 .testTag("privacy_policy_button"),
@@ -511,6 +514,39 @@ internal fun PrivacySettingsSection(
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+    }
+}
+
+@Composable
+internal fun FeedbackSettingsSection(
+    uriHandler: UriHandler,
+) {
+    val githubIssuesUrl = stringResource(R.string.github_issues_url)
+    val supportEmail = stringResource(R.string.support_email)
+    SettingsSection("Feedback") {
+        Text(
+            "Report a bug or request a feature through GitHub Issues or by email.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        OutlinedButton(
+            onClick = { uriHandler.openUri(githubIssuesUrl) },
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag("github_issues_button"),
+            shape = MaterialTheme.shapes.medium,
+        ) {
+            Text("Open GitHub Issues")
+        }
+        OutlinedButton(
+            onClick = { uriHandler.openUri("mailto:$supportEmail") },
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag("support_email_button"),
+            shape = MaterialTheme.shapes.medium,
+        ) {
+            Text("Email $supportEmail")
+        }
     }
 }
 

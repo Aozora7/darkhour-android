@@ -3,9 +3,6 @@ package one.aozora.darkhour.ui.settings
 import one.aozora.darkhour.data.HealthDataRange
 import one.aozora.darkhour.data.HealthImportPhase
 
-internal const val PRIVACY_POLICY_URL =
-    "https://github.com/Aozora7/darkhour-android/blob/master/PRIVACY.md"
-
 internal enum class HealthDataRangeOption(
     val label: String,
     val testTag: String,

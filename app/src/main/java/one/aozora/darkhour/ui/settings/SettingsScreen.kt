@@ -75,6 +75,7 @@ fun SettingsScreen(
             healthConnect = healthConnect,
             customDays = pendingCustomDays.toInt(),
         )
+        FeedbackSettingsSection(uriHandler = uriHandler)
         PrivacySettingsSection(uriHandler = uriHandler)
     }
 }

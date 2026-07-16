@@ -1,4 +1,9 @@
 <resources>
     <string name="app_name">Dark Hour</string>
     <string name="app_name_debug">Dark Hour Debug</string>
+    <string name="privacy_policy_url" translatable="false">https://github.com/Aozora7/darkhour-android/blob/master/PRIVACY.md</string>
+    <string name="github_issues_url" translatable="false">https://github.com/Aozora7/darkhour-android/issues</string>
+    <string name="support_email" translatable="false">aozora@aozora.one</string>
+    <string name="health_connect_provider_package_name" translatable="false">com.google.android.apps.healthdata</string>
+    <string name="google_play_package_name" translatable="false">com.android.vending</string>
 </resources>

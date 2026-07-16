@@ -16,7 +16,6 @@ import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.launch
 import one.aozora.darkhour.data.HealthConnectDataController
 import one.aozora.darkhour.data.HealthDataRange
-import one.aozora.darkhour.data.HEALTH_CONNECT_PROVIDER_PACKAGE_NAME
 import one.aozora.darkhour.data.SleepExportRange
 import one.aozora.darkhour.data.shouldOfferHealthConnectSetup
 import one.aozora.darkhour.data.settings.AppSettingsStore
@@ -331,12 +330,13 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun openHealthConnectProviderListing() {
-        val marketUri = Uri.parse("market://details?id=$HEALTH_CONNECT_PROVIDER_PACKAGE_NAME")
+        val providerPackageName = getString(R.string.health_connect_provider_package_name)
+        val marketUri = Uri.parse("market://details?id=$providerPackageName")
         val webUri = Uri.parse(
-            "https://play.google.com/store/apps/details?id=$HEALTH_CONNECT_PROVIDER_PACKAGE_NAME",
+            "https://play.google.com/store/apps/details?id=$providerPackageName",
         )
         val marketIntent = Intent(Intent.ACTION_VIEW, marketUri).apply {
-            setPackage(GOOGLE_PLAY_PACKAGE_NAME)
+            setPackage(getString(R.string.google_play_package_name))
         }
         if (runCatching { startActivity(marketIntent) }.isFailure) {
             runCatching { startActivity(Intent(Intent.ACTION_VIEW, webUri)) }
@@ -344,9 +344,10 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun openHealthConnect() {
+        val providerPackageName = getString(R.string.health_connect_provider_package_name)
         val intent = Intent(HealthConnectClient.ACTION_HEALTH_CONNECT_SETTINGS).apply {
             if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                setPackage(HEALTH_CONNECT_PROVIDER_PACKAGE_NAME)
+                setPackage(providerPackageName)
             }
         }
         if (runCatching { startActivity(intent) }.isSuccess) {
@@ -375,4 +376,3 @@ private enum class HealthPermissionRequestKind {
 }
 
 private const val ADAPTIVE_KALMAN_LOG_TAG = "DarkHourAdaptiveKalman"
-private const val GOOGLE_PLAY_PACKAGE_NAME = "com.android.vending"
