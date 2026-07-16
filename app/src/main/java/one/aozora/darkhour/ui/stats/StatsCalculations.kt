@@ -53,6 +53,16 @@ internal data class YearlyTauSeries(
     val points: List<YearlyTauPoint>,
 )
 
+internal fun selectedTauYears(
+    series: List<YearlyTauSeries>,
+    persistedSelection: Set<Int>?,
+): Set<Int> {
+    val availableYears = series.map { it.year }.toSet()
+    return persistedSelection
+        ?.intersect(availableYears)
+        ?: availableYears.sortedDescending().take(DEFAULT_SELECTED_TAU_YEAR_COUNT).toSet()
+}
+
 internal fun calculateYearlyTauSeries(
     days: List<CircadianDay>,
 ): List<YearlyTauSeries> =
@@ -124,3 +134,4 @@ internal fun calculateStatsMetrics(
 }
 
 private const val MILLIS_PER_DAY = 86_400_000.0
+private const val DEFAULT_SELECTED_TAU_YEAR_COUNT = 4

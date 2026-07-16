@@ -4,10 +4,12 @@ import one.aozora.darkhour.core.circadian.CircadianAlgorithmRegistry
 import one.aozora.darkhour.core.circadian.CircadianConfidence
 import one.aozora.darkhour.core.circadian.CircadianDay
 import one.aozora.darkhour.core.model.SleepRecord
+import one.aozora.darkhour.core.periodogram.PeriodogramPoint
 import one.aozora.darkhour.data.HealthDataRange
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.time.Instant
 import java.time.LocalDate
@@ -131,6 +133,100 @@ class StatsScreenTest {
         assertNotEquals(first, middle)
         assertNotEquals(first, last)
         assertNotEquals(middle, last)
+    }
+
+    @Test
+    fun defaultsToNewestFourTauYearsAndHonorsPersistedSelection() {
+        val series = (2020..2025).map { YearlyTauSeries(it, emptyList()) }
+
+        assertEquals(setOf(2022, 2023, 2024, 2025), selectedTauYears(series, null))
+        assertEquals(setOf(2020, 2024), selectedTauYears(series, setOf(2019, 2020, 2024)))
+        assertEquals(emptySet<Int>(), selectedTauYears(series, emptySet()))
+    }
+
+    @Test
+    fun periodogramSelectionUsesNearestPointWithinPlotBounds() {
+        val points = listOf(
+            PeriodogramPoint(period = 23.0, power = 0.1),
+            PeriodogramPoint(period = 24.0, power = 0.4),
+            PeriodogramPoint(period = 25.0, power = 0.2),
+        )
+
+        assertEquals(points[1], periodogramPointAtX(points, 51f, 0f, 100f))
+        assertNull(periodogramPointAtX(points, -1f, 0f, 100f))
+        assertNull(periodogramPointAtX(points, 50f, 100f, 100f))
+    }
+
+    @Test
+    fun periodogramGestureSpeedSeparatesSwipeFromSlowScrub() {
+        assertTrue(
+            horizontalSpeedDpPerSecond(
+                displacementPx = 300f,
+                elapsedMillis = 500L,
+                density = 1f,
+            ) > QUICK_SWIPE_SPEED_DP_PER_SECOND,
+        )
+        assertTrue(
+            horizontalSpeedDpPerSecond(
+                displacementPx = 300f,
+                elapsedMillis = 3_000L,
+                density = 1f,
+            ) < QUICK_SWIPE_SPEED_DP_PER_SECOND,
+        )
+    }
+
+    @Test
+    fun tauTooltipUsesNearestValueForEachEnabledYearNewestFirst() {
+        val values = tauTooltipValues(
+            series = listOf(
+                YearlyTauSeries(
+                    year = 2025,
+                    points = listOf(
+                        YearlyTauPoint(100, 24.2, 1.0),
+                        YearlyTauPoint(110, 24.4, 1.0),
+                    ),
+                ),
+                YearlyTauSeries(
+                    year = 2026,
+                    points = listOf(
+                        YearlyTauPoint(100, 24.6, 1.0),
+                        YearlyTauPoint(110, 24.8, 1.0),
+                    ),
+                ),
+            ),
+            dayOfYear = 105,
+        )
+
+        assertEquals(listOf(2026, 2025), values.map { it.year })
+        assertEquals(listOf(105, 105), values.map { it.point.dayOfYear })
+        assertEquals(24.7, values[0].point.tauHours, 0.0001)
+        assertEquals(24.3, values[1].point.tauHours, 0.0001)
+        assertEquals("Feb 29", formatTauDayOfYear(60))
+    }
+
+    @Test
+    fun tauTooltipDoesNotExtrapolatePastAYearsPlottedRange() {
+        val values = tauTooltipValues(
+            series = listOf(
+                YearlyTauSeries(
+                    year = 2026,
+                    points = listOf(
+                        YearlyTauPoint(100, 24.6, 1.0),
+                        YearlyTauPoint(110, 24.8, 1.0),
+                    ),
+                ),
+            ),
+            dayOfYear = 120,
+        )
+
+        assertEquals(emptyList<TauTooltipValue>(), values)
+    }
+
+    @Test
+    fun tauDaySelectionMapsPlotEdgesToCalendarYear() {
+        assertEquals(1, tauDayAtX(10f, 10f, 110f))
+        assertEquals(366, tauDayAtX(110f, 10f, 110f))
+        assertNull(tauDayAtX(9f, 10f, 110f))
     }
 
     private fun record(

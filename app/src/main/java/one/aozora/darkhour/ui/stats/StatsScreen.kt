@@ -17,10 +17,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
@@ -42,16 +39,15 @@ fun StatsScreen(
     val statsOverrides = remember(developerCircadian.activeOverrides) {
         statsCircadianOverrides(developerCircadian.activeOverrides)
     }
-    val (settings) = LocalAppSettings.current
+    val (settings, onSettingsChange) = LocalAppSettings.current
     val healthConnect = LocalHealthConnectState.current
-    var dataScope by rememberSaveable { mutableStateOf(StatsDataScope.SelectedPeriod) }
     val statsAllRecords = healthConnect.statsAllRecords
     val showDataScopeToggle = healthConnect.dataRange != HealthDataRange.ENTIRE_HISTORY
     val providerAvailable = healthConnect.access.providerAvailable
-    LaunchedEffect(showDataScopeToggle) {
-        if (!showDataScopeToggle) {
-            dataScope = StatsDataScope.SelectedPeriod
-        }
+    val dataScope = if (showDataScopeToggle && providerAvailable && settings.statsUseAllData) {
+        StatsDataScope.AllAvailable
+    } else {
+        StatsDataScope.SelectedPeriod
     }
     LaunchedEffect(
         dataScope,
@@ -144,9 +140,14 @@ fun StatsScreen(
             healthConnect.statsAllDataError
         else -> null
     }
+    val isAllDataLoading =
+        dataScope == StatsDataScope.AllAvailable &&
+            statsAllRecords == null &&
+            healthConnect.hasHistoryPermission &&
+            healthConnect.statsAllDataError == null
     fun selectDataScope(scope: StatsDataScope) {
         if (scope == StatsDataScope.AllAvailable && !providerAvailable) return
-        dataScope = scope
+        onSettingsChange(settings.copy(statsUseAllData = scope == StatsDataScope.AllAvailable))
         if (scope == StatsDataScope.AllAvailable) {
             if (
                 healthConnect.hasHistoryPermission &&
@@ -184,16 +185,28 @@ fun StatsScreen(
                         onDataScopeChange = ::selectDataScope,
                     )
                     Spacer(Modifier.height(16.dp))
-                    PeriodogramChart(
-                        result = periodogram,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .weight(1f)
-                    )
-                    if (showAllDataStats) {
+                    if (isAllDataLoading) {
+                        StatsLoadingIndicator(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .weight(1f),
+                        )
+                    } else {
+                        PeriodogramChart(
+                            result = periodogram,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .weight(1f),
+                        )
+                    }
+                    if (showAllDataStats && !isAllDataLoading) {
                         Spacer(Modifier.height(16.dp))
                         YearlyTauSection(
                             series = yearlyTauSeries,
+                            selectedYears = selectedTauYears(yearlyTauSeries, settings.selectedTauYears),
+                            onSelectedYearsChange = {
+                                onSettingsChange(settings.copy(selectedTauYears = it))
+                            },
                             modifier = Modifier.fillMaxWidth(),
                         )
                     }
@@ -258,16 +271,28 @@ fun StatsScreen(
                     onDataScopeChange = ::selectDataScope,
                 )
 
-                PeriodogramChart(
-                    result = periodogram,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(min = 180.dp, max = 260.dp)
-                        .aspectRatio(1.75f),
-                )
-                if (showAllDataStats) {
+                if (isAllDataLoading) {
+                    StatsLoadingIndicator(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(180.dp),
+                    )
+                } else {
+                    PeriodogramChart(
+                        result = periodogram,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 180.dp, max = 260.dp)
+                            .aspectRatio(1.75f),
+                    )
+                }
+                if (showAllDataStats && !isAllDataLoading) {
                     YearlyTauSection(
                         series = yearlyTauSeries,
+                        selectedYears = selectedTauYears(yearlyTauSeries, settings.selectedTauYears),
+                        onSelectedYearsChange = {
+                            onSettingsChange(settings.copy(selectedTauYears = it))
+                        },
                         modifier = Modifier.fillMaxWidth(),
                     )
                 }

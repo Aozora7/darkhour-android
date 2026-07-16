@@ -8,4 +8,6 @@ data class AppSettings(
     val forecastDays: Int = 2,
     val useIsoDateTime: Boolean = false,
     val historyAccessCalloutDismissed: Boolean = false,
+    val statsUseAllData: Boolean = false,
+    val selectedTauYears: Set<Int>? = null,
 )

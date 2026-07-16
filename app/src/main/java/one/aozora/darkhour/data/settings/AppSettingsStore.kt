@@ -34,6 +34,15 @@ class AppSettingsStore(context: Context) {
                     HISTORY_ACCESS_CALLOUT_DISMISSED_KEY,
                     settings.historyAccessCalloutDismissed,
                 )
+                .putBoolean(STATS_USE_ALL_DATA_KEY, settings.statsUseAllData)
+            if (settings.selectedTauYears == null) {
+                remove(SELECTED_TAU_YEARS_KEY)
+            } else {
+                putStringSet(
+                    SELECTED_TAU_YEARS_KEY,
+                    settings.selectedTauYears.map(Int::toString).toSet(),
+                )
+            }
         }
     }
 
@@ -88,6 +97,8 @@ private const val INCLUDE_NAPS_KEY = "include_naps"
 private const val FORECAST_DAYS_KEY = "forecast_days"
 private const val USE_ISO_DATE_TIME_KEY = "use_iso_date_time"
 private const val HISTORY_ACCESS_CALLOUT_DISMISSED_KEY = "history_access_callout_dismissed"
+private const val STATS_USE_ALL_DATA_KEY = "stats_use_all_data"
+private const val SELECTED_TAU_YEARS_KEY = "stats_selected_tau_years"
 private const val ROW_HEIGHT_DP_KEY = "actogram_row_height_dp"
 private const val DOUBLE_PLOT_KEY = "actogram_double_plot"
 private const val SHOW_DATE_LABELS_KEY = "actogram_show_date_labels"
@@ -114,6 +125,15 @@ private fun SharedPreferences.readAppSettings(): AppSettings {
             HISTORY_ACCESS_CALLOUT_DISMISSED_KEY,
             defaults.historyAccessCalloutDismissed,
         ),
+        statsUseAllData = getBoolean(STATS_USE_ALL_DATA_KEY, defaults.statsUseAllData),
+        selectedTauYears = if (contains(SELECTED_TAU_YEARS_KEY)) {
+            getStringSet(SELECTED_TAU_YEARS_KEY, emptySet())
+                .orEmpty()
+                .mapNotNull(String::toIntOrNull)
+                .toSet()
+        } else {
+            defaults.selectedTauYears
+        },
     )
 }
 

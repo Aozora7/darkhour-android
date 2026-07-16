@@ -7,6 +7,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -18,6 +22,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
 import one.aozora.darkhour.ui.theme.ChartSelection
 import one.aozora.darkhour.ui.theme.ChartTeal
@@ -25,17 +30,24 @@ import one.aozora.darkhour.ui.theme.CircadianForecast
 import kotlin.math.ceil
 import kotlin.math.floor
 import kotlin.math.roundToInt
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
 
 @Composable
 internal fun TauYearChart(
     series: List<YearlyTauSeries>,
+    colorYearRange: IntRange,
     modifier: Modifier = Modifier,
 ) {
+    val nonEmptySeries = series.filter { it.points.isNotEmpty() }.sortedByDescending { it.year }
+    var selectedDayOfYear by remember(series) { mutableStateOf<Int?>(null) }
     val backgroundColor = MaterialTheme.colorScheme.surfaceContainer
     val gridColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.15f)
     val labelColor = MaterialTheme.colorScheme.onSurfaceVariant
     val referenceColor = labelColor.copy(alpha = 0.35f)
     val seasonBandColor = MaterialTheme.colorScheme.surfaceContainerHigh
+    val tooltipBackgroundColor = Color(0xFF202124)
+    val tooltipTextColor = Color(0xFFF1F3F4)
 
     Surface(
         modifier = modifier,
@@ -43,8 +55,22 @@ internal fun TauYearChart(
         color = backgroundColor,
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.12f)),
     ) {
-        Canvas(modifier = Modifier.fillMaxSize()) {
-            val nonEmptySeries = series.filter { it.points.isNotEmpty() }
+        Canvas(
+            modifier = Modifier
+                .fillMaxSize()
+                .pointerInput(nonEmptySeries) {
+                    observeChartPresses(
+                        onPosition = { positionX ->
+                            selectedDayOfYear = tauDayAtX(
+                                positionX = positionX,
+                                plotLeft = 48.dp.toPx(),
+                                plotRight = size.width - 18.dp.toPx(),
+                            )
+                        },
+                        onGestureCancelled = { selectedDayOfYear = null },
+                    )
+                },
+        ) {
             if (nonEmptySeries.isEmpty()) {
                 drawCenteredText("Not enough data", labelColor)
                 return@Canvas
@@ -60,8 +86,8 @@ internal fun TauYearChart(
             val axisRange = tauAxisRange(allTau)
             val yMin = axisRange.min
             val yMax = axisRange.max
-            val minYear = nonEmptySeries.minOf { it.year }
-            val maxYear = nonEmptySeries.maxOf { it.year }
+            val minYear = colorYearRange.first
+            val maxYear = colorYearRange.last
 
             fun x(dayOfYear: Int): Float =
                 left + ((dayOfYear - 1).coerceIn(0, 365) / 365f) * (right - left)
@@ -128,11 +154,187 @@ internal fun TauYearChart(
                 }
             }
 
+            selectedDayOfYear?.let { dayOfYear ->
+                val tooltipValues = tauTooltipValues(nonEmptySeries, dayOfYear)
+                if (tooltipValues.isNotEmpty()) {
+                    drawTauValueTooltip(
+                        dayOfYear = dayOfYear,
+                        values = tooltipValues,
+                        cursorX = x(dayOfYear),
+                        valueY = { tauHours -> y(tauHours) },
+                        minYear = minYear,
+                        maxYear = maxYear,
+                        left = left,
+                        right = right,
+                        top = top,
+                        bottom = bottom,
+                        backgroundColor = tooltipBackgroundColor,
+                        textColor = tooltipTextColor,
+                    )
+                }
+            }
+
             drawAxes(yMin, yMax, left, top, bottom, labelColor)
-            drawLegend(nonEmptySeries, minYear, maxYear, left, top, labelColor)
         }
     }
 }
+
+internal fun tauDayAtX(
+    positionX: Float,
+    plotLeft: Float,
+    plotRight: Float,
+): Int? {
+    if (plotRight <= plotLeft || positionX !in plotLeft..plotRight) return null
+    return (1 + ((positionX - plotLeft) / (plotRight - plotLeft) * 365f).roundToInt())
+        .coerceIn(1, 366)
+}
+
+internal data class TauTooltipValue(
+    val year: Int,
+    val point: YearlyTauPoint,
+)
+
+internal fun tauTooltipValues(
+    series: List<YearlyTauSeries>,
+    dayOfYear: Int,
+): List<TauTooltipValue> =
+    series
+        .sortedByDescending { it.year }
+        .mapNotNull { yearly ->
+            interpolatedTauPoint(yearly.points, dayOfYear)
+                ?.let { point -> TauTooltipValue(yearly.year, point) }
+        }
+
+private fun interpolatedTauPoint(
+    points: List<YearlyTauPoint>,
+    dayOfYear: Int,
+): YearlyTauPoint? {
+    val sorted = points.sortedBy { it.dayOfYear }
+    if (sorted.isEmpty() || dayOfYear !in sorted.first().dayOfYear..sorted.last().dayOfYear) return null
+    val upperIndex = sorted.indexOfFirst { it.dayOfYear >= dayOfYear }
+    val upper = sorted[upperIndex]
+    if (upper.dayOfYear == dayOfYear || upperIndex == 0) return upper
+    val lower = sorted[upperIndex - 1]
+    val fraction = (dayOfYear - lower.dayOfYear).toDouble() /
+        (upper.dayOfYear - lower.dayOfYear).toDouble()
+    return YearlyTauPoint(
+        dayOfYear = dayOfYear,
+        tauHours = lower.tauHours + (upper.tauHours - lower.tauHours) * fraction,
+        confidence = lower.confidence + (upper.confidence - lower.confidence) * fraction,
+    )
+}
+
+private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawTauValueTooltip(
+    dayOfYear: Int,
+    values: List<TauTooltipValue>,
+    cursorX: Float,
+    valueY: (Double) -> Float,
+    minYear: Int,
+    maxYear: Int,
+    left: Float,
+    right: Float,
+    top: Float,
+    bottom: Float,
+    backgroundColor: Color,
+    textColor: Color,
+) {
+    drawLine(
+        color = textColor.copy(alpha = 0.35f),
+        start = Offset(cursorX, top),
+        end = Offset(cursorX, bottom),
+        strokeWidth = 1.dp.toPx(),
+    )
+    values.forEach { value ->
+        val color = yearGradientColor(value.year, minYear, maxYear)
+        drawCircle(
+            color = backgroundColor,
+            radius = 4.dp.toPx(),
+            center = Offset(cursorX, valueY(value.point.tauHours)),
+        )
+        drawCircle(
+            color = color,
+            radius = 2.5.dp.toPx(),
+            center = Offset(cursorX, valueY(value.point.tauHours)),
+        )
+    }
+
+    val titlePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = textColor.toArgb()
+        textSize = 11.dp.toPx()
+        typeface = android.graphics.Typeface.DEFAULT_BOLD
+    }
+    val rowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = textColor.toArgb()
+        textSize = 10.dp.toPx()
+    }
+    val title = formatTauDayOfYear(dayOfYear)
+    val valueLabels = values.map { value -> "%.2f h".format(value.point.tauHours) }
+    val yearWidth = values.maxOf { rowPaint.measureText(it.year.toString()) }
+    val valueWidth = valueLabels.maxOf(rowPaint::measureText)
+    val horizontalPadding = 10.dp.toPx()
+    val markerWidth = 13.dp.toPx()
+    val columnGap = 16.dp.toPx()
+    val panelWidth = maxOf(
+        titlePaint.measureText(title),
+        markerWidth + yearWidth + columnGap + valueWidth,
+    ) + horizontalPadding * 2
+    val titleHeight = 21.dp.toPx()
+    val rowHeight = 16.dp.toPx()
+    val verticalPadding = 7.dp.toPx()
+    val panelHeight = verticalPadding * 2 + titleHeight + rowHeight * values.size
+    val cursorGap = 8.dp.toPx()
+    val panelLeft = if (cursorX + cursorGap + panelWidth <= right) {
+        cursorX + cursorGap
+    } else {
+        (cursorX - cursorGap - panelWidth).coerceAtLeast(left)
+    }
+    val panelTop = (top + 5.dp.toPx()).coerceIn(
+        minimumValue = top,
+        maximumValue = (bottom - panelHeight).coerceAtLeast(top),
+    )
+
+    drawRoundRect(
+        color = backgroundColor.copy(alpha = 0.96f),
+        topLeft = Offset(panelLeft, panelTop),
+        size = Size(panelWidth, panelHeight),
+        cornerRadius = androidx.compose.ui.geometry.CornerRadius(7.dp.toPx()),
+    )
+    drawContext.canvas.nativeCanvas.drawText(
+        title,
+        panelLeft + horizontalPadding,
+        panelTop + verticalPadding + 11.dp.toPx(),
+        titlePaint,
+    )
+    values.forEachIndexed { index, value ->
+        val baseline = panelTop + verticalPadding + titleHeight + rowHeight * index + 11.dp.toPx()
+        val markerCenterX = panelLeft + horizontalPadding + 4.dp.toPx()
+        val markerCenterY = baseline - 3.5.dp.toPx()
+        drawCircle(
+            color = yearGradientColor(value.year, minYear, maxYear),
+            radius = 3.5.dp.toPx(),
+            center = Offset(markerCenterX, markerCenterY),
+        )
+        rowPaint.textAlign = Paint.Align.LEFT
+        drawContext.canvas.nativeCanvas.drawText(
+            value.year.toString(),
+            panelLeft + horizontalPadding + markerWidth,
+            baseline,
+            rowPaint,
+        )
+        rowPaint.textAlign = Paint.Align.RIGHT
+        drawContext.canvas.nativeCanvas.drawText(
+            valueLabels[index],
+            panelLeft + panelWidth - horizontalPadding,
+            baseline,
+            rowPaint,
+        )
+    }
+}
+
+private val TAU_TOOLTIP_DATE_FORMATTER: DateTimeFormatter = DateTimeFormatter.ofPattern("MMM d")
+
+internal fun formatTauDayOfYear(dayOfYear: Int): String =
+    LocalDate.ofYearDay(2000, dayOfYear.coerceIn(1, 366)).format(TAU_TOOLTIP_DATE_FORMATTER)
 
 private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawAxes(
     yMin: Double,
@@ -155,40 +357,6 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawAxes(
     drawContext.canvas.nativeCanvas.rotate(-90f, 12.dp.toPx(), (top + bottom) / 2)
     drawContext.canvas.nativeCanvas.drawText("Tau (hours)", 12.dp.toPx(), (top + bottom) / 2, paint)
     drawContext.canvas.nativeCanvas.restore()
-}
-
-private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawLegend(
-    series: List<YearlyTauSeries>,
-    minYear: Int,
-    maxYear: Int,
-    left: Float,
-    top: Float,
-    labelColor: Color,
-) {
-    val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = labelColor.toArgb()
-        textSize = 10.dp.toPx()
-        textAlign = Paint.Align.LEFT
-    }
-    var x = left
-    var y = top - 10.dp.toPx()
-    series.take(6).forEach { yearly ->
-        val label = yearly.year.toString()
-        val labelWidth = paint.measureText(label) + 26.dp.toPx()
-        if (x + labelWidth > size.width - 12.dp.toPx()) {
-            x = left
-            y += 14.dp.toPx()
-        }
-        val color = yearGradientColor(yearly.year, minYear, maxYear)
-        drawLine(
-            color = color,
-            start = Offset(x, y - 3.dp.toPx()),
-            end = Offset(x + 14.dp.toPx(), y - 3.dp.toPx()),
-            strokeWidth = 2.dp.toPx(),
-        )
-        drawContext.canvas.nativeCanvas.drawText(label, x + 18.dp.toPx(), y, paint)
-        x += labelWidth
-    }
 }
 
 private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawBottomLabel(

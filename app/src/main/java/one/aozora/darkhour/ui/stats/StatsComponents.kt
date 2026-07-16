@@ -1,12 +1,19 @@
 package one.aozora.darkhour.ui.stats
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
@@ -14,6 +21,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 
@@ -74,15 +83,113 @@ internal data class Metric(val label: String, val value: String, val detail: Str
 @Composable
 internal fun YearlyTauSection(
     series: List<YearlyTauSeries>,
+    selectedYears: Set<Int>,
+    onSelectedYearsChange: (Set<Int>) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    val yearListState = rememberLazyListState()
+    val sortedSeries = series.sortedByDescending { it.year }
+    val minYear = series.minOfOrNull { it.year } ?: 0
+    val maxYear = series.maxOfOrNull { it.year } ?: 0
+    Column(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        LazyRow(
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag("tau_year_selector")
+                .pointerInput(yearListState) {
+                    awaitEachGesture {
+                        val down = awaitFirstDown(requireUnconsumed = false)
+                        var previousPosition = down.position
+                        var horizontalDrag = false
+                        var verticalGesture = false
+                        while (true) {
+                            val event = awaitPointerEvent(PointerEventPass.Initial)
+                            val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                            val displacement = change.position - down.position
+                            if (!horizontalDrag && !verticalGesture) {
+                                when {
+                                    kotlin.math.abs(displacement.y) > viewConfiguration.touchSlop &&
+                                        kotlin.math.abs(displacement.y) > kotlin.math.abs(displacement.x) -> {
+                                        verticalGesture = true
+                                    }
+                                    kotlin.math.abs(displacement.x) > viewConfiguration.touchSlop &&
+                                        kotlin.math.abs(displacement.x) > kotlin.math.abs(displacement.y) -> {
+                                        horizontalDrag = true
+                                    }
+                                }
+                            }
+
+                            if (horizontalDrag) {
+                                yearListState.dispatchRawDelta(previousPosition.x - change.position.x)
+                                change.consume()
+                            }
+
+                            previousPosition = change.position
+                            if (!change.pressed) break
+                        }
+                    }
+                },
+            state = yearListState,
+            userScrollEnabled = false,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            items(
+                items = sortedSeries,
+                key = YearlyTauSeries::year,
+            ) { yearly ->
+                val selected = yearly.year in selectedYears
+                FilterChip(
+                    selected = selected,
+                    onClick = {
+                        onSelectedYearsChange(
+                            if (selected) selectedYears - yearly.year else selectedYears + yearly.year,
+                        )
+                    },
+                    label = {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(5.dp),
+                            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                        ) {
+                            YearColorMarker(yearGradientColor(yearly.year, minYear, maxYear))
+                            Text(yearly.year.toString())
+                        }
+                    },
+                    modifier = Modifier.testTag("tau_year_${yearly.year}"),
+                )
+            }
+        }
         TauYearChart(
-            series = series,
-            modifier = modifier
+            series = sortedSeries.filter { it.year in selectedYears },
+            colorYearRange = minYear..maxYear,
+            modifier = Modifier
+                .fillMaxWidth()
                 .height(260.dp)
                 .testTag("tau_year_chart"),
         )
+    }
+}
+
+@Composable
+internal fun StatsLoadingIndicator(modifier: Modifier = Modifier) {
+    Box(
+        modifier = modifier,
+        contentAlignment = androidx.compose.ui.Alignment.Center,
+    ) {
+        androidx.compose.material3.CircularProgressIndicator(
+            modifier = Modifier
+                .size(36.dp)
+                .testTag("stats_all_data_loading"),
+        )
+    }
+}
+
+@Composable
+private fun YearColorMarker(color: androidx.compose.ui.graphics.Color) {
+    androidx.compose.foundation.Canvas(Modifier.size(12.dp)) {
+        drawCircle(color)
     }
 }
 

@@ -78,7 +78,83 @@ class DarkHourAppTest {
         }
         composeRule.waitForIdle()
 
+        composeRule.onNodeWithTag("destination_stats").assertIsSelected()
+    }
+
+    @Test
+    fun horizontalSwipeOnPeriodogramRemainsPagerNavigation() {
+        setContent()
+        composeRule.onNodeWithTag("destination_stats").performClick()
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag("periodogram_chart").performTouchInput {
+            swipe(
+                start = Offset(width * 0.9f, centerY),
+                end = Offset(width * 0.1f, centerY),
+                durationMillis = 300,
+            )
+        }
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag("schedule_screen").assertIsDisplayed()
+    }
+
+    @Test
+    fun slowHorizontalDragOnPeriodogramRemainsValueInspection() {
+        setContent()
+        composeRule.onNodeWithTag("destination_stats").performClick()
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag("periodogram_chart").performTouchInput {
+            swipe(
+                start = Offset(width * 0.1f, centerY),
+                end = Offset(width * 0.9f, centerY),
+                durationMillis = 3_000,
+            )
+        }
+        composeRule.waitForIdle()
+
         composeRule.onNodeWithText("Circadian stats").assertIsDisplayed()
+    }
+
+    @Test
+    fun slowHorizontalDragOnYearSelectorRemainsOnStats() {
+        setContent()
+        composeRule.onNodeWithTag("destination_stats").performClick()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("stats_scope_all").performClick()
+        composeRule.onNodeWithTag("tau_year_selector").performScrollTo()
+
+        composeRule.onNodeWithTag("tau_year_selector").performTouchInput {
+            swipe(
+                start = Offset(width * 0.1f, centerY),
+                end = Offset(width * 0.9f, centerY),
+                durationMillis = 3_000,
+            )
+        }
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag("destination_stats").assertIsSelected()
+    }
+
+    @Test
+    fun fastHorizontalSwipeOnYearSelectorNavigatesPager() {
+        setContent()
+        composeRule.onNodeWithTag("destination_stats").performClick()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("stats_scope_all").performClick()
+        composeRule.onNodeWithTag("tau_year_selector").performScrollTo()
+
+        composeRule.onNodeWithTag("tau_year_selector").performTouchInput {
+            swipe(
+                start = Offset(width * 0.9f, centerY),
+                end = Offset(width * 0.1f, centerY),
+                durationMillis = 300,
+            )
+        }
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag("schedule_screen").assertIsDisplayed()
     }
 
     @Test
@@ -533,6 +609,27 @@ class DarkHourAppTest {
             assertTrue(requested)
             assertTrue(selectedRange == HealthDataRange.DEFAULT_PERIOD)
         }
+    }
+
+    @Test
+    fun statsAllDataShowsLoadingBeforeRefreshStateArrives() {
+        composeRule.setContent {
+            DarkHourTheme {
+                DarkHourApp(
+                    records = DemoData.records.take(8),
+                    statsAllRecords = null,
+                    healthDataRange = HealthDataRange.custom(90),
+                    hasHistoryPermission = true,
+                )
+            }
+        }
+
+        composeRule.onNodeWithTag("destination_stats").performClick()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("stats_scope_all").performClick()
+
+        composeRule.onNodeWithTag("stats_all_data_loading").assertIsDisplayed()
+        composeRule.onAllNodesWithTag("periodogram_chart").assertCountEquals(0)
     }
 
     @Test
