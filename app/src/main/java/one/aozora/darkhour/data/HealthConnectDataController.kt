@@ -15,6 +15,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import one.aozora.darkhour.core.model.SleepRecord
@@ -101,26 +102,32 @@ class HealthConnectDataController(
     }
 
     fun reportSleepWritePermissionDenied() {
-        mutableState.value = state.value.copy(
-            fileOperation = HealthConnectFileOperation.IDLE,
-            fileOperationErrorMessage = "Sleep write permission was not granted",
-        )
+        mutableState.update {
+            it.copy(
+                fileOperation = HealthConnectFileOperation.IDLE,
+                fileOperationErrorMessage = "Sleep write permission was not granted",
+            )
+        }
     }
 
     fun reportSleepExportPermissionDenied() {
-        mutableState.value = state.value.copy(
-            fileOperation = HealthConnectFileOperation.IDLE,
-            fileOperationErrorMessage = "Health Connect history permission was not granted",
-        )
+        mutableState.update {
+            it.copy(
+                fileOperation = HealthConnectFileOperation.IDLE,
+                fileOperationErrorMessage = "Health Connect history permission was not granted",
+            )
+        }
     }
 
     fun reportSetupRequired() {
         setupRequired = true
-        mutableState.value = state.value.copy(
-            access = HealthConnectAccess.SETUP_REQUIRED,
-            isRefreshing = false,
-            errorMessage = null,
-        )
+        mutableState.update {
+            it.copy(
+                access = HealthConnectAccess.SETUP_REQUIRED,
+                isRefreshing = false,
+                errorMessage = null,
+            )
+        }
     }
 
     fun clearSetupRequired() {
@@ -141,13 +148,15 @@ class HealthConnectDataController(
                         verifyExistingHealthConnectRecords = !legacyDirectFileImport,
                     )
                 }
-                mutableState.value = state.value.copy(
-                    statsAllRecords = null,
-                    fileOperation = HealthConnectFileOperation.IDLE,
-                    fileImportResult = result,
-                    fileOperationMessage = result.summaryText(),
-                    fileOperationErrorMessage = result.errorMessage,
-                )
+                mutableState.update {
+                    it.copy(
+                        statsAllRecords = null,
+                        fileOperation = HealthConnectFileOperation.IDLE,
+                        fileImportResult = result,
+                        fileOperationMessage = result.summaryText(),
+                        fileOperationErrorMessage = result.errorMessage,
+                    )
+                }
                 if (result.committedRecordCount > 0) refresh()
             } catch (cancelled: CancellationException) {
                 throw cancelled
@@ -158,21 +167,8 @@ class HealthConnectDataController(
     }
 
     fun prepareSleepExport(range: SleepExportRange) {
-        if (!isProviderAvailable ||
-            state.value.fileOperation == HealthConnectFileOperation.EXPORTING ||
-            state.value.fileOperation == HealthConnectFileOperation.IMPORTING ||
-            state.value.fileOperation == HealthConnectFileOperation.DELETING
-        ) {
-            return
-        }
+        if (!isProviderAvailable || !beginPreparingExport()) return
         fileOperationJob?.cancel()
-        mutableState.value = state.value.copy(
-            fileOperation = HealthConnectFileOperation.PREPARING_EXPORT,
-            exportPreparation = null,
-            exportResult = null,
-            fileOperationMessage = null,
-            fileOperationErrorMessage = null,
-        )
         fileOperationJob = scope.launch {
             try {
                 val preparation = withContext(Dispatchers.IO) {
@@ -181,10 +177,12 @@ class HealthConnectDataController(
                         packageDisplayName = ::packageDisplayName,
                     )
                 }
-                mutableState.value = state.value.copy(
-                    fileOperation = HealthConnectFileOperation.IDLE,
-                    exportPreparation = preparation,
-                )
+                mutableState.update {
+                    it.copy(
+                        fileOperation = HealthConnectFileOperation.IDLE,
+                        exportPreparation = preparation,
+                    )
+                }
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (failure: Exception) {
@@ -197,10 +195,12 @@ class HealthConnectDataController(
         if (state.value.fileOperation == HealthConnectFileOperation.PREPARING_EXPORT) {
             fileOperationJob?.cancel()
         }
-        mutableState.value = state.value.copy(
-            fileOperation = HealthConnectFileOperation.IDLE,
-            exportPreparation = null,
-        )
+        mutableState.update {
+            it.copy(
+                fileOperation = HealthConnectFileOperation.IDLE,
+                exportPreparation = null,
+            )
+        }
     }
 
     fun exportSleepRecords(uri: Uri, packageNames: Set<String>) {
@@ -223,13 +223,15 @@ class HealthConnectDataController(
                         clock = clock,
                     )
                 }
-                mutableState.value = state.value.copy(
-                    fileOperation = HealthConnectFileOperation.IDLE,
-                    exportPreparation = null,
-                    exportResult = result,
-                    fileOperationMessage = result.summaryText(),
-                    fileOperationErrorMessage = null,
-                )
+                mutableState.update {
+                    it.copy(
+                        fileOperation = HealthConnectFileOperation.IDLE,
+                        exportPreparation = null,
+                        exportResult = result,
+                        fileOperationMessage = result.summaryText(),
+                        fileOperationErrorMessage = null,
+                    )
+                }
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (failure: Exception) {
@@ -249,15 +251,17 @@ class HealthConnectDataController(
                         TimeRangeFilter.before(MAX_HEALTH_CONNECT_EPOCH_MILLI_INSTANT),
                     )
                 }
-                mutableState.value = state.value.copy(
-                    statsAllRecords = null,
-                    fileImportedRecordCount = 0,
-                    totalHistoryDays = null,
-                    fileOperation = HealthConnectFileOperation.IDLE,
-                    fileImportResult = null,
-                    fileOperationMessage = "Deleted imported records",
-                    fileOperationErrorMessage = null,
-                )
+                mutableState.update {
+                    it.copy(
+                        statsAllRecords = null,
+                        fileImportedRecordCount = 0,
+                        totalHistoryDays = null,
+                        fileOperation = HealthConnectFileOperation.IDLE,
+                        fileImportResult = null,
+                        fileOperationMessage = "Deleted imported records",
+                        fileOperationErrorMessage = null,
+                    )
+                }
                 refresh()
             } catch (cancelled: CancellationException) {
                 throw cancelled
@@ -276,27 +280,40 @@ class HealthConnectDataController(
             HealthConnectFileOperation.DELETING -> isSleepFileWriteSupported
             else -> true
         }
-        if (!isProviderAvailable ||
-            (requiresWriteSupport && !operationWriteSupported) ||
-            state.value.fileOperation != HealthConnectFileOperation.IDLE
-        ) {
+        if (!isProviderAvailable || (requiresWriteSupport && !operationWriteSupported)) {
             return false
         }
-        mutableState.value = state.value.copy(
-            fileOperation = operation,
-            fileImportResult = null,
-            exportResult = null,
-            fileOperationMessage = null,
-            fileOperationErrorMessage = null,
-        )
-        return true
+        while (true) {
+            val current = mutableState.value
+            if (current.fileOperation != HealthConnectFileOperation.IDLE) return false
+            if (mutableState.compareAndSet(current, current.withFileOperationStarted(operation))) {
+                return true
+            }
+        }
+    }
+
+    private fun beginPreparingExport(): Boolean {
+        while (true) {
+            val current = mutableState.value
+            if (current.fileOperation != HealthConnectFileOperation.IDLE &&
+                current.fileOperation != HealthConnectFileOperation.PREPARING_EXPORT
+            ) {
+                return false
+            }
+            val preparing = current.withFileOperationStarted(
+                HealthConnectFileOperation.PREPARING_EXPORT,
+            )
+            if (mutableState.compareAndSet(current, preparing)) return true
+        }
     }
 
     private fun finishFileOperationWithError(failure: Exception, fallback: String) {
-        mutableState.value = state.value.copy(
-            fileOperation = HealthConnectFileOperation.IDLE,
-            fileOperationErrorMessage = failure.message ?: fallback,
-        )
+        mutableState.update {
+            it.copy(
+                fileOperation = HealthConnectFileOperation.IDLE,
+                fileOperationErrorMessage = failure.message ?: fallback,
+            )
+        }
     }
 
     private fun packageDisplayName(packageName: String): String =
@@ -307,7 +324,7 @@ class HealthConnectDataController(
 
     fun setDataRange(range: HealthDataRange) {
         if (range == state.value.dataRange) return
-        mutableState.value = state.value.copy(dataRange = range, errorMessage = null)
+        mutableState.update { it.copy(dataRange = range, errorMessage = null) }
         refresh()
     }
 
@@ -319,47 +336,27 @@ class HealthConnectDataController(
                 when (val sdkStatus = HealthConnectClient.getSdkStatus(applicationContext)) {
                     HealthConnectClient.SDK_UNAVAILABLE -> {
                         setupRequired = false
-                        mutableState.value = state.value.copy(
-                            records = emptyList(),
-                            recordMetadata = emptyMap(),
-                            analysisRecords = emptyList(),
-                            access = HealthConnectAccess.UNAVAILABLE,
-                            totalHistoryDays = null,
-                            hasHistoryPermission = false,
-                            isRefreshing = false,
-                            importedRecordCount = 0,
-                            fileImportedRecordCount = 0,
-                            expectedRecordCount = null,
-                            isImportPartial = false,
-                            importPhase = HealthImportPhase.IDLE,
-                            errorMessage = null,
-                        )
+                        mutableState.update {
+                            it.withProviderUnavailable(HealthConnectAccess.UNAVAILABLE)
+                        }
                     }
                     HealthConnectClient.SDK_UNAVAILABLE_PROVIDER_UPDATE_REQUIRED -> {
                         setupRequired = false
-                        mutableState.value = state.value.copy(
-                            records = emptyList(),
-                            recordMetadata = emptyMap(),
-                            analysisRecords = emptyList(),
-                            access = healthConnectAccess(applicationContext, sdkStatus),
-                            totalHistoryDays = null,
-                            hasHistoryPermission = false,
-                            isRefreshing = false,
-                            importedRecordCount = 0,
-                            fileImportedRecordCount = 0,
-                            expectedRecordCount = null,
-                            isImportPartial = false,
-                            importPhase = HealthImportPhase.IDLE,
-                            errorMessage = null,
-                        )
+                        mutableState.update {
+                            it.withProviderUnavailable(
+                                healthConnectAccess(applicationContext, sdkStatus),
+                            )
+                        }
                     }
                     HealthConnectClient.SDK_AVAILABLE -> {
                         if (setupRequired) {
-                            mutableState.value = state.value.copy(
-                                access = HealthConnectAccess.SETUP_REQUIRED,
-                                isRefreshing = false,
-                                errorMessage = null,
-                            )
+                            mutableState.update {
+                                it.copy(
+                                    access = HealthConnectAccess.SETUP_REQUIRED,
+                                    isRefreshing = false,
+                                    errorMessage = null,
+                                )
+                            }
                         } else {
                             refreshAvailableClient(range)
                         }
@@ -368,10 +365,12 @@ class HealthConnectDataController(
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (failure: Exception) {
-                mutableState.value = state.value.copy(
-                    isRefreshing = false,
-                    errorMessage = failure.message ?: "Health Connect refresh failed",
-                )
+                mutableState.update {
+                    it.copy(
+                        isRefreshing = false,
+                        errorMessage = failure.message ?: "Health Connect refresh failed",
+                    )
+                }
             }
         }
     }
@@ -383,21 +382,16 @@ class HealthConnectDataController(
                 when (HealthConnectClient.getSdkStatus(applicationContext)) {
                     HealthConnectClient.SDK_UNAVAILABLE,
                     HealthConnectClient.SDK_UNAVAILABLE_PROVIDER_UPDATE_REQUIRED -> {
-                        mutableState.value = state.value.copy(
-                            statsAllRecords = null,
-                            isStatsAllDataRefreshing = false,
-                            statsAllDataErrorMessage = null,
-                        )
+                        mutableState.update(HealthConnectUiState::withStatsUnavailable)
                     }
                     HealthConnectClient.SDK_AVAILABLE -> refreshStatsAllDataAvailableClient()
                 }
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (failure: Exception) {
-                mutableState.value = state.value.copy(
-                    isStatsAllDataRefreshing = false,
-                    statsAllDataErrorMessage = failure.message ?: "Stats import failed",
-                )
+                mutableState.update {
+                    it.withStatsRefreshFailure(failure.message ?: "Stats import failed")
+                }
             }
         }
     }
@@ -408,34 +402,11 @@ class HealthConnectDataController(
         val hasHistoryPermission =
             HealthPermission.PERMISSION_READ_HEALTH_DATA_HISTORY in granted
         if (!granted.containsAll(requiredPermissions(range))) {
-            mutableState.value = state.value.copy(
-                records = emptyList(),
-                recordMetadata = emptyMap(),
-                analysisRecords = emptyList(),
-                access = HealthConnectAccess.PERMISSION_REQUIRED,
-                totalHistoryDays = if (hasHistoryPermission) state.value.totalHistoryDays else null,
-                hasHistoryPermission = hasHistoryPermission,
-                isRefreshing = false,
-                importedRecordCount = 0,
-                fileImportedRecordCount = 0,
-                expectedRecordCount = null,
-                isImportPartial = false,
-                importPhase = HealthImportPhase.IDLE,
-                errorMessage = null,
-            )
+            mutableState.update { it.withReadPermissionRequired(hasHistoryPermission) }
             return
         }
 
-        mutableState.value = state.value.copy(
-            access = HealthConnectAccess.CONNECTED,
-            hasHistoryPermission = hasHistoryPermission,
-            isRefreshing = true,
-            importedRecordCount = 0,
-            expectedRecordCount = null,
-            isImportPartial = false,
-            importPhase = HealthImportPhase.RECENT,
-            errorMessage = null,
-        )
+        mutableState.update { it.withRefreshStarted(hasHistoryPermission) }
         try {
             val imported = withContext(Dispatchers.IO) {
                 client.readSleepRecords(
@@ -448,35 +419,29 @@ class HealthConnectDataController(
                     onProgress = ::publishImportProgress,
                 )
             }
-            mutableState.value = state.value.copy(
-                records = imported.records.map(ImportedSleepRecord::record).sortedBy(SleepRecord::startTime),
-                recordMetadata = imported.records.displayMetadataByLogId(::packageDisplayName),
-                analysisRecords = imported.analysisRecords
-                    .map(ImportedSleepRecord::record)
-                    .sortedBy(SleepRecord::startTime),
-                totalHistoryDays = if (hasHistoryPermission) {
-                    imported.totalHistoryDays ?: state.value.totalHistoryDays
-                } else {
-                    null
-                },
-                access = HealthConnectAccess.CONNECTED,
-                isRefreshing = false,
-                importedRecordCount = imported.records.size,
-                fileImportedRecordCount = imported.fileImportedRecordCount,
-                expectedRecordCount = imported.records.size,
-                isImportPartial = false,
-                importPhase = HealthImportPhase.IDLE,
-                errorMessage = null,
-            )
+            val records = imported.records
+                .map(ImportedSleepRecord::record)
+                .sortedBy(SleepRecord::startTime)
+            val analysisRecords = imported.analysisRecords
+                .map(ImportedSleepRecord::record)
+                .sortedBy(SleepRecord::startTime)
+            val recordMetadata = imported.records.displayMetadataByLogId(::packageDisplayName)
+            mutableState.update {
+                it.withRefreshCompleted(
+                    records = records,
+                    recordMetadata = recordMetadata,
+                    analysisRecords = analysisRecords,
+                    importedTotalHistoryDays = imported.totalHistoryDays,
+                    hasHistoryPermission = hasHistoryPermission,
+                    fileImportedRecordCount = imported.fileImportedRecordCount,
+                )
+            }
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (failure: Exception) {
-            mutableState.value = state.value.copy(
-                isRefreshing = false,
-                isImportPartial = false,
-                importPhase = HealthImportPhase.IDLE,
-                errorMessage = failure.message ?: "Health Connect import failed",
-            )
+            mutableState.update {
+                it.withRefreshFailure(failure.message ?: "Health Connect import failed")
+            }
         }
     }
 
@@ -484,20 +449,15 @@ class HealthConnectDataController(
         val client = HealthConnectClient.getOrCreate(applicationContext)
         val granted = client.permissionController.getGrantedPermissions()
         if (!granted.containsAll(requiredPermissions(HealthDataRange.ENTIRE_HISTORY))) {
-            mutableState.value = state.value.copy(
-                statsAllRecords = null,
-                hasHistoryPermission = HealthPermission.PERMISSION_READ_HEALTH_DATA_HISTORY in granted,
-                isStatsAllDataRefreshing = false,
-                statsAllDataErrorMessage = null,
-            )
+            mutableState.update {
+                it.withStatsPermissionRequired(
+                    HealthPermission.PERMISSION_READ_HEALTH_DATA_HISTORY in granted,
+                )
+            }
             return
         }
 
-        mutableState.value = state.value.copy(
-            hasHistoryPermission = true,
-            isStatsAllDataRefreshing = true,
-            statsAllDataErrorMessage = null,
-        )
+        mutableState.update(HealthConnectUiState::withStatsRefreshStarted)
         try {
             val imported = withContext(Dispatchers.IO) {
                 client.readSleepRecords(
@@ -509,22 +469,18 @@ class HealthConnectDataController(
                     readTotalHistoryDays = true,
                 )
             }
-            mutableState.value = state.value.copy(
-                statsAllRecords = imported.analysisRecords
-                    .map(ImportedSleepRecord::record)
-                    .sortedBy(SleepRecord::startTime),
-                totalHistoryDays = imported.totalHistoryDays ?: state.value.totalHistoryDays,
-                hasHistoryPermission = true,
-                isStatsAllDataRefreshing = false,
-                statsAllDataErrorMessage = null,
-            )
+            val records = imported.analysisRecords
+                .map(ImportedSleepRecord::record)
+                .sortedBy(SleepRecord::startTime)
+            mutableState.update {
+                it.withStatsRefreshCompleted(records, imported.totalHistoryDays)
+            }
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (failure: Exception) {
-            mutableState.value = state.value.copy(
-                isStatsAllDataRefreshing = false,
-                statsAllDataErrorMessage = failure.message ?: "Stats import failed",
-            )
+            mutableState.update {
+                it.withStatsRefreshFailure(failure.message ?: "Stats import failed")
+            }
         }
     }
 
@@ -537,15 +493,17 @@ class HealthConnectDataController(
             ?.sortedBy(SleepRecord::startTime)
         val progressRecordMetadata = progress.records
             ?.displayMetadataByLogId(::packageDisplayName)
-        mutableState.value = state.value.copy(
-            records = progressRecords ?: state.value.records,
-            recordMetadata = progressRecordMetadata ?: state.value.recordMetadata,
-            analysisRecords = progressAnalysisRecords ?: state.value.analysisRecords,
-            importedRecordCount = progress.importedRecordCount,
-            expectedRecordCount = progress.expectedRecordCount,
-            isImportPartial = progress.isImportPartial,
-            importPhase = progress.phase,
-        )
+        mutableState.update {
+            it.withImportProgress(
+                records = progressRecords,
+                recordMetadata = progressRecordMetadata,
+                analysisRecords = progressAnalysisRecords,
+                importedRecordCount = progress.importedRecordCount,
+                expectedRecordCount = progress.expectedRecordCount,
+                isImportPartial = progress.isImportPartial,
+                phase = progress.phase,
+            )
+        }
     }
 
     companion object {
