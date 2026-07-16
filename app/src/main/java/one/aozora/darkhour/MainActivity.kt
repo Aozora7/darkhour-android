@@ -125,6 +125,11 @@ class MainActivity : ComponentActivity() {
             val initialDisplayOptions = remember { startupDisplayOptions }
             val initialScheduleEntries = remember { appSettings.readScheduleEntries() }
             val records = if (BuildConfig.USE_DEMO_DATA) DemoData.records else healthState.records
+            val recordMetadata = if (BuildConfig.USE_DEMO_DATA) {
+                emptyMap()
+            } else {
+                healthState.recordMetadata
+            }
             val analysisRecords = if (BuildConfig.USE_DEMO_DATA) {
                 DemoData.records
             } else {
@@ -138,6 +143,7 @@ class MainActivity : ComponentActivity() {
             DarkHourTheme {
                 DarkHourApp(
                     records = records,
+                    recordMetadata = recordMetadata,
                     analysisRecords = analysisRecords,
                     initialSettings = initialSettings,
                     onAppSettingsChange = appSettings::write,

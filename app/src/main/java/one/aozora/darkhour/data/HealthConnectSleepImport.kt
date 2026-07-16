@@ -29,6 +29,8 @@ data class ImportedSleepRecord(
     val specificStageSeconds: Long = -1,
     val usableStageSeconds: Long = -1,
     val sourceClientRecordId: String? = null,
+    val title: String? = null,
+    val notes: String? = null,
 )
 
 internal fun SleepSessionRecord.toImportedSleepRecord(
@@ -95,6 +97,8 @@ internal fun SleepSessionRecord.toImportedSleepRecord(
         specificStageSeconds = specificStageSeconds,
         usableStageSeconds = mappedStages.sumOf { it.seconds.toLong().coerceAtLeast(0) },
         sourceClientRecordId = metadata.clientRecordId,
+        title = title,
+        notes = notes,
     )
 }
 

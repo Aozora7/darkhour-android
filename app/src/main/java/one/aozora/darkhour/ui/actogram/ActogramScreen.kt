@@ -44,7 +44,8 @@ fun ActogramScreen(
     onTransformingChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val (layout, options, onOptionsChange) = LocalActogramDisplay.current
+    val actogramDisplay = LocalActogramDisplay.current
+    val (layout, options, onOptionsChange) = actogramDisplay
     val (settings, onSettingsChange) = LocalAppSettings.current
     val schedule = LocalScheduleState.current
     val healthConnect = LocalHealthConnectState.current
@@ -135,6 +136,9 @@ fun ActogramScreen(
             selection?.let {
                 ActogramDetailsPanel(
                     selection = it,
+                    sleepMetadata = (it as? ActogramSelection.Sleep)?.let { sleep ->
+                        actogramDisplay.recordMetadata[sleep.logId]
+                    },
                     useIsoDateTime = useIsoDateTime,
                     onEditScheduleEntry = { entryId ->
                         selection = null

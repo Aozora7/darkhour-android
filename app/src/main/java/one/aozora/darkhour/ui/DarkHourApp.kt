@@ -25,6 +25,7 @@ import one.aozora.darkhour.data.SleepFileImportResult
 import one.aozora.darkhour.data.SleepExportPreparation
 import one.aozora.darkhour.data.SleepExportRange
 import one.aozora.darkhour.data.SleepExportResult
+import one.aozora.darkhour.data.SleepRecordDisplayMetadata
 import one.aozora.darkhour.core.model.SleepRecord
 import one.aozora.darkhour.ui.actogram.ActogramDisplayOptions
 import one.aozora.darkhour.ui.schedule.ScheduleEntry
@@ -34,6 +35,7 @@ import one.aozora.darkhour.ui.settings.AppSettings
 @Composable
 fun DarkHourApp(
     records: List<SleepRecord>,
+    recordMetadata: Map<Long, SleepRecordDisplayMetadata> = emptyMap(),
     modifier: Modifier = Modifier,
     initialSettings: AppSettings = AppSettings(),
     onAppSettingsChange: (AppSettings) -> Unit = {},
@@ -79,6 +81,7 @@ fun DarkHourApp(
     var actogramTransforming by remember { mutableStateOf(false) }
     val appState = rememberDarkHourAppState(
         records = records,
+        recordMetadata = recordMetadata,
         analysisRecords = analysisRecords,
         initialSettings = initialSettings,
         onAppSettingsChange = onAppSettingsChange,

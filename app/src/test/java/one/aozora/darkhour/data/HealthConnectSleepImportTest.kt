@@ -140,6 +140,8 @@ class HealthConnectSleepImportTest {
             endTime = start.plusSeconds(8 * 60 * 60),
             endZoneOffset = ZoneOffset.ofHours(2),
             metadata = Metadata.manualEntry(),
+            title = "Night sleep",
+            notes = "Felt rested",
             stages = listOf(
                 stage(start, 60, SleepSessionRecord.STAGE_TYPE_AWAKE),
                 stage(start.plusSeconds(60 * 60), 120, SleepSessionRecord.STAGE_TYPE_DEEP),
@@ -162,6 +164,31 @@ class HealthConnectSleepImportTest {
         assertEquals(LocalDate.parse("2026-06-10"), sleep.dateOfSleep)
         assertEquals(ZoneOffset.ofHours(2), sleep.startZoneOffset)
         assertTrue(sleep.sleepScore != null)
+        assertEquals("Night sleep", imported.title)
+        assertEquals("Felt rested", imported.notes)
+    }
+
+    @Test
+    fun buildsNormalizedDisplayMetadataWithResolvedSourceName() {
+        val start = Instant.parse("2026-06-10T21:00:00Z")
+        val imported = sleepRecord(start).toImportedSleepRecord(ZoneId.of("UTC")).copy(
+            sourcePackageName = "com.example.sleep",
+            sourceDevice = "  Example Watch  ",
+            sourceRecordingMethod = Metadata.RECORDING_METHOD_AUTOMATICALLY_RECORDED,
+            title = "  Night sleep  ",
+            notes = "  Felt rested  ",
+        )
+
+        val metadata = listOf(imported).displayMetadataByLogId { packageName ->
+            assertEquals("com.example.sleep", packageName)
+            "Example Sleep"
+        }.getValue(imported.record.logId)
+
+        assertEquals("Night sleep", metadata.title)
+        assertEquals("Felt rested", metadata.notes)
+        assertEquals("Example Sleep", metadata.sourceName)
+        assertEquals("Example Watch", metadata.sourceDevice)
+        assertEquals(SleepRecordingMethod.AUTOMATIC, metadata.recordingMethod)
     }
 
     @Test

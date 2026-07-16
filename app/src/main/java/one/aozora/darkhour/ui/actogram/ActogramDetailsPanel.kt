@@ -3,6 +3,7 @@ package one.aozora.darkhour.ui.actogram
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,6 +17,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.EventNote
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.ExpandLess
+import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.Hotel
 import androidx.compose.material.icons.outlined.Nightlight
 import androidx.compose.material3.Button
@@ -26,13 +29,21 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import one.aozora.darkhour.data.SleepRecordDisplayMetadata
+import one.aozora.darkhour.data.SleepRecordingMethod
 import one.aozora.darkhour.ui.schedule.ScheduleEntry
 import one.aozora.darkhour.ui.theme.CircadianForecast
 import one.aozora.darkhour.ui.theme.CircadianObserved
@@ -49,6 +60,7 @@ import java.util.Locale
 @Composable
 internal fun ActogramDetailsPanel(
     selection: ActogramSelection,
+    sleepMetadata: SleepRecordDisplayMetadata? = null,
     useIsoDateTime: Boolean,
     onEditScheduleEntry: (Long) -> Unit,
     onDismiss: () -> Unit,
@@ -105,7 +117,7 @@ internal fun ActogramDetailsPanel(
                 ) {
                     Text(
                         text = when (selection) {
-                            is ActogramSelection.Sleep -> "Sleep Record"
+                            is ActogramSelection.Sleep -> sleepMetadata?.title ?: "Sleep Record"
                             is ActogramSelection.Circadian -> "Circadian Window"
                             is ActogramSelection.Schedule -> selection.entry.label.ifBlank { "Schedule Entry" }
                         },
@@ -114,12 +126,14 @@ internal fun ActogramDetailsPanel(
                     )
                     Text(
                         text = when (selection) {
-                            is ActogramSelection.Sleep -> "Health Connect"
+                            is ActogramSelection.Sleep -> sleepMetadata.sourceSummary()
                             is ActogramSelection.Circadian -> if (selection.isForecast) "Forecast" else "Observed"
                             is ActogramSelection.Schedule -> if (selection.entry.isWeekly) "Weekly" else "Dated"
                         },
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                     )
                 }
                 IconButton(
@@ -141,7 +155,7 @@ internal fun ActogramDetailsPanel(
 
             when (selection) {
                 is ActogramSelection.Sleep ->
-                    SleepDetails(selection, use24HourTime, useIsoDateTime)
+                    SleepDetails(selection, sleepMetadata, use24HourTime, useIsoDateTime)
                 is ActogramSelection.Circadian ->
                     CircadianDetails(selection, use24HourTime, useIsoDateTime)
                 is ActogramSelection.Schedule ->
@@ -154,6 +168,7 @@ internal fun ActogramDetailsPanel(
 @Composable
 private fun SleepDetails(
     selection: ActogramSelection.Sleep,
+    metadata: SleepRecordDisplayMetadata?,
     use24HourTime: Boolean,
     useIsoDateTime: Boolean,
 ) {
@@ -174,6 +189,12 @@ private fun SleepDetails(
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            metadata?.notes?.let { notes ->
+                CompactSleepNote(
+                    notes = notes,
+                    selectionId = selection.logId,
+                )
+            }
         }
         Column(Modifier.weight(1f)) {
             DetailLabel("Time")
@@ -228,6 +249,50 @@ private fun SleepDetails(
                 StageTile("REM", stages.rem, ActogramRemColor, Modifier.weight(1f))
                 StageTile("Wake", stages.wake, ActogramWakeColor, Modifier.weight(1f))
             }
+        }
+    }
+}
+
+@Composable
+private fun CompactSleepNote(
+    notes: String,
+    selectionId: Long,
+) {
+    var expanded by remember(selectionId, notes) { mutableStateOf(false) }
+    var hasOverflow by remember(selectionId, notes) { mutableStateOf(false) }
+    val canToggle = hasOverflow || expanded
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(
+                if (canToggle) {
+                    Modifier
+                        .clickable(role = Role.Button) { expanded = !expanded }
+                        .testTag("sleep_notes_toggle")
+                } else {
+                    Modifier.testTag("sleep_notes")
+                },
+            ),
+        verticalAlignment = Alignment.Top,
+    ) {
+        Text(
+            text = "Notes: $notes",
+            modifier = Modifier.weight(1f),
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = if (expanded) Int.MAX_VALUE else 1,
+            overflow = TextOverflow.Ellipsis,
+            onTextLayout = { result ->
+                if (!expanded) hasOverflow = result.hasVisualOverflow
+            },
+        )
+        if (canToggle) {
+            Icon(
+                imageVector = if (expanded) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
+                contentDescription = if (expanded) "Collapse notes" else "Expand notes",
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(18.dp),
+            )
         }
     }
 }
@@ -368,6 +433,22 @@ private fun ScheduleEntry.recurrenceSummary(useIsoDateTime: Boolean): String {
     val ordered = DayOfWeek.entries.filter { it in daysOfWeek }
     if (ordered.size == 7) return "Every day"
     return ordered.joinToString(", ") { it.getDisplayName(TextStyle.SHORT, Locale.getDefault()) }
+}
+
+private fun SleepRecordDisplayMetadata?.sourceSummary(): String {
+    if (this == null) return "Health Connect"
+    return listOfNotNull(
+        sourceName,
+        sourceDevice,
+        recordingMethod.displayLabel(),
+    ).distinct().joinToString(" · ").ifBlank { "Health Connect" }
+}
+
+private fun SleepRecordingMethod.displayLabel(): String? = when (this) {
+    SleepRecordingMethod.AUTOMATIC -> "Automatic"
+    SleepRecordingMethod.ACTIVE -> "Active"
+    SleepRecordingMethod.MANUAL -> "Manual"
+    SleepRecordingMethod.UNKNOWN -> null
 }
 
 private val ActogramDeepColor = SleepDeep

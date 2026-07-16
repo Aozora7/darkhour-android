@@ -22,6 +22,7 @@ import one.aozora.darkhour.data.SleepFileImportResult
 import one.aozora.darkhour.data.SleepExportPreparation
 import one.aozora.darkhour.data.SleepExportRange
 import one.aozora.darkhour.data.SleepExportResult
+import one.aozora.darkhour.data.SleepRecordDisplayMetadata
 import one.aozora.darkhour.ui.actogram.ActogramDisplayOptions
 import one.aozora.darkhour.ui.actogram.ActogramLayout
 import one.aozora.darkhour.ui.actogram.ActogramLayoutEngine
@@ -43,6 +44,7 @@ data class DarkHourAppState(
 @Composable
 fun rememberDarkHourAppState(
     records: List<SleepRecord>,
+    recordMetadata: Map<Long, SleepRecordDisplayMetadata>,
     analysisRecords: List<SleepRecord>,
     initialSettings: AppSettings,
     onAppSettingsChange: (AppSettings) -> Unit,
@@ -272,6 +274,7 @@ fun rememberDarkHourAppState(
             layout = layout,
             options = options,
             onOptionsChange = ::updateDisplayOptions,
+            recordMetadata = recordMetadata,
         ),
         developerCircadian = developerCircadian,
         schedule = ScheduleState(

@@ -317,6 +317,7 @@ class HealthConnectDataController(
                         setupRequired = false
                         mutableState.value = state.value.copy(
                             records = emptyList(),
+                            recordMetadata = emptyMap(),
                             analysisRecords = emptyList(),
                             access = HealthConnectAccess.UNAVAILABLE,
                             totalHistoryDays = null,
@@ -334,6 +335,7 @@ class HealthConnectDataController(
                         setupRequired = false
                         mutableState.value = state.value.copy(
                             records = emptyList(),
+                            recordMetadata = emptyMap(),
                             analysisRecords = emptyList(),
                             access = healthConnectAccess(applicationContext, sdkStatus),
                             totalHistoryDays = null,
@@ -404,6 +406,7 @@ class HealthConnectDataController(
         if (!granted.containsAll(requiredPermissions(range))) {
             mutableState.value = state.value.copy(
                 records = emptyList(),
+                recordMetadata = emptyMap(),
                 analysisRecords = emptyList(),
                 access = HealthConnectAccess.PERMISSION_REQUIRED,
                 totalHistoryDays = if (hasHistoryPermission) state.value.totalHistoryDays else null,
@@ -443,6 +446,7 @@ class HealthConnectDataController(
             }
             mutableState.value = state.value.copy(
                 records = imported.records.map(ImportedSleepRecord::record).sortedBy(SleepRecord::startTime),
+                recordMetadata = imported.records.displayMetadataByLogId(::packageDisplayName),
                 analysisRecords = imported.analysisRecords
                     .map(ImportedSleepRecord::record)
                     .sortedBy(SleepRecord::startTime),
@@ -527,8 +531,11 @@ class HealthConnectDataController(
         val progressAnalysisRecords = progress.analysisRecords
             ?.map(ImportedSleepRecord::record)
             ?.sortedBy(SleepRecord::startTime)
+        val progressRecordMetadata = progress.records
+            ?.displayMetadataByLogId(::packageDisplayName)
         mutableState.value = state.value.copy(
             records = progressRecords ?: state.value.records,
+            recordMetadata = progressRecordMetadata ?: state.value.recordMetadata,
             analysisRecords = progressAnalysisRecords ?: state.value.analysisRecords,
             importedRecordCount = progress.importedRecordCount,
             expectedRecordCount = progress.expectedRecordCount,
