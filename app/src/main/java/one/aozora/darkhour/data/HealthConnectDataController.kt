@@ -32,6 +32,9 @@ class HealthConnectDataController(
     allowLegacyFileImport: Boolean = false,
 ) {
     private val applicationContext = context.applicationContext
+    private val healthConnectAppNames by lazy {
+        healthConnectAppDisplayNames(applicationContext)
+    }
     private val zoneId = ZoneId.systemDefault()
     private val legacyDirectFileImport = isLegacyDirectFileImportSupported(
         allowLegacyFileImport = allowLegacyFileImport,
@@ -296,10 +299,11 @@ class HealthConnectDataController(
         )
     }
 
-    private fun packageDisplayName(packageName: String): String = runCatching {
-        val info = applicationContext.packageManager.getApplicationInfo(packageName, 0)
-        applicationContext.packageManager.getApplicationLabel(info).toString()
-    }.getOrDefault(packageName)
+    private fun packageDisplayName(packageName: String): String =
+        healthConnectAppNames[packageName] ?: runCatching {
+            val info = applicationContext.packageManager.getApplicationInfo(packageName, 0)
+            applicationContext.packageManager.getApplicationLabel(info).toString()
+        }.getOrDefault(packageName)
 
     fun setDataRange(range: HealthDataRange) {
         if (range == state.value.dataRange) return
