@@ -80,6 +80,7 @@ sealed interface ActogramSelection {
 data class ActogramRow(
     val date: LocalDate,
     val startTime: Instant,
+    val zoneOffset: ZoneOffset,
     val sleeps: List<ActogramSleepBlock>,
     val overlays: List<ActogramOverlayBlock>,
     val schedules: List<ActogramScheduleBlock>,
@@ -125,7 +126,7 @@ object ActogramLayoutEngine {
                 schedules = scheduleEntries.toScheduleBlocks(
                     rowStart = row.startTime,
                     rowEnd = rowEnd,
-                    zoneOffset = layout.zoneOffset,
+                    zoneOffset = row.zoneOffset,
                 ),
             )
         }
@@ -188,6 +189,7 @@ object ActogramLayoutEngine {
             ActogramRow(
                 date = date,
                 startTime = rowStart,
+                zoneOffset = offset,
                 sleeps = sleeps,
                 overlays = overlays,
                 schedules = scheduleEntries.toScheduleBlocks(rowStart, rowEnd, offset),
@@ -251,6 +253,7 @@ object ActogramLayoutEngine {
             ActogramRow(
                 date = date,
                 startTime = rowStart,
+                zoneOffset = fallbackOffset,
                 sleeps = recordsByRow[index].mapNotNull { it.toBlock(rowStart, rowEnd) },
                 overlays = circadianByRow[index].flatMap { window ->
                     window.toFixedDurationOverlays(rowStart, rowEnd)

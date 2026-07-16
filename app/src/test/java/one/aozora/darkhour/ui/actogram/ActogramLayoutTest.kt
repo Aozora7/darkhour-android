@@ -516,6 +516,39 @@ class ActogramLayoutTest {
     }
 
     @Test
+    fun weeklyScheduleAppliedLaterUsesEachCalendarRowsOffset() {
+        val firstDate = LocalDate.parse("2026-06-15")
+        val secondDate = firstDate.plusDays(1)
+        val baseLayout = ActogramLayoutEngine.build(
+            records = listOf(
+                record(firstDate, 1.0, 7.0, ZoneOffset.ofHours(2)),
+                record(secondDate, 1.0, 7.0, ZoneOffset.ofHours(5)),
+            ),
+            minimumRows = 2,
+        )
+        val layout = ActogramLayoutEngine.withScheduleEntries(
+            layout = baseLayout,
+            scheduleEntries = listOf(
+                schedule(
+                    start = LocalTime.of(8, 0),
+                    end = LocalTime.of(16, 0),
+                    days = setOf(DayOfWeek.MONDAY, DayOfWeek.TUESDAY),
+                ),
+            ),
+        )
+
+        val first = layout.rows.first { it.date == firstDate }.schedules.single()
+        val second = layout.rows.first { it.date == secondDate }.schedules.single()
+
+        assertEquals(8.0, first.startHour, 0.001)
+        assertEquals(16.0, first.endHour, 0.001)
+        assertEquals(8.0, second.startHour, 0.001)
+        assertEquals(16.0, second.endHour, 0.001)
+        assertEquals(ZoneOffset.ofHours(2), first.selection.zoneOffset)
+        assertEquals(ZoneOffset.ofHours(5), second.selection.zoneOffset)
+    }
+
+    @Test
     fun scheduleRespectsCustomRowWidth() {
         val date = LocalDate.parse("2026-06-15")
         val layout = ActogramLayoutEngine.build(
@@ -902,8 +935,13 @@ class ActogramLayoutTest {
     private fun ActogramDisplayRow.legendRow(): ActogramDisplayRow.Legend =
         this as ActogramDisplayRow.Legend
 
-    private fun record(date: LocalDate, startHour: Double, durationHours: Double): SleepRecord {
-        val dayStart = date.atStartOfDay().toInstant(offset)
+    private fun record(
+        date: LocalDate,
+        startHour: Double,
+        durationHours: Double,
+        zoneOffset: ZoneOffset = offset,
+    ): SleepRecord {
+        val dayStart = date.atStartOfDay().toInstant(zoneOffset)
         val start = dayStart.plusMillis((startHour * 3_600_000).toLong())
         val end = start.plusMillis((durationHours * 3_600_000).toLong())
         return SleepRecord(
@@ -918,8 +956,8 @@ class ActogramLayoutTest {
             minutesAwake = (durationHours * 6).toInt(),
             isMainSleep = true,
             sleepScore = 0.8,
-            startZoneOffset = offset,
-            endZoneOffset = offset,
+            startZoneOffset = zoneOffset,
+            endZoneOffset = zoneOffset,
         )
     }
 

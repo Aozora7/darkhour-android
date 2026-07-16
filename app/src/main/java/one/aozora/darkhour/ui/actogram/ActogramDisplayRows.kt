@@ -187,6 +187,7 @@ private fun ActogramLayout.emptyDataRow(startTime: Instant): ActogramRow {
     return ActogramRow(
         date = localStart.toLocalDate(),
         startTime = startTime,
+        zoneOffset = zoneOffset,
         sleeps = emptyList(),
         overlays = emptyList(),
         schedules = emptyList(),
