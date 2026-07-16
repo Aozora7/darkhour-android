@@ -91,7 +91,7 @@ class DarkHourAppTest {
             swipe(
                 start = Offset(width * 0.9f, centerY),
                 end = Offset(width * 0.1f, centerY),
-                durationMillis = 300,
+                durationMillis = 80,
             )
         }
         composeRule.waitForIdle()
@@ -138,14 +138,12 @@ class DarkHourAppTest {
     }
 
     @Test
-    fun fastHorizontalSwipeOnYearSelectorNavigatesPager() {
+    fun horizontalSwipeOutsideInteractiveChartsNavigatesPager() {
         setContent()
         composeRule.onNodeWithTag("destination_stats").performClick()
         composeRule.waitForIdle()
-        composeRule.onNodeWithTag("stats_scope_all").performClick()
-        composeRule.onNodeWithTag("tau_year_selector").performScrollTo()
 
-        composeRule.onNodeWithTag("tau_year_selector").performTouchInput {
+        composeRule.onNodeWithTag("stats_screen").performTouchInput {
             swipe(
                 start = Offset(width * 0.9f, centerY),
                 end = Offset(width * 0.1f, centerY),
@@ -419,19 +417,20 @@ class DarkHourAppTest {
             LocalDate.parse("2026-07-15"),
             ZoneId.of("UTC"),
         )
+        val packages = listOf(
+            SleepExportPackage("example.one", "Example One", 4),
+            SleepExportPackage("example.two", "Example Two", 3),
+        )
+        var preparation by mutableStateOf<SleepExportPreparation?>(null)
         composeRule.setContent {
             DarkHourTheme {
                 DarkHourApp(
                     records = DemoData.records,
                     fileWriteSupported = false,
-                    exportPreparation = SleepExportPreparation(
-                        range = range,
-                        packages = listOf(
-                            SleepExportPackage("example.one", "Example One", 4),
-                            SleepExportPackage("example.two", "Example Two", 3),
-                        ),
-                    ),
-                    onPrepareSleepExport = {},
+                    exportPreparation = preparation,
+                    onPrepareSleepExport = { requestedRange ->
+                        preparation = SleepExportPreparation(requestedRange, packages)
+                    },
                     onCreateSleepExportDocument = { exportedPackages = it },
                 )
             }
@@ -506,11 +505,19 @@ class DarkHourAppTest {
         composeRule.waitForIdle()
         composeRule.onNodeWithTag("imported_sleep_record_count").performScrollTo()
             .assertTextEquals("Imported records in selected range: 7")
-        composeRule.onNodeWithTag("delete_imported_records").performClick()
+        composeRule.onNodeWithTag("delete_imported_records").performScrollTo().performClick()
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            composeRule.onAllNodesWithTag("cancel_delete_imported_records")
+                .fetchSemanticsNodes().size == 1
+        }
         composeRule.onNodeWithTag("cancel_delete_imported_records").performClick()
         composeRule.runOnIdle { assertTrue(deletions == 0) }
 
-        composeRule.onNodeWithTag("delete_imported_records").performClick()
+        composeRule.onNodeWithTag("delete_imported_records").performScrollTo().performClick()
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            composeRule.onAllNodesWithTag("confirm_delete_imported_records")
+                .fetchSemanticsNodes().size == 1
+        }
         composeRule.onNodeWithTag("confirm_delete_imported_records").performClick()
         composeRule.runOnIdle { assertTrue(deletions == 1) }
     }
