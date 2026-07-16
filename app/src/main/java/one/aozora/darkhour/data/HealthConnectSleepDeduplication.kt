@@ -17,6 +17,7 @@ internal data class ResolvedImportedSleepRecords(
 
 internal fun resolveImportedSleepRecords(
     importedRecords: List<ImportedSleepRecord>,
+    ownedPackageName: String? = null,
 ): ResolvedImportedSleepRecords {
     if (importedRecords.isEmpty()) {
         return ResolvedImportedSleepRecords(emptyList(), emptyList())
@@ -25,7 +26,7 @@ internal fun resolveImportedSleepRecords(
     val records = importedRecords
         .groupBy(ImportedSleepRecord::deduplicationIdentity)
         .values
-        .map(::canonicalRecord)
+        .map { records -> canonicalRecord(records, ownedPackageName) }
         .sortedWith(importedRecordTimeOrder)
     if (records.size == 1) {
         return ResolvedImportedSleepRecords(records, records)
@@ -67,7 +68,11 @@ internal fun resolveImportedSleepRecords(
         .map { indices -> indices.map(records::get) }
     val analysisRecordByMemberIdentity = mutableMapOf<String, ImportedSleepRecord>()
     val analysisRecords = analysisComponents.map { members ->
-        val consolidated = if (members.size == 1) members.single() else consolidateRecords(members)
+        val consolidated = if (members.size == 1) {
+            members.single()
+        } else {
+            consolidateRecords(members, ownedPackageName)
+        }
         members.forEach { member ->
             analysisRecordByMemberIdentity[member.stableIdentity()] = consolidated
         }
@@ -77,7 +82,7 @@ internal fun resolveImportedSleepRecords(
     val displayRecords = records.indices
         .groupBy(duplicateSets::find)
         .values
-        .map { indices -> canonicalRecord(indices.map(records::get)) }
+        .map { indices -> canonicalRecord(indices.map(records::get), ownedPackageName) }
         .map { displayRecord ->
             val episode = checkNotNull(analysisRecordByMemberIdentity[displayRecord.stableIdentity()])
             if (displayRecord.record.isMainSleep == episode.record.isMainSleep) {
@@ -96,13 +101,17 @@ internal fun resolveImportedSleepRecords(
 internal fun preferredImportedSleepRecord(
     first: ImportedSleepRecord,
     second: ImportedSleepRecord,
-): ImportedSleepRecord = canonicalRecord(listOf(first, second))
+    ownedPackageName: String? = null,
+): ImportedSleepRecord = canonicalRecord(listOf(first, second), ownedPackageName)
 
 internal fun ImportedSleepRecord.deduplicationIdentity(): String =
     sourceRecordId?.let { "health-connect:$it" } ?: "fallback:${record.logId}"
 
-private fun consolidateRecords(members: List<ImportedSleepRecord>): ImportedSleepRecord {
-    val rankedMembers = members.sortedWith(canonicalRecordOrder)
+private fun consolidateRecords(
+    members: List<ImportedSleepRecord>,
+    ownedPackageName: String?,
+): ImportedSleepRecord {
+    val rankedMembers = members.sortedWith(canonicalRecordOrder(ownedPackageName))
     val canonical = rankedMembers.first()
     val startOwner = rankedMembers
         .filter { it.record.startTime == members.minOf { member -> member.record.startTime } }
@@ -238,14 +247,17 @@ private fun resolveStages(
     return resolved
 }
 
-private fun canonicalRecord(records: List<ImportedSleepRecord>): ImportedSleepRecord =
-    records.sortedWith(canonicalRecordOrder).first()
+private fun canonicalRecord(
+    records: List<ImportedSleepRecord>,
+    ownedPackageName: String?,
+): ImportedSleepRecord = records.sortedWith(canonicalRecordOrder(ownedPackageName)).first()
 
-private val canonicalRecordOrder =
+private fun canonicalRecordOrder(ownedPackageName: String?) =
     compareByDescending<ImportedSleepRecord> { it.specificStageCoverageSeconds() }
         .thenByDescending { it.usableStageCoverageSeconds() }
         .thenByDescending { it.record.durationMs }
         .thenByDescending { it.recordingMethodRank() }
+        .thenBy { it.isOwnedAppVariant(ownedPackageName) }
         .thenByDescending { it.sourceLastModifiedTime }
         .thenBy { it.sourcePackageName.orEmpty() }
         .thenBy { it.sourceRecordId.orEmpty() }
@@ -276,6 +288,16 @@ private fun ImportedSleepRecord.recordingMethodRank(): Int = when (sourceRecordi
     Metadata.RECORDING_METHOD_UNKNOWN -> 1
     Metadata.RECORDING_METHOD_MANUAL_ENTRY -> 0
     else -> 1
+}
+
+private fun ImportedSleepRecord.isOwnedAppVariant(ownedPackageName: String?): Boolean {
+    if (ownedPackageName == null || sourcePackageName == null) return false
+    val basePackageName = ownedPackageName
+        .removeSuffix(DEBUG_APPLICATION_ID_SUFFIX)
+        .removeSuffix(DEMO_APPLICATION_ID_SUFFIX)
+    return sourcePackageName == basePackageName ||
+        sourcePackageName == basePackageName + DEBUG_APPLICATION_ID_SUFFIX ||
+        sourcePackageName == basePackageName + DEMO_APPLICATION_ID_SUFFIX
 }
 
 private fun ImportedSleepRecord.stableIdentity(): String =
@@ -315,4 +337,6 @@ private class DisjointSets(size: Int) {
 
 private const val MOSTLY_OVERLAPPING_RATIO = 0.8
 private const val MILLIS_PER_HOUR = 3_600_000.0
+private const val DEBUG_APPLICATION_ID_SUFFIX = ".debug"
+private const val DEMO_APPLICATION_ID_SUFFIX = ".demo"
 private val MAIN_SLEEP_MINIMUM_DURATION = Duration.ofHours(4)

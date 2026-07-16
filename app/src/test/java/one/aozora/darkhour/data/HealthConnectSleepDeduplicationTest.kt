@@ -243,6 +243,68 @@ class HealthConnectSleepDeduplicationTest {
         assertEquals("staged", result.records.single().sourceRecordId)
     }
 
+    @Test
+    fun originalSourceWinsOverEqualQualityDarkHourCopyRegardlessOfInputOrder() {
+        val original = imported(0, 480, "com.example.sleep", "original")
+        val darkHourCopy = imported(
+            0,
+            480,
+            DARK_HOUR_RELEASE_PACKAGE,
+            "copy",
+            lastModifiedTime = BASE.plusSeconds(60),
+        )
+
+        val forward = resolveImportedSleepRecords(
+            listOf(darkHourCopy, original),
+            ownedPackageName = DARK_HOUR_PACKAGE,
+        )
+        val reverse = resolveImportedSleepRecords(
+            listOf(original, darkHourCopy),
+            ownedPackageName = DARK_HOUR_PACKAGE,
+        )
+
+        assertEquals("original", forward.records.single().sourceRecordId)
+        assertEquals(forward, reverse)
+    }
+
+    @Test
+    fun originalSourceWinsWhenEqualQualityCopiesHaveExactIdentity() {
+        val original = imported(0, 480, "com.example.sleep", "same")
+        val darkHourCopy = imported(
+            0,
+            480,
+            DARK_HOUR_RELEASE_PACKAGE,
+            "same",
+            lastModifiedTime = BASE.plusSeconds(60),
+        )
+
+        val result = resolveImportedSleepRecords(
+            listOf(darkHourCopy, original),
+            ownedPackageName = DARK_HOUR_PACKAGE,
+        )
+
+        assertEquals("com.example.sleep", result.records.single().sourcePackageName)
+    }
+
+    @Test
+    fun higherQualityDarkHourCopyStillWinsOverOriginalSource() {
+        val original = imported(0, 480, "com.example.sleep", "original")
+        val stagedDarkHourCopy = imported(
+            0,
+            480,
+            DARK_HOUR_RELEASE_PACKAGE,
+            "copy",
+            stages = listOf(stage(0, 480, SleepStageLevel.LIGHT)),
+        )
+
+        val result = resolveImportedSleepRecords(
+            listOf(original, stagedDarkHourCopy),
+            ownedPackageName = DARK_HOUR_PACKAGE,
+        )
+
+        assertEquals("copy", result.records.single().sourceRecordId)
+    }
+
     private fun imported(
         startMinutes: Long,
         durationMinutes: Long,
@@ -250,6 +312,7 @@ class HealthConnectSleepDeduplicationTest {
         id: String,
         stages: List<SleepStageInterval> = emptyList(),
         recordingMethod: Int = Metadata.RECORDING_METHOD_AUTOMATICALLY_RECORDED,
+        lastModifiedTime: Instant = BASE,
     ): ImportedSleepRecord {
         val start = BASE.plusSeconds(startMinutes * 60)
         val end = start.plusSeconds(durationMinutes * 60)
@@ -289,7 +352,7 @@ class HealthConnectSleepDeduplicationTest {
             sourceRecordId = id,
             sourcePackageName = source,
             sourceRecordingMethod = recordingMethod,
-            sourceLastModifiedTime = BASE,
+            sourceLastModifiedTime = lastModifiedTime,
             specificStageSeconds = stageSeconds,
             usableStageSeconds = stageSeconds,
         )
@@ -307,5 +370,7 @@ class HealthConnectSleepDeduplicationTest {
 
     private companion object {
         val BASE: Instant = Instant.parse("2026-01-01T00:00:00Z")
+        const val DARK_HOUR_PACKAGE = "one.aozora.darkhour.debug"
+        const val DARK_HOUR_RELEASE_PACKAGE = "one.aozora.darkhour"
     }
 }

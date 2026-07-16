@@ -25,7 +25,7 @@ internal fun importSleepRecords(
         .filter { it.isInRange(range, now) }
         .map { it.toImportedSleepRecord(zoneId) }
         .toList()
-    val resolved = resolveImportedSleepRecords(imported)
+    val resolved = resolveImportedSleepRecords(imported, ownedPackageName)
     return ImportedSleepRecords(
         records = resolved.records,
         analysisRecords = resolved.analysisRecords,
@@ -67,13 +67,15 @@ internal class ImportedSleepAccumulator(
             val imported = rawRecord.toImportedSleepRecord(zoneId)
             val identity = imported.deduplicationIdentity()
             recordsByIdentity[identity] = recordsByIdentity[identity]
-                ?.let { existing -> preferredImportedSleepRecord(existing, imported) }
+                ?.let { existing ->
+                    preferredImportedSleepRecord(existing, imported, ownedPackageName)
+                }
                 ?: imported
         }
     }
 
     fun resolvedRecords(): ResolvedImportedSleepRecords =
-        resolveImportedSleepRecords(recordsByIdentity.values.toList())
+        resolveImportedSleepRecords(recordsByIdentity.values.toList(), ownedPackageName)
 
     fun sortedRecords(): List<ImportedSleepRecord> = resolvedRecords().records
 }
