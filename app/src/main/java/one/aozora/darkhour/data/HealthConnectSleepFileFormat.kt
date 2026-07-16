@@ -429,55 +429,6 @@ private fun JsonReader.readHealthConnectDevice(): SleepFileDevice? {
     return SleepFileDevice(type, manufacturer, model)
 }
 
-internal suspend fun HealthConnectClient.readExistingSourceMatches(
-    sessions: List<DecodedSleepSession>,
-): Set<DecodedSleepSession> {
-    val sourceSessions = sessions.filter {
-        it.formatKey == HEALTH_CONNECT_FORMAT_KEY && !it.sourcePackageName.isNullOrBlank()
-    }
-    if (sourceSessions.isEmpty()) return emptySet()
-    val start = sourceSessions.minOf(DecodedSleepSession::startTime)
-    val end = sourceSessions.maxOf(DecodedSleepSession::endTime)
-    val origins = sourceSessions.mapNotNullTo(linkedSetOf()) { session ->
-        session.sourcePackageName?.let(::DataOrigin)
-    }
-    val existing = readSleepRecordsPageRange(start, end, origins)
-    return sourceSessions.filterTo(linkedSetOf()) { source ->
-        existing.any { target ->
-            source.matchesExistingSourceRecord(
-                ExistingHealthConnectSourceRecord(
-                    packageName = target.metadata.dataOrigin.packageName,
-                    recordId = target.metadata.id,
-                    clientRecordId = target.metadata.clientRecordId,
-                    startTime = target.startTime,
-                    endTime = target.endTime,
-                ),
-            )
-        }
-    }
-}
-
-internal data class ExistingHealthConnectSourceRecord(
-    val packageName: String,
-    val recordId: String?,
-    val clientRecordId: String?,
-    val startTime: Instant,
-    val endTime: Instant,
-)
-
-internal fun DecodedSleepSession.matchesExistingSourceRecord(
-    existing: ExistingHealthConnectSourceRecord,
-): Boolean {
-    if (formatKey != HEALTH_CONNECT_FORMAT_KEY || sourcePackageName != existing.packageName) return false
-    return when {
-        !sourceHealthConnectRecordId.isNullOrBlank() &&
-            existing.recordId == sourceHealthConnectRecordId -> true
-        !sourceClientRecordId.isNullOrBlank() &&
-            existing.clientRecordId == sourceClientRecordId -> true
-        else -> existing.startTime == startTime && existing.endTime == endTime
-    }
-}
-
 private fun Int.toSleepFileStageType(): SleepFileStageType = when (this) {
     SleepSessionRecord.STAGE_TYPE_DEEP -> SleepFileStageType.DEEP
     SleepSessionRecord.STAGE_TYPE_LIGHT -> SleepFileStageType.LIGHT

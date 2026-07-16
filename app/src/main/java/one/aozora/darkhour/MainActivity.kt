@@ -23,11 +23,7 @@ import one.aozora.darkhour.data.settings.AppSettingsStore
 import one.aozora.darkhour.core.circadian.adaptive.AdaptiveKalmanDiagnostics
 import one.aozora.darkhour.ui.DarkHourApp
 import one.aozora.darkhour.ui.DemoData
-import one.aozora.darkhour.ui.actogram.ActogramDisplayOptions
-import one.aozora.darkhour.ui.actogram.ActogramTimeScale
 import one.aozora.darkhour.ui.theme.DarkHourTheme
-import java.time.Duration
-import kotlin.math.ceil
 
 class MainActivity : ComponentActivity() {
     private lateinit var healthConnect: HealthConnectDataController
@@ -115,7 +111,10 @@ class MainActivity : ComponentActivity() {
             context = this,
             scope = lifecycleScope,
             initialDataRange = appSettings.readHealthDataRange(),
-            initialImportDuration = initialVisibleImportDuration(startupDisplayOptions),
+            initialImportDuration = initialVisibleImportDuration(
+                viewportHeightDp = resources.displayMetrics.heightPixels / resources.displayMetrics.density,
+                options = startupDisplayOptions,
+            ),
             allowLegacyFileImport = BuildConfig.DEBUG,
         )
         enableEdgeToEdge()
@@ -375,26 +374,5 @@ private enum class HealthPermissionRequestKind {
     SLEEP_WRITE,
 }
 
-private fun ComponentActivity.initialVisibleImportDuration(
-    options: ActogramDisplayOptions,
-): Duration {
-    val heightDp = resources.displayMetrics.heightPixels / resources.displayMetrics.density
-    val visibleRows = ceil(
-        ((heightDp - ACTOGRAM_AXIS_HEIGHT_DP).coerceAtLeast(0f) / options.rowHeightDp)
-            .toDouble(),
-    ).toLong()
-    val doublePlotRows = if (options.doublePlot) 1L else 0L
-    val rowHours = when (options.timeScale) {
-        ActogramTimeScale.HOURS_24 -> 24.0
-        ActogramTimeScale.CIRCADIAN_TAU -> 24.0
-        ActogramTimeScale.CUSTOM -> options.customHours.toDouble()
-    }
-    val days = ceil(((visibleRows + doublePlotRows).coerceAtLeast(1L) * rowHours) / 24.0)
-        .toLong()
-        .coerceAtLeast(1L)
-    return Duration.ofDays(days)
-}
-
-private const val ACTOGRAM_AXIS_HEIGHT_DP = 30f
 private const val ADAPTIVE_KALMAN_LOG_TAG = "DarkHourAdaptiveKalman"
 private const val GOOGLE_PLAY_PACKAGE_NAME = "com.android.vending"

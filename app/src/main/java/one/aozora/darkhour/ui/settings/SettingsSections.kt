@@ -255,29 +255,6 @@ internal fun ImportExportSettingsSection(
                     modifier = Modifier.testTag("legacy_debug_sleep_import_note"),
                 )
             }
-            when (healthConnect.fileOperation) {
-                HealthConnectFileOperation.PREPARING_EXPORT -> FileOperationProgress("Preparing sleep export…")
-                HealthConnectFileOperation.EXPORTING -> FileOperationProgress("Exporting sleep records…")
-                HealthConnectFileOperation.IMPORTING -> FileOperationProgress("Importing sleep files…")
-                HealthConnectFileOperation.DELETING -> FileOperationProgress("Deleting imported records…")
-                HealthConnectFileOperation.IDLE -> Unit
-            }
-            healthConnect.fileOperationMessage?.let { message ->
-                Text(
-                    message,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.testTag("sleep_file_operation_message"),
-                )
-            }
-            healthConnect.fileOperationError?.let { error ->
-                Text(
-                    error,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error,
-                    modifier = Modifier.testTag("sleep_file_operation_error"),
-                )
-            }
             healthConnect.fileImportResult?.issues?.firstOrNull()?.let { issue ->
                 Text(
                     issue,
@@ -286,19 +263,7 @@ internal fun ImportExportSettingsSection(
                 )
             }
         }
-        if (!healthConnect.fileWriteSupported) {
-            when (healthConnect.fileOperation) {
-                HealthConnectFileOperation.PREPARING_EXPORT -> FileOperationProgress("Preparing sleep export…")
-                HealthConnectFileOperation.EXPORTING -> FileOperationProgress("Exporting sleep records…")
-                else -> Unit
-            }
-            healthConnect.fileOperationMessage?.let { message ->
-                Text(message, style = MaterialTheme.typography.bodySmall)
-            }
-            healthConnect.fileOperationError?.let { error ->
-                Text(error, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
-            }
-        }
+        FileOperationStatus(healthConnect)
     }
 
     if (showExportDialog) {
@@ -490,6 +455,41 @@ private fun FileOperationProgress(label: String) {
         CircularProgressIndicator()
         Text(label, style = MaterialTheme.typography.bodyMedium)
     }
+}
+
+@Composable
+private fun FileOperationStatus(healthConnect: HealthConnectState) {
+    fileOperationProgressLabel(
+        operation = healthConnect.fileOperation,
+        fileWriteSupported = healthConnect.fileWriteSupported,
+    )?.let { label -> FileOperationProgress(label) }
+    healthConnect.fileOperationMessage?.let { message ->
+        Text(
+            message,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.testTag("sleep_file_operation_message"),
+        )
+    }
+    healthConnect.fileOperationError?.let { error ->
+        Text(
+            error,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.error,
+            modifier = Modifier.testTag("sleep_file_operation_error"),
+        )
+    }
+}
+
+internal fun fileOperationProgressLabel(
+    operation: HealthConnectFileOperation,
+    fileWriteSupported: Boolean,
+): String? = when (operation) {
+    HealthConnectFileOperation.PREPARING_EXPORT -> "Preparing sleep export…"
+    HealthConnectFileOperation.EXPORTING -> "Exporting sleep records…"
+    HealthConnectFileOperation.IMPORTING -> if (fileWriteSupported) "Importing sleep files…" else null
+    HealthConnectFileOperation.DELETING -> if (fileWriteSupported) "Deleting imported records…" else null
+    HealthConnectFileOperation.IDLE -> null
 }
 
 @Composable
