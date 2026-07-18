@@ -73,22 +73,22 @@ internal fun AppearanceSettingsSection(
     onSettingsChange: (AppSettings) -> Unit,
 ) {
     SettingsSection("Appearance") {
-        SettingsSwitch(
-            label = "ISO date and time",
-            checked = settings.useIsoDateTime,
-            testTag = "iso_date_time_toggle",
-        ) {
-            onSettingsChange(settings.copy(useIsoDateTime = it))
+        SettingsControlGroup {
+            SettingsSwitch(
+                label = "ISO date and time",
+                checked = settings.useIsoDateTime,
+                testTag = "iso_date_time_toggle",
+            ) {
+                onSettingsChange(settings.copy(useIsoDateTime = it))
+            }
+            SettingsSupportingText(
+                if (settings.useIsoDateTime) {
+                    "Example: 2026-06-04 12:34"
+                } else {
+                    "Example: Jun 4, 2026 12:34"
+                },
+            )
         }
-        Text(
-            if (settings.useIsoDateTime) {
-                "Example: 2026-06-04 12:34"
-            } else {
-                "Example: Jun 4, 2026 12:34"
-            },
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
     }
 }
 
@@ -104,71 +104,69 @@ internal fun DataSettingsSection(
     val providerAvailable = healthConnect.access.providerAvailable
     SettingsSection("Data") {
         Text("Health Connect", style = MaterialTheme.typography.titleMedium)
-        SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-            HealthDataRangeOptions.forEachIndexed { index, option ->
-                val selected = option.isSelected(healthDataRange)
-                SegmentedButton(
-                    selected = selected,
-                    onClick = {
-                        healthConnect.onDataRangeChange(
-                            option.toRange(pendingCustomDays.roundToInt()),
-                        )
-                    },
-                    enabled = providerAvailable,
-                    shape = SegmentedButtonDefaults.itemShape(index, HealthDataRangeOptions.size),
-                    modifier = Modifier.testTag(option.testTag),
-                ) {
-                    Text(option.label)
+        SettingsControlGroup {
+            SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                HealthDataRangeOptions.forEachIndexed { index, option ->
+                    val selected = option.isSelected(healthDataRange)
+                    SegmentedButton(
+                        selected = selected,
+                        onClick = {
+                            healthConnect.onDataRangeChange(
+                                option.toRange(pendingCustomDays.roundToInt()),
+                            )
+                        },
+                        enabled = providerAvailable,
+                        shape = SegmentedButtonDefaults.itemShape(index, HealthDataRangeOptions.size),
+                        modifier = Modifier.testTag(option.testTag),
+                    ) {
+                        Text(option.label)
+                    }
                 }
             }
-        }
-        if (healthDataRange is HealthDataRange.Custom) {
-            Text("Last ${pendingCustomDays.roundToInt()} days", style = MaterialTheme.typography.bodyLarge)
-            if (maxCustomDays > HealthDataRange.MINIMUM_CUSTOM_DAYS) {
-                Slider(
-                    value = pendingCustomDays,
-                    onValueChange = onPendingCustomDaysChange,
-                    onValueChangeFinished = {
-                        healthConnect.onDataRangeChange(
-                            HealthDataRange.custom(pendingCustomDays.roundToInt()),
-                        )
-                    },
-                    valueRange = HealthDataRange.MINIMUM_CUSTOM_DAYS.toFloat()..maxCustomDays.toFloat(),
-                    steps = (maxCustomDays - HealthDataRange.MINIMUM_CUSTOM_DAYS - 1).coerceAtLeast(0),
-                    modifier = Modifier.testTag("health_range_custom_days"),
-                    enabled = providerAvailable,
+            if (healthDataRange is HealthDataRange.Custom) {
+                Text("Last ${pendingCustomDays.roundToInt()} days", style = MaterialTheme.typography.bodyLarge)
+                if (maxCustomDays > HealthDataRange.MINIMUM_CUSTOM_DAYS) {
+                    Slider(
+                        value = pendingCustomDays,
+                        onValueChange = onPendingCustomDaysChange,
+                        onValueChangeFinished = {
+                            healthConnect.onDataRangeChange(
+                                HealthDataRange.custom(pendingCustomDays.roundToInt()),
+                            )
+                        },
+                        valueRange = HealthDataRange.MINIMUM_CUSTOM_DAYS.toFloat()..maxCustomDays.toFloat(),
+                        steps = (maxCustomDays - HealthDataRange.MINIMUM_CUSTOM_DAYS - 1).coerceAtLeast(0),
+                        modifier = Modifier.testTag("health_range_custom_days"),
+                        enabled = providerAvailable,
+                    )
+                }
+            }
+            SettingsSupportingText(
+                text = settingsImportStatusText(
+                    healthConnect = healthConnect,
+                    visibleRecordCount = visibleRecordCount,
+                ),
+            )
+            if (healthConnect.historyPermissionState.canRequestPermission && providerAvailable) {
+                OutlinedButton(
+                    onClick = healthConnect.onRequestHistoryPermission,
+                    modifier = Modifier.testTag("request_history_permission"),
+                    shape = MaterialTheme.shapes.medium,
+                ) {
+                    Text("Allow history access")
+                }
+            } else if (
+                healthConnect.historyPermissionState == HistoryPermissionState.UNAVAILABLE &&
+                providerAvailable &&
+                healthDataRange.extendsBeyondDefaultPeriod
+            ) {
+                SettingsSupportingText(
+                    text = "All available shows every record Health Connect currently makes available " +
+                        "to Dark Hour. Older records, including Dark Hour imports, may be " +
+                        "unavailable on this device.",
+                    modifier = Modifier.testTag("history_permission_unavailable"),
                 )
             }
-        }
-        Text(
-            settingsImportStatusText(
-                healthConnect = healthConnect,
-                visibleRecordCount = visibleRecordCount,
-            ),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        if (healthConnect.historyPermissionState.canRequestPermission && providerAvailable) {
-            OutlinedButton(
-                onClick = healthConnect.onRequestHistoryPermission,
-                modifier = Modifier.testTag("request_history_permission"),
-                shape = MaterialTheme.shapes.medium,
-            ) {
-                Text("Allow history access")
-            }
-        } else if (
-            healthConnect.historyPermissionState == HistoryPermissionState.UNAVAILABLE &&
-            providerAvailable &&
-            healthDataRange.extendsBeyondDefaultPeriod
-        ) {
-            Text(
-                "All available shows every record Health Connect currently makes available " +
-                    "to Dark Hour. Older records, including Dark Hour imports, may be " +
-                    "unavailable on this device.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.testTag("history_permission_unavailable"),
-            )
         }
     }
 }
@@ -207,7 +205,7 @@ internal fun ImportExportSettingsSection(
     }
 
     SettingsSection("Import & export") {
-        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        SettingsControlGroup {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -233,23 +231,17 @@ internal fun ImportExportSettingsSection(
                 }
             }
             if (!healthConnect.fileWriteSupported) {
-                Text(
-                    "File import requires Android 14 or later.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                SettingsSupportingText(
+                    text = "File import requires Android 14 or later.",
                     modifier = Modifier.testTag("sleep_file_import_unsupported"),
                 )
             } else {
                 healthConnect.fileImportResult?.issues?.firstOrNull()?.let { issue ->
-                    Text(
-                        issue,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                    SettingsSupportingText(issue)
                 }
             }
         }
-        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        SettingsControlGroup {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -290,19 +282,15 @@ internal fun ImportExportSettingsSection(
                 }
             }
             if (healthConnect.fileWriteSupported) {
-                Text(
-                    "Imported records in selected range: ${healthConnect.fileImportedRecordCount}",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                SettingsSupportingText(
+                    text = "Imported records in selected range: ${healthConnect.fileImportedRecordCount}",
                     modifier = Modifier.testTag("imported_sleep_record_count"),
                 )
             }
             if (healthConnect.fileWriteSupported && !healthConnect.fileDeletionSupported) {
-                Text(
-                    "Debug import mode: files are upserted directly without checking existing " +
+                SettingsSupportingText(
+                    text = "Debug import mode: files are upserted directly without checking existing " +
                         "Health Connect records.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.testTag("legacy_debug_sleep_import_note"),
                 )
             }
@@ -588,20 +576,18 @@ internal fun PrivacySettingsSection(
 ) {
     val privacyPolicyUrl = stringResource(R.string.privacy_policy_url)
     SettingsSection("Privacy") {
-        OutlinedButton(
-            onClick = { uriHandler.openUri(privacyPolicyUrl) },
-            modifier = Modifier
-                .fillMaxWidth()
-                .testTag("privacy_policy_button"),
-            shape = MaterialTheme.shapes.medium,
-        ) {
-            Text("Open privacy policy")
+        SettingsControlGroup {
+            OutlinedButton(
+                onClick = { uriHandler.openUri(privacyPolicyUrl) },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("privacy_policy_button"),
+                shape = MaterialTheme.shapes.medium,
+            ) {
+                Text("Open privacy policy")
+            }
+            SettingsSupportingText("Updated July 15, 2026")
         }
-        Text(
-            "Updated July 15, 2026",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
     }
 }
 
@@ -612,28 +598,33 @@ internal fun FeedbackSettingsSection(
     val githubIssuesUrl = stringResource(R.string.github_issues_url)
     val supportEmail = stringResource(R.string.support_email)
     SettingsSection("Feedback") {
-        Text(
-            "Report a bug or request a feature through GitHub Issues or by email.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        OutlinedButton(
-            onClick = { uriHandler.openUri(githubIssuesUrl) },
-            modifier = Modifier
-                .fillMaxWidth()
-                .testTag("github_issues_button"),
-            shape = MaterialTheme.shapes.medium,
-        ) {
-            Text("Open GitHub Issues")
-        }
-        OutlinedButton(
-            onClick = { uriHandler.openUri("mailto:$supportEmail") },
-            modifier = Modifier
-                .fillMaxWidth()
-                .testTag("support_email_button"),
-            shape = MaterialTheme.shapes.medium,
-        ) {
-            Text("Email $supportEmail")
+        SettingsControlGroup {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                OutlinedButton(
+                    onClick = { uriHandler.openUri(githubIssuesUrl) },
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag("github_issues_button"),
+                    shape = MaterialTheme.shapes.medium,
+                ) {
+                    Text("GitHub")
+                }
+                OutlinedButton(
+                    onClick = { uriHandler.openUri("mailto:$supportEmail") },
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag("support_email_button"),
+                    shape = MaterialTheme.shapes.medium,
+                ) {
+                    Text("Email")
+                }
+            }
+            SettingsSupportingText(
+                "Report bugs or request features through GitHub Issues or $supportEmail.",
+            )
         }
     }
 }

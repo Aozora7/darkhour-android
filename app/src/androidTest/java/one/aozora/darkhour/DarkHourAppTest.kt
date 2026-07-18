@@ -612,6 +612,24 @@ class DarkHourAppTest {
     }
 
     @Test
+    fun feedbackActionsShareACompactRow() {
+        setContent()
+
+        composeRule.onNodeWithTag("destination_settings").performClick()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("github_issues_button").performScrollTo()
+            .assertIsDisplayed()
+            .assertTextEquals("GitHub")
+        composeRule.onNodeWithTag("support_email_button")
+            .assertIsDisplayed()
+            .assertTextEquals("Email")
+
+        val github = composeRule.onNodeWithTag("github_issues_button").fetchSemanticsNode().boundsInRoot
+        val email = composeRule.onNodeWithTag("support_email_button").fetchSemanticsNode().boundsInRoot
+        composeRule.runOnIdle { assertTrue(github.top == email.top) }
+    }
+
+    @Test
     fun legacyDebugImportIsShownWithoutDeletion() {
         composeRule.setContent {
             DarkHourTheme {
