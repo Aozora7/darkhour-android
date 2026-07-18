@@ -8,7 +8,13 @@ import java.time.ZoneId
 import java.time.ZoneOffset
 
 internal object GoogleHealthSleepFileDecoder : SleepFileDecoder {
-    override val formatName: String = "Google Health"
+    override val format = SleepFileFormatInfo(
+        key = "google-health",
+        name = "Google Health",
+        description = "Google Health API sleep session JSON. Exported by 25h.aozora.one.",
+        fileExtensions = setOf("json"),
+        mimeTypes = setOf("application/json", "text/json"),
+    )
 
     override fun detects(input: InputStream): Boolean {
         val shape = detectJsonSleepRecordShape(input) ?: return false

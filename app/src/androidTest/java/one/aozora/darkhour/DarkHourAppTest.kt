@@ -500,7 +500,7 @@ class DarkHourAppTest {
     }
 
     @Test
-    fun sleepFileImportIsHiddenBehindAndroidVersionSupportState() {
+    fun sleepFileActionsStayAlignedAndUnsupportedActionsAreDisabled() {
         composeRule.setContent {
             DarkHourTheme {
                 DarkHourApp(
@@ -514,8 +514,18 @@ class DarkHourAppTest {
         composeRule.waitForIdle()
         composeRule.onNodeWithTag("sleep_file_import_unsupported").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithTag("export_sleep_records").assertIsDisplayed()
-        composeRule.onAllNodesWithTag("import_sleep_files").assertCountEquals(0)
-        composeRule.onAllNodesWithTag("delete_imported_records").assertCountEquals(0)
+        composeRule.onNodeWithTag("import_sleep_files").assertIsDisplayed().assertIsNotEnabled()
+        composeRule.onNodeWithTag("delete_imported_records").assertIsDisplayed().assertIsNotEnabled()
+
+        val formats = composeRule.onNodeWithTag("supported_import_formats").fetchSemanticsNode().boundsInRoot
+        val import = composeRule.onNodeWithTag("import_sleep_files").fetchSemanticsNode().boundsInRoot
+        val export = composeRule.onNodeWithTag("export_sleep_records").fetchSemanticsNode().boundsInRoot
+        val delete = composeRule.onNodeWithTag("delete_imported_records").fetchSemanticsNode().boundsInRoot
+        composeRule.runOnIdle {
+            assertTrue(formats.top == import.top)
+            assertTrue(export.top == delete.top)
+            assertTrue(export.top > formats.bottom)
+        }
     }
 
     @Test
@@ -578,6 +588,30 @@ class DarkHourAppTest {
     }
 
     @Test
+    fun supportedImportFormatsDialogIsGeneratedFromDecoderMetadata() {
+        composeRule.setContent {
+            DarkHourTheme {
+                DarkHourApp(
+                    records = DemoData.records,
+                    fileWriteSupported = false,
+                )
+            }
+        }
+
+        composeRule.onNodeWithTag("destination_settings").performClick()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("supported_import_formats").performScrollTo().performClick()
+
+        composeRule.onNodeWithTag("supported_import_format_plees-tracker").assertIsDisplayed()
+        composeRule.onNodeWithTag("supported_import_format_fitbit").assertIsDisplayed()
+        composeRule.onNodeWithTag("supported_import_format_google-health").assertIsDisplayed()
+        composeRule.onNodeWithTag("supported_import_format_health-connect").assertIsDisplayed()
+        composeRule.onNodeWithText("Plees Tracker (.csv)").assertIsDisplayed()
+        composeRule.onNodeWithText("Fitbit (.json)").assertIsDisplayed()
+        composeRule.onNodeWithTag("close_supported_import_formats").performClick()
+    }
+
+    @Test
     fun legacyDebugImportIsShownWithoutDeletion() {
         composeRule.setContent {
             DarkHourTheme {
@@ -593,7 +627,7 @@ class DarkHourAppTest {
         composeRule.waitForIdle()
         composeRule.onNodeWithTag("import_sleep_files").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithTag("legacy_debug_sleep_import_note").performScrollTo().assertIsDisplayed()
-        composeRule.onAllNodesWithTag("delete_imported_records").assertCountEquals(0)
+        composeRule.onNodeWithTag("delete_imported_records").assertIsDisplayed().assertIsNotEnabled()
     }
 
     @Test

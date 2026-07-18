@@ -36,6 +36,80 @@ class SleepFileDecoderTest {
     }
 
     @Test
+    fun registryPublishesImporterDeclaredFormatsAndPickerMimeTypes() {
+        val registry = SleepFileDecoderRegistry()
+
+        assertEquals(
+            listOf("plees-tracker", "fitbit", "google-health", HEALTH_CONNECT_FORMAT_KEY),
+            registry.supportedFormats.map(SleepFileFormatInfo::key),
+        )
+        assertEquals(
+            setOf(
+                "text/csv",
+                "application/csv",
+                "text/comma-separated-values",
+                "application/json",
+                "text/json",
+            ),
+            registry.supportedMimeTypes,
+        )
+        assertTrue(registry.supportedFormats.all { it.description.isNotBlank() })
+        assertTrue(registry.supportedFormats.all { it.fileExtensions.isNotEmpty() })
+        assertTrue(registry.supportedFormats.all { it.mimeTypes.isNotEmpty() })
+    }
+
+    @Test
+    fun pleesTrackerCsvPreservesEpochTimesIdentityMetadataAndMultilineComments() {
+        val csv = "sid,start,stop,rating,comment,wakes\n" +
+            "1,1784319701170,1784347783429,4,\"Test, with \"\"quotes\"\"\",2\n" +
+            "2,10000,20000,0,\"first line\nsecond line\",0\n" +
+            "3,20000,10000,3,invalid,1\n"
+        val source = source("misleading.json", csv)
+
+        val decoder = SleepFileDecoderRegistry().decoderFor(source)
+        val decoded = PleesTrackerSleepFileDecoder.decode(
+            csv.byteInputStream(),
+            ZoneId.of("Europe/Riga"),
+        )
+
+        assertEquals("Plees Tracker", decoder?.formatName)
+        assertEquals(2, decoded.sessions.size)
+        assertEquals(1, decoded.skippedRecordCount)
+        assertEquals("1", decoded.sessions[0].sourceId)
+        assertEquals(0, decoded.sessions[0].clientRecordVersion)
+        assertEquals(Instant.ofEpochMilli(1784319701170), decoded.sessions[0].startTime)
+        assertEquals("Test, with \"quotes\"\n\nPlees Tracker metadata v1\nRating: 4\nWakes: 2", decoded.sessions[0].notes)
+        assertEquals(Instant.ofEpochMilli(10_000_000), decoded.sessions[1].startTime)
+        assertEquals("first line\nsecond line", decoded.sessions[1].notes)
+        assertEquals(SleepFileStageType.SLEEPING, decoded.sessions[0].stages.single().type)
+        assertTrue(decoded.issues.any { it.recordIndex == 2 })
+
+        val healthRecord = decoded.sessions[0].toHealthConnectRecord()
+        assertEquals("darkhour:file:plees-tracker:1", healthRecord.metadata.clientRecordId)
+        assertEquals(Metadata.RECORDING_METHOD_ACTIVELY_RECORDED, healthRecord.metadata.recordingMethod)
+        assertEquals(decoded.sessions[0].notes, healthRecord.notes)
+        assertEquals(SleepSessionRecord.STAGE_TYPE_SLEEPING, healthRecord.stages.single().stage)
+    }
+
+    @Test
+    fun pleesTrackerIgnoresUnrecognizedColumnsAfterTheSixColumnFormat() {
+        val csv = "sid,start,stop,rating,comment,wakes\n1,1784319701170,1784347783429,4,Test,0\n"
+        val draftCsv = "sid,start,stop,rating,comment,wakes,health_connect_id,health_connect_version\n" +
+            "1,1784319701170,1784347783429,4,Test,0,id,1\n"
+
+        val decoder = SleepFileDecoderRegistry().decoderFor(source("plees.csv", csv))
+        val decoded = PleesTrackerSleepFileDecoder.decode(csv.byteInputStream(), ZoneId.of("UTC"))
+
+        assertEquals("Plees Tracker", decoder?.formatName)
+        assertEquals("1", decoded.sessions.single().sourceId)
+        assertEquals(0, decoded.sessions.single().clientRecordVersion)
+        assertEquals("Plees Tracker", SleepFileDecoderRegistry().decoderFor(source("draft.csv", draftCsv))?.formatName)
+        val draft = PleesTrackerSleepFileDecoder.decode(draftCsv.byteInputStream(), ZoneId.of("UTC"))
+        assertEquals("1", draft.sessions.single().sourceId)
+        assertEquals(0, draft.sessions.single().clientRecordVersion)
+    }
+
+    @Test
     fun fitbitUsesDeviceZonePreservesIdAndOverlaysShortWakeData() {
         val decoded = FitbitSleepFileDecoder.decode(
             resourceStream("fitbit-synthetic.json"),

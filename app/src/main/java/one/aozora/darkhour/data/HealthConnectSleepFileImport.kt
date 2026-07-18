@@ -230,8 +230,8 @@ internal fun DecodedSleepSession.toHealthConnectRecord(
         endTime = endTime,
         endZoneOffset = endZoneOffset,
         metadata = metadata,
-        title = if (formatKey == HEALTH_CONNECT_FORMAT_KEY) title else "Imported from $formatName",
-        notes = if (formatKey == HEALTH_CONNECT_FORMAT_KEY) notes else null,
+        title = if (formatKey == HEALTH_CONNECT_FORMAT_KEY) title else title ?: "Imported from $formatName",
+        notes = notes,
         stages = stages.map { stage ->
             SleepSessionRecord.Stage(
                 startTime = stage.startTime,

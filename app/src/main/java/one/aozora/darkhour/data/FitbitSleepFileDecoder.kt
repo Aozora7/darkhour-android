@@ -9,7 +9,13 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
 internal object FitbitSleepFileDecoder : SleepFileDecoder {
-    override val formatName: String = "Fitbit"
+    override val format = SleepFileFormatInfo(
+        key = "fitbit",
+        name = "Fitbit",
+        description = "Fitbit Web API and Google Takeout sleep JSON exports. Also exported by n24.aozora.one. ",
+        fileExtensions = setOf("json"),
+        mimeTypes = setOf("application/json", "text/json"),
+    )
 
     override fun detects(input: InputStream): Boolean {
         val shape = detectJsonSleepRecordShape(input) ?: return false

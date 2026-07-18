@@ -75,8 +75,27 @@ internal data class SleepFileSource(
     val openStream: () -> InputStream,
 )
 
+internal data class SleepFileFormatInfo(
+    val key: String,
+    val name: String,
+    val description: String,
+    val fileExtensions: Set<String>,
+    val mimeTypes: Set<String>,
+) {
+    init {
+        require(key.isNotBlank()) { "A sleep file format key is required" }
+        require(name.isNotBlank()) { "A sleep file format name is required" }
+        require(description.isNotBlank()) { "A sleep file format description is required" }
+        require(fileExtensions.isNotEmpty()) { "At least one sleep file extension is required" }
+        require(mimeTypes.isNotEmpty()) { "At least one sleep file MIME type is required" }
+    }
+}
+
 internal interface SleepFileDecoder {
+    val format: SleepFileFormatInfo
+
     val formatName: String
+        get() = format.name
 
     fun detects(input: InputStream): Boolean
 
@@ -85,11 +104,17 @@ internal interface SleepFileDecoder {
 
 internal class SleepFileDecoderRegistry(
     private val decoders: List<SleepFileDecoder> = listOf(
+        PleesTrackerSleepFileDecoder,
         FitbitSleepFileDecoder,
         GoogleHealthSleepFileDecoder,
         HealthConnectSleepFileDecoder,
     ),
 ) {
+    val supportedFormats: List<SleepFileFormatInfo> = decoders.map(SleepFileDecoder::format)
+
+    val supportedMimeTypes: Set<String> = supportedFormats
+        .flatMapTo(linkedSetOf(), SleepFileFormatInfo::mimeTypes)
+
     fun decoderFor(source: SleepFileSource): SleepFileDecoder? = decoders.singleOrNull { decoder ->
         runCatching { source.openStream().use(decoder::detects) }.getOrDefault(false)
     }

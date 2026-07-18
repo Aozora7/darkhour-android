@@ -233,7 +233,13 @@ private fun JsonWriter.nullableValue(value: String?) {
 }
 
 internal object HealthConnectSleepFileDecoder : SleepFileDecoder {
-    override val formatName: String = "Health Connect"
+    override val format = SleepFileFormatInfo(
+        key = HEALTH_CONNECT_FORMAT_KEY,
+        name = "Health Connect",
+        description = "Versioned Health Connect JSON files exported by Dark Hour.",
+        fileExtensions = setOf("json"),
+        mimeTypes = setOf("application/json", "text/json"),
+    )
 
     override fun detects(input: InputStream): Boolean = runCatching {
         input.jsonReader().use { reader ->

@@ -39,6 +39,8 @@ import one.aozora.darkhour.data.HealthConnectFileOperation
 import one.aozora.darkhour.data.HealthDataRange
 import one.aozora.darkhour.data.HistoryPermissionState
 import one.aozora.darkhour.data.SleepExportRange
+import one.aozora.darkhour.data.SleepFileDecoderRegistry
+import one.aozora.darkhour.data.SleepFileFormatInfo
 import one.aozora.darkhour.ui.HealthConnectState
 import java.time.Instant
 import java.time.LocalDate
@@ -179,6 +181,8 @@ internal fun ImportExportSettingsSection(
 ) {
     var showDeleteConfirmation by remember { mutableStateOf(false) }
     var showExportDialog by remember { mutableStateOf(false) }
+    var showSupportedFormats by remember { mutableStateOf(false) }
+    val supportedFormats = remember { SleepFileDecoderRegistry().supportedFormats }
     val zoneId = remember { ZoneId.systemDefault() }
     val today = remember { LocalDate.now(zoneId) }
     var exportStartDate by remember { mutableStateOf(today.minusDays(29)) }
@@ -203,76 +207,103 @@ internal fun ImportExportSettingsSection(
     }
 
     SettingsSection("Import & export") {
-        OutlinedButton(
-            onClick = {
-                showExportDialog = true
-                val days = when (val range = healthConnect.dataRange) {
-                    HealthDataRange.DefaultPeriod -> 30
-                    is HealthDataRange.Custom -> range.days
-                    HealthDataRange.EntireHistory -> null
-                }
-                prepareExport(days?.let { today.minusDays(it.toLong() - 1) } ?: LocalDate.ofEpochDay(0), today)
-            },
-            enabled = providerAvailable && operationIdle,
-            modifier = Modifier
-                .fillMaxWidth()
-                .testTag("export_sleep_records"),
-            shape = MaterialTheme.shapes.medium,
-        ) {
-            Text("Export sleep records")
-        }
-        if (!healthConnect.fileWriteSupported) {
-            Text(
-                "File import requires Android 14 or later.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.testTag("sleep_file_import_unsupported"),
-            )
-        } else {
-            Text(
-                "Imported records in selected range: ${healthConnect.fileImportedRecordCount}",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.testTag("imported_sleep_record_count"),
-            )
-            OutlinedButton(
-                onClick = healthConnect.onImportSleepFiles,
-                enabled = providerAvailable && operationIdle,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .testTag("import_sleep_files"),
-                shape = MaterialTheme.shapes.medium,
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                Text("Import sleep files")
-            }
-            if (healthConnect.fileDeletionSupported) {
                 OutlinedButton(
-                    onClick = { showDeleteConfirmation = true },
+                    onClick = { showSupportedFormats = true },
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag("supported_import_formats"),
+                    shape = MaterialTheme.shapes.medium,
+                ) {
+                    Text("Formats")
+                }
+                OutlinedButton(
+                    onClick = healthConnect.onImportSleepFiles,
+                    enabled = healthConnect.fileWriteSupported && providerAvailable && operationIdle,
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag("import_sleep_files"),
+                    shape = MaterialTheme.shapes.medium,
+                ) {
+                    Text("Import")
+                }
+            }
+            if (!healthConnect.fileWriteSupported) {
+                Text(
+                    "File import requires Android 14 or later.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.testTag("sleep_file_import_unsupported"),
+                )
+            } else {
+                healthConnect.fileImportResult?.issues?.firstOrNull()?.let { issue ->
+                    Text(
+                        issue,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        }
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                OutlinedButton(
+                    onClick = {
+                        showExportDialog = true
+                        val days = when (val range = healthConnect.dataRange) {
+                            HealthDataRange.DefaultPeriod -> 30
+                            is HealthDataRange.Custom -> range.days
+                            HealthDataRange.EntireHistory -> null
+                        }
+                        prepareExport(
+                            days?.let { today.minusDays(it.toLong() - 1) } ?: LocalDate.ofEpochDay(0),
+                            today,
+                        )
+                    },
                     enabled = providerAvailable && operationIdle,
                     modifier = Modifier
-                        .fillMaxWidth()
+                        .weight(1f)
+                        .testTag("export_sleep_records"),
+                    shape = MaterialTheme.shapes.medium,
+                ) {
+                    Text("Export")
+                }
+                OutlinedButton(
+                    onClick = { showDeleteConfirmation = true },
+                    enabled = healthConnect.fileDeletionSupported && providerAvailable && operationIdle,
+                    modifier = Modifier
+                        .weight(1f)
                         .testTag("delete_imported_records"),
                     shape = MaterialTheme.shapes.medium,
                     colors = ButtonDefaults.outlinedButtonColors(
                         contentColor = MaterialTheme.colorScheme.error,
                     ),
                 ) {
-                    Text("Delete imported records")
+                    Text("Delete imports")
                 }
-            } else {
+            }
+            if (healthConnect.fileWriteSupported) {
+                Text(
+                    "Imported records in selected range: ${healthConnect.fileImportedRecordCount}",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.testTag("imported_sleep_record_count"),
+                )
+            }
+            if (healthConnect.fileWriteSupported && !healthConnect.fileDeletionSupported) {
                 Text(
                     "Debug import mode: files are upserted directly without checking existing " +
                         "Health Connect records.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.testTag("legacy_debug_sleep_import_note"),
-                )
-            }
-            healthConnect.fileImportResult?.issues?.firstOrNull()?.let { issue ->
-                Text(
-                    issue,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         }
@@ -297,6 +328,13 @@ internal fun ImportExportSettingsSection(
                 showExportDialog = false
                 healthConnect.onCreateSleepExportDocument(selectedPackages)
             },
+        )
+    }
+
+    if (showSupportedFormats) {
+        SupportedImportFormatsDialog(
+            formats = supportedFormats,
+            onDismiss = { showSupportedFormats = false },
         )
     }
 
@@ -468,6 +506,45 @@ private fun FileOperationProgress(label: String) {
         CircularProgressIndicator()
         Text(label, style = MaterialTheme.typography.bodyMedium)
     }
+}
+
+@Composable
+private fun SupportedImportFormatsDialog(
+    formats: List<SleepFileFormatInfo>,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Supported import formats") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                formats.forEach { format ->
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(2.dp),
+                        modifier = Modifier.testTag("supported_import_format_${format.key}"),
+                    ) {
+                        Text(
+                            "${format.name} (${format.fileExtensions.joinToString { ".$it" }})",
+                            style = MaterialTheme.typography.titleSmall,
+                        )
+                        Text(
+                            format.description,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = onDismiss,
+                modifier = Modifier.testTag("close_supported_import_formats"),
+            ) {
+                Text("Close")
+            }
+        },
+    )
 }
 
 @Composable

@@ -18,6 +18,7 @@ import one.aozora.darkhour.data.HealthConnectDataController
 import one.aozora.darkhour.data.HealthDataRange
 import one.aozora.darkhour.data.HistoryPermissionState
 import one.aozora.darkhour.data.SleepExportRange
+import one.aozora.darkhour.data.SleepFileDecoderRegistry
 import one.aozora.darkhour.data.shouldOfferHealthConnectSetup
 import one.aozora.darkhour.data.settings.AppSettingsStore
 import one.aozora.darkhour.core.circadian.adaptive.AdaptiveKalmanDiagnostics
@@ -33,6 +34,7 @@ class MainActivity : ComponentActivity() {
     private var pendingSleepExportPackages: Set<String>? = null
     private var lastHealthPermissionRequest: PendingHealthPermissionRequest? = null
     private var resumePermissionRequestAfterSetup: PendingHealthPermissionRequest? = null
+    private val sleepFileDecoderRegistry = SleepFileDecoderRegistry()
     private val requestHealthPermissions = registerForActivityResult(
         HealthConnectDataController.permissionContract,
     ) { granted ->
@@ -270,7 +272,9 @@ class MainActivity : ComponentActivity() {
 
     private fun runSleepWriteAction(action: SleepWriteAction) {
         when (action) {
-            SleepWriteAction.IMPORT -> openSleepFiles.launch(arrayOf("*/*"))
+            SleepWriteAction.IMPORT -> openSleepFiles.launch(
+                sleepFileDecoderRegistry.supportedMimeTypes.toTypedArray(),
+            )
             SleepWriteAction.DELETE -> healthConnect.deleteOwnedSleepRecords()
         }
     }
