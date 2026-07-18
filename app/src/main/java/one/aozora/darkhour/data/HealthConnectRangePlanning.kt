@@ -8,6 +8,33 @@ internal data class HealthConnectReadRange(
     val end: Instant,
 )
 
+internal data class AccessibleHistoryRead(
+    val range: HealthConnectReadRange,
+    val ownedOnly: Boolean,
+)
+
+internal fun accessibleHistoryReads(
+    range: HealthDataRange,
+    now: Instant,
+    recentStart: Instant,
+): List<AccessibleHistoryRead> {
+    val selectedStart = healthDataRangeStart(range, now)
+    if (selectedStart >= recentStart) return emptyList()
+    return buildList {
+        add(AccessibleHistoryRead(HealthConnectReadRange(selectedStart, recentStart), ownedOnly = false))
+        val ownedEnd = minOf(recentStart, now.minus(DEFAULT_HISTORY_DURATION))
+        if (selectedStart < ownedEnd) {
+            add(AccessibleHistoryRead(HealthConnectReadRange(selectedStart, ownedEnd), ownedOnly = true))
+        }
+    }
+}
+
+internal fun healthDataRangeStart(range: HealthDataRange, now: Instant): Instant = when (range) {
+    HealthDataRange.EntireHistory -> Instant.EPOCH
+    is HealthDataRange.Custom -> now.minus(Duration.ofDays(range.days.toLong()))
+    HealthDataRange.DefaultPeriod -> now.minus(DEFAULT_HISTORY_DURATION)
+}
+
 internal fun healthConnectReadRanges(
     range: HealthDataRange,
     now: Instant,
@@ -16,11 +43,8 @@ internal fun healthConnectReadRanges(
 ): List<HealthConnectReadRange> {
     val recentRange = healthConnectInitialReadRange(range, now, initialImportDuration)
     val recentStart = recentRange.start
-    val oldestStart = when (range) {
-        HealthDataRange.EntireHistory -> oldestAvailableStart ?: Instant.EPOCH
-        is HealthDataRange.Custom -> now.minus(Duration.ofDays(range.days.toLong()))
-        HealthDataRange.DefaultPeriod -> now.minus(DEFAULT_HISTORY_DURATION)
-    }
+    val oldestStart = oldestAvailableStart.takeIf { range == HealthDataRange.EntireHistory }
+        ?: healthDataRangeStart(range, now)
     if (oldestStart >= recentStart) {
         return listOf(HealthConnectReadRange(oldestStart, now))
     }

@@ -30,7 +30,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import one.aozora.darkhour.data.HealthConnectAccess
 import one.aozora.darkhour.BuildConfig
-import one.aozora.darkhour.data.HealthDataRange
+import one.aozora.darkhour.data.HistoryPermissionState
 import one.aozora.darkhour.ui.LocalActogramDisplay
 import one.aozora.darkhour.ui.LocalAppSettings
 import one.aozora.darkhour.ui.LocalHealthConnectState
@@ -54,7 +54,6 @@ fun ActogramScreen(
     if (healthConnect.access != HealthConnectAccess.CONNECTED) {
         HealthConnectGate(
             access = healthConnect.access,
-            dataRangeRequiresHistoryPermission = healthConnect.dataRange.requiresHistoryPermission,
             onRequestPermissions = healthConnect.onRequestHealthPermissions,
             onInstallHealthConnect = healthConnect.onInstallHealthConnect,
             onOpenHealthConnect = healthConnect.onOpenHealthConnect,
@@ -80,16 +79,14 @@ fun ActogramScreen(
                 onTransformingChange = onTransformingChange,
                 modifier = Modifier.fillMaxSize().testTag("actogram_canvas"),
             )
-            if (!healthConnect.hasHistoryPermission && !settings.historyAccessCalloutDismissed) {
+            if (
+                healthConnect.dataRange.extendsBeyondDefaultPeriod &&
+                healthConnect.historyPermissionState == HistoryPermissionState.AVAILABLE_NOT_GRANTED &&
+                !settings.historyAccessCalloutDismissed
+            ) {
                 HistoryAccessCallout(
                     dataRange = healthConnect.dataRange,
-                    onAllowHistory = {
-                        if (healthConnect.dataRange == HealthDataRange.ENTIRE_HISTORY) {
-                            healthConnect.onRequestHistoryPermission()
-                        } else {
-                            healthConnect.onDataRangeChange(HealthDataRange.ENTIRE_HISTORY)
-                        }
-                    },
+                    onAllowHistory = healthConnect.onRequestHistoryPermission,
                     onDismiss = {
                         onSettingsChange(
                             settings.copy(historyAccessCalloutDismissed = true),

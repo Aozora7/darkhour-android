@@ -17,7 +17,7 @@ internal suspend fun HealthConnectClient.readSleepRecords(
     zoneId: ZoneId,
     ownedPackageName: String,
     initialImportDuration: Duration = DEFAULT_HISTORY_DURATION,
-    readTotalHistoryDays: Boolean = range == HealthDataRange.EntireHistory,
+    hasCompleteHistoryAccess: Boolean = true,
     onProgress: (HealthImportProgress) -> Unit = {},
 ): ImportedSleepRecords {
     return readSleepRecordsRecentFirst(
@@ -26,7 +26,7 @@ internal suspend fun HealthConnectClient.readSleepRecords(
         zoneId = zoneId,
         ownedPackageName = ownedPackageName,
         initialImportDuration = initialImportDuration,
-        readTotalHistoryDays = readTotalHistoryDays,
+        hasCompleteHistoryAccess = hasCompleteHistoryAccess,
         onProgress = onProgress,
     )
 }
@@ -37,7 +37,7 @@ internal suspend fun HealthConnectClient.readSleepRecordsRecentFirst(
     zoneId: ZoneId,
     ownedPackageName: String,
     initialImportDuration: Duration = DEFAULT_HISTORY_DURATION,
-    readTotalHistoryDays: Boolean = range == HealthDataRange.EntireHistory,
+    hasCompleteHistoryAccess: Boolean = true,
     onProgress: (HealthImportProgress) -> Unit = {},
 ): ImportedSleepRecords {
     val accumulator = ImportedSleepAccumulator(zoneId, ownedPackageName)
@@ -47,22 +47,26 @@ internal suspend fun HealthConnectClient.readSleepRecordsRecentFirst(
     accumulator.add(recentRecords)
     val recentResolved = accumulator.resolvedRecords()
     currentCoroutineContext().ensureActive()
-    val oldestAvailableStart = if (readTotalHistoryDays) {
+    val oldestAvailableStart = if (hasCompleteHistoryAccess) {
         readOldestSleepRecord(Instant.EPOCH, now)?.startTime
     } else {
         null
     }
-    val olderRanges = if (range == HealthDataRange.EntireHistory && oldestAvailableStart == null) {
-        emptyList()
+    val olderReads = if (hasCompleteHistoryAccess) {
+        if (range == HealthDataRange.EntireHistory && oldestAvailableStart == null) {
+            emptyList()
+        } else {
+            healthConnectReadRanges(
+                range = range,
+                now = now,
+                oldestAvailableStart = oldestAvailableStart,
+                initialImportDuration = initialImportDuration,
+            ).drop(1).map { AccessibleHistoryRead(it, ownedOnly = false) }
+        }
     } else {
-        healthConnectReadRanges(
-            range = range,
-            now = now,
-            oldestAvailableStart = oldestAvailableStart,
-            initialImportDuration = initialImportDuration,
-        ).drop(1)
+        accessibleHistoryReads(range, now, recentRange.start)
     }
-    if (olderRanges.isNotEmpty()) {
+    if (olderReads.isNotEmpty()) {
         onProgress(
             HealthImportProgress(
                 phase = HealthImportPhase.HISTORY,
@@ -74,9 +78,14 @@ internal suspend fun HealthConnectClient.readSleepRecordsRecentFirst(
             ),
         )
     }
-    olderRanges.forEachIndexed { index, readRange ->
+    olderReads.forEachIndexed { index, read ->
         currentCoroutineContext().ensureActive()
-        val rawRecords = readSleepRecordsPageRange(readRange.start, readRange.end)
+        val origins = if (read.ownedOnly) {
+            setOf(DataOrigin(ownedPackageName))
+        } else {
+            emptySet()
+        }
+        val rawRecords = readSleepRecordsPageRange(read.range.start, read.range.end, origins)
         accumulator.add(rawRecords)
         currentCoroutineContext().ensureActive()
         onProgress(
@@ -85,7 +94,7 @@ internal suspend fun HealthConnectClient.readSleepRecordsRecentFirst(
                 records = null,
                 importedRecordCount = accumulator.size,
                 expectedRecordCount = null,
-                isImportPartial = index < olderRanges.lastIndex,
+                isImportPartial = index < olderReads.lastIndex,
             ),
         )
     }
@@ -94,7 +103,11 @@ internal suspend fun HealthConnectClient.readSleepRecordsRecentFirst(
     return ImportedSleepRecords(
         records = resolved.records,
         analysisRecords = resolved.analysisRecords,
-        totalHistoryDays = totalHistoryDaysFromOldest(oldestAvailableStart, now, zoneId),
+        totalHistoryDays = if (hasCompleteHistoryAccess) {
+            totalHistoryDaysFromOldest(oldestAvailableStart, now, zoneId)
+        } else {
+            null
+        },
         fileImportedRecordCount = accumulator.fileImportedRecordCount,
     )
 }

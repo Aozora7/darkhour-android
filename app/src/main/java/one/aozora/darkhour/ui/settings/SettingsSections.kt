@@ -37,6 +37,7 @@ import one.aozora.darkhour.R
 import one.aozora.darkhour.data.HealthConnectAccess
 import one.aozora.darkhour.data.HealthConnectFileOperation
 import one.aozora.darkhour.data.HealthDataRange
+import one.aozora.darkhour.data.HistoryPermissionState
 import one.aozora.darkhour.data.SleepExportRange
 import one.aozora.darkhour.ui.HealthConnectState
 import java.time.Instant
@@ -145,10 +146,7 @@ internal fun DataSettingsSection(
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        if (
-            !healthConnect.hasHistoryPermission &&
-            providerAvailable
-        ) {
+        if (healthConnect.historyPermissionState.canRequestPermission && providerAvailable) {
             OutlinedButton(
                 onClick = healthConnect.onRequestHistoryPermission,
                 modifier = Modifier.testTag("request_history_permission"),
@@ -156,6 +154,19 @@ internal fun DataSettingsSection(
             ) {
                 Text("Allow history access")
             }
+        } else if (
+            healthConnect.historyPermissionState == HistoryPermissionState.UNAVAILABLE &&
+            providerAvailable &&
+            healthDataRange.extendsBeyondDefaultPeriod
+        ) {
+            Text(
+                "All available shows every record Health Connect currently makes available " +
+                    "to Dark Hour. Older records, including Dark Hour imports, may be " +
+                    "unavailable on this device.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.testTag("history_permission_unavailable"),
+            )
         }
     }
 }
@@ -355,7 +366,7 @@ private fun SleepExportDialog(
                         Text("$customDays days")
                     }
                     TextButton(onClick = { onRangeChange(LocalDate.ofEpochDay(0), today) }) {
-                        Text("All history")
+                        Text("All available")
                     }
                 }
                 when {

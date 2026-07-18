@@ -33,7 +33,6 @@ import one.aozora.darkhour.data.HealthDataRange
 @Composable
 internal fun HealthConnectGate(
     access: HealthConnectAccess,
-    dataRangeRequiresHistoryPermission: Boolean,
     onRequestPermissions: () -> Unit,
     onInstallHealthConnect: () -> Unit,
     onOpenHealthConnect: () -> Unit,
@@ -63,11 +62,8 @@ internal fun HealthConnectGate(
             Spacer(Modifier.height(10.dp))
             Text(
                 text = when (access) {
-                    HealthConnectAccess.PERMISSION_REQUIRED -> if (dataRangeRequiresHistoryPermission) {
-                        "Allow sleep and history access to show your complete actogram."
-                    } else {
-                        "Allow sleep access to show your last 30 days in the actogram."
-                    }
+                    HealthConnectAccess.PERMISSION_REQUIRED ->
+                        "Allow sleep access to show your Health Connect records in the actogram."
                     HealthConnectAccess.SETUP_REQUIRED ->
                         "Finish setup in Health Connect, then return to allow access."
                     HealthConnectAccess.UPDATE_REQUIRED ->
@@ -147,7 +143,7 @@ internal fun HistoryAccessCallout(
                     fontWeight = FontWeight.SemiBold,
                 )
                 Text(
-                    "Allow history access to inspect older sleep records.",
+                    "Allow complete history access to include older records from other apps.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -178,6 +174,6 @@ internal fun HistoryAccessCallout(
 private fun historyAccessTitle(dataRange: HealthDataRange): String =
     when (dataRange) {
         HealthDataRange.DefaultPeriod -> "Showing last 30 days"
-        HealthDataRange.EntireHistory -> "History access required"
+        HealthDataRange.EntireHistory -> "Some older records may be unavailable"
         is HealthDataRange.Custom -> "Showing last ${dataRange.days} days"
     }

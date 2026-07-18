@@ -42,6 +42,24 @@ class HealthConnectSleepImportTest {
     }
 
     @Test
+    fun defaultRangeExcludesReadableRecordsOlderThanRollingThirtyDays() {
+        val now = Instant.parse("2026-06-20T00:00:00Z")
+        val imported = importSleepRecords(
+            rawRecords = listOf(
+                sleepRecord(now.minus(Duration.ofDays(45))),
+                sleepRecord(now.minus(Duration.ofDays(10))),
+            ),
+            range = HealthDataRange.DEFAULT_PERIOD,
+            now = now,
+            zoneId = ZoneId.of("UTC"),
+            totalHistoryComplete = false,
+        )
+
+        assertEquals(listOf(now.minus(Duration.ofDays(10))), imported.records.map { it.record.startTime })
+        assertNull(imported.totalHistoryDays)
+    }
+
+    @Test
     fun defaultRangePlansOnlyRecentThirtyDays() {
         val now = Instant.parse("2026-06-20T00:00:00Z")
 
@@ -166,6 +184,70 @@ class HealthConnectSleepImportTest {
         assertTrue(sleep.sleepScore != null)
         assertEquals("Night sleep", imported.title)
         assertEquals("Felt rested", imported.notes)
+    }
+
+    @Test
+    fun limitedDefaultRangeReadsOnlyRemainingRollingThirtyDays() {
+        val now = Instant.parse("2026-06-20T00:00:00Z")
+        val recentStart = now.minus(Duration.ofDays(8))
+
+        val reads = accessibleHistoryReads(HealthDataRange.DEFAULT_PERIOD, now, recentStart)
+
+        assertEquals(
+            listOf(
+                AccessibleHistoryRead(
+                    HealthConnectReadRange(now.minus(Duration.ofDays(30)), recentStart),
+                    ownedOnly = false,
+                ),
+            ),
+            reads,
+        )
+    }
+
+    @Test
+    fun limitedCustomRangeAddsOwnedReadOnlyBeforeRollingBoundary() {
+        val now = Instant.parse("2026-06-20T00:00:00Z")
+        val selectedStart = now.minus(Duration.ofDays(90))
+        val recentStart = now.minus(Duration.ofDays(8))
+        val rollingBoundary = now.minus(Duration.ofDays(30))
+
+        val reads = accessibleHistoryReads(HealthDataRange.custom(90), now, recentStart)
+
+        assertEquals(
+            listOf(
+                AccessibleHistoryRead(
+                    HealthConnectReadRange(selectedStart, recentStart),
+                    ownedOnly = false,
+                ),
+                AccessibleHistoryRead(
+                    HealthConnectReadRange(selectedStart, rollingBoundary),
+                    ownedOnly = true,
+                ),
+            ),
+            reads,
+        )
+    }
+
+    @Test
+    fun limitedAllAvailableReadsFromEpochAndGuaranteesOwnedHistory() {
+        val now = Instant.parse("2026-06-20T00:00:00Z")
+        val recentStart = now.minus(Duration.ofDays(30))
+
+        val reads = accessibleHistoryReads(HealthDataRange.ENTIRE_HISTORY, now, recentStart)
+
+        assertEquals(
+            listOf(
+                AccessibleHistoryRead(
+                    HealthConnectReadRange(Instant.EPOCH, recentStart),
+                    ownedOnly = false,
+                ),
+                AccessibleHistoryRead(
+                    HealthConnectReadRange(Instant.EPOCH, recentStart),
+                    ownedOnly = true,
+                ),
+            ),
+            reads,
+        )
     }
 
     @Test

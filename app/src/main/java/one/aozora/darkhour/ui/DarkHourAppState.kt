@@ -14,6 +14,7 @@ import one.aozora.darkhour.data.HealthConnectAccess
 import one.aozora.darkhour.data.HealthConnectFileOperation
 import one.aozora.darkhour.data.HealthDataRange
 import one.aozora.darkhour.data.HealthImportPhase
+import one.aozora.darkhour.data.HistoryPermissionState
 import one.aozora.darkhour.data.SleepExportPreparation
 import one.aozora.darkhour.data.SleepExportRange
 import one.aozora.darkhour.data.SleepExportResult
@@ -65,7 +66,7 @@ fun rememberDarkHourAppState(
     onScheduleEntriesChange: (List<ScheduleEntry>) -> Unit,
     healthConnectAccess: HealthConnectAccess,
     healthDataRange: HealthDataRange,
-    hasHistoryPermission: Boolean,
+    historyPermissionState: HistoryPermissionState,
     statsAllRecords: List<SleepRecord>?,
     isRefreshing: Boolean,
     isStatsAllDataRefreshing: Boolean,
@@ -76,6 +77,7 @@ fun rememberDarkHourAppState(
     importError: String?,
     statsAllDataError: String?,
     totalHistoryDays: Int?,
+    availableHistoryDays: Int,
     fileWriteSupported: Boolean,
     fileDeletionSupported: Boolean,
     fileImportedRecordCount: Int,
@@ -110,7 +112,7 @@ fun rememberDarkHourAppState(
         healthConnect = HealthConnectState(
             access = healthConnectAccess,
             dataRange = healthDataRange,
-            hasHistoryPermission = hasHistoryPermission,
+            historyPermissionState = historyPermissionState,
             statsAllRecords = statsAllRecords,
             isRefreshing = isRefreshing,
             isStatsAllDataRefreshing = isStatsAllDataRefreshing,
@@ -121,6 +123,7 @@ fun rememberDarkHourAppState(
             importError = importError,
             statsAllDataError = statsAllDataError,
             totalHistoryDays = totalHistoryDays,
+            availableHistoryDays = availableHistoryDays,
             fileWriteSupported = fileWriteSupported,
             fileDeletionSupported = fileDeletionSupported,
             fileImportedRecordCount = fileImportedRecordCount,

@@ -7,7 +7,7 @@ sealed class HealthDataRange {
     data object EntireHistory : HealthDataRange()
     data class Custom(val days: Int) : HealthDataRange()
 
-    val requiresHistoryPermission: Boolean
+    val extendsBeyondDefaultPeriod: Boolean
         get() = this == EntireHistory || (this is Custom && days > MINIMUM_CUSTOM_DAYS)
 
     companion object {
@@ -19,6 +19,18 @@ sealed class HealthDataRange {
         fun custom(days: Int): HealthDataRange =
             Custom(days.coerceAtLeast(MINIMUM_CUSTOM_DAYS))
     }
+}
+
+enum class HistoryPermissionState {
+    GRANTED,
+    AVAILABLE_NOT_GRANTED,
+    UNAVAILABLE;
+
+    val hasCompleteHistoryAccess: Boolean
+        get() = this == GRANTED
+
+    val canRequestPermission: Boolean
+        get() = this == AVAILABLE_NOT_GRANTED
 }
 
 enum class HealthConnectAccess {
@@ -47,7 +59,8 @@ data class HealthConnectUiState(
     val access: HealthConnectAccess = HealthConnectAccess.UNAVAILABLE,
     val dataRange: HealthDataRange = HealthDataRange.DEFAULT_PERIOD,
     val totalHistoryDays: Int? = null,
-    val hasHistoryPermission: Boolean = false,
+    val availableHistoryDays: Int = HealthDataRange.MINIMUM_CUSTOM_DAYS,
+    val historyPermissionState: HistoryPermissionState = HistoryPermissionState.UNAVAILABLE,
     val isRefreshing: Boolean = false,
     val isStatsAllDataRefreshing: Boolean = false,
     val importedRecordCount: Int = 0,

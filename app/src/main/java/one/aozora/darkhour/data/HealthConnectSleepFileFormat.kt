@@ -65,11 +65,18 @@ data class SleepExportResult(
 
 internal suspend fun HealthConnectClient.prepareSleepExport(
     range: SleepExportRange,
+    ownedPackageName: String,
+    hasCompleteHistoryAccess: Boolean,
     packageDisplayName: (String) -> String,
 ): SleepExportPreparation {
     val counts = linkedMapOf<String, Int>()
     var oldestStart: Instant? = null
-    forEachSleepRecordPage(range, emptySet()) { records ->
+    forEachAccessibleSleepRecordPage(
+        range = range,
+        origins = emptySet(),
+        ownedPackageName = ownedPackageName,
+        hasCompleteHistoryAccess = hasCompleteHistoryAccess,
+    ) { records ->
         records.forEach { record ->
             oldestStart = minOf(oldestStart ?: record.startTime, record.startTime)
             val packageName = record.metadata.dataOrigin.packageName
@@ -93,6 +100,8 @@ internal suspend fun HealthConnectClient.writeSleepExport(
     uri: Uri,
     range: SleepExportRange,
     packageNames: Set<String>,
+    ownedPackageName: String,
+    hasCompleteHistoryAccess: Boolean,
     clock: Clock = Clock.systemUTC(),
 ): SleepExportResult {
     require(packageNames.isNotEmpty())
@@ -111,7 +120,12 @@ internal suspend fun HealthConnectClient.writeSleepExport(
             writer.name("endDate").value(range.endDate.toString())
             writer.name("sleep").beginArray()
             val origins = packageNames.mapTo(linkedSetOf()) { DataOrigin(it) }
-            forEachSleepRecordPage(range, origins) { records ->
+            forEachAccessibleSleepRecordPage(
+                range = range,
+                origins = origins,
+                ownedPackageName = ownedPackageName,
+                hasCompleteHistoryAccess = hasCompleteHistoryAccess,
+            ) { records ->
                 records.forEach { record ->
                     writer.writeSleepSession(record)
                     exported += 1
@@ -123,6 +137,32 @@ internal suspend fun HealthConnectClient.writeSleepExport(
     }
     return SleepExportResult(exported, packageNames.size)
 }
+
+private suspend fun HealthConnectClient.forEachAccessibleSleepRecordPage(
+    range: SleepExportRange,
+    origins: Set<DataOrigin>,
+    ownedPackageName: String,
+    hasCompleteHistoryAccess: Boolean,
+    consume: (List<SleepSessionRecord>) -> Unit,
+) {
+    val seenRecords = mutableSetOf<String>()
+    fun consumeUnseen(records: List<SleepSessionRecord>) {
+        val unseen = records.filter { seenRecords.add(it.exportIdentity()) }
+        if (unseen.isNotEmpty()) consume(unseen)
+    }
+    forEachSleepRecordPage(range, origins, ::consumeUnseen)
+    if (!hasCompleteHistoryAccess && (origins.isEmpty() || origins.any { it.packageName == ownedPackageName })) {
+        forEachSleepRecordPage(range, setOf(DataOrigin(ownedPackageName)), ::consumeUnseen)
+    }
+}
+
+private fun SleepSessionRecord.exportIdentity(): String = metadata.id.takeIf(String::isNotBlank)
+    ?: listOf(
+        metadata.dataOrigin.packageName,
+        metadata.clientRecordId.orEmpty(),
+        startTime.toString(),
+        endTime.toString(),
+    ).joinToString("|")
 
 private suspend fun HealthConnectClient.forEachSleepRecordPage(
     range: SleepExportRange,

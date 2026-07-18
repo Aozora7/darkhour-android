@@ -12,6 +12,7 @@ import one.aozora.darkhour.data.HealthConnectAccess
 import one.aozora.darkhour.data.HealthDataRange
 import one.aozora.darkhour.data.HealthImportPhase
 import one.aozora.darkhour.data.HealthConnectFileOperation
+import one.aozora.darkhour.data.HistoryPermissionState
 import one.aozora.darkhour.data.SleepFileImportResult
 import one.aozora.darkhour.data.SleepExportPreparation
 import one.aozora.darkhour.data.SleepExportRange
@@ -84,7 +85,7 @@ data class ScheduleState(
 data class HealthConnectState(
     val access: HealthConnectAccess,
     val dataRange: HealthDataRange,
-    val hasHistoryPermission: Boolean,
+    val historyPermissionState: HistoryPermissionState,
     val statsAllRecords: List<SleepRecord>?,
     val isRefreshing: Boolean,
     val isStatsAllDataRefreshing: Boolean,
@@ -95,6 +96,7 @@ data class HealthConnectState(
     val importError: String?,
     val statsAllDataError: String?,
     val totalHistoryDays: Int?,
+    val availableHistoryDays: Int,
     val fileWriteSupported: Boolean,
     val fileDeletionSupported: Boolean,
     val fileImportedRecordCount: Int,

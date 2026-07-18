@@ -35,7 +35,7 @@ fun SettingsScreen(
         ?: HealthDataRange.DEFAULT_CUSTOM_DAYS
     val maxCustomDays = maxOf(
         HealthDataRange.MINIMUM_CUSTOM_DAYS,
-        healthConnect.totalHistoryDays ?: customDays,
+        healthConnect.totalHistoryDays ?: healthConnect.availableHistoryDays,
     )
     var pendingCustomDays by remember(healthDataRange, maxCustomDays) {
         mutableFloatStateOf(customDays.coerceIn(HealthDataRange.MINIMUM_CUSTOM_DAYS, maxCustomDays).toFloat())

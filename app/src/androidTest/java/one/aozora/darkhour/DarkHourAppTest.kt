@@ -30,6 +30,7 @@ import one.aozora.darkhour.ui.theme.DarkHourTheme
 import one.aozora.darkhour.ui.settings.AppSettings
 import one.aozora.darkhour.data.HealthConnectAccess
 import one.aozora.darkhour.data.HealthDataRange
+import one.aozora.darkhour.data.HistoryPermissionState
 import one.aozora.darkhour.data.SleepExportPackage
 import one.aozora.darkhour.data.SleepExportPreparation
 import one.aozora.darkhour.data.SleepExportRange
@@ -318,7 +319,7 @@ class DarkHourAppTest {
                 DarkHourApp(
                     records = emptyList(),
                     healthConnectAccess = HealthConnectAccess.INSTALL_REQUIRED,
-                    hasHistoryPermission = false,
+                    historyPermissionState = HistoryPermissionState.UNAVAILABLE,
                 )
             }
         }
@@ -369,13 +370,77 @@ class DarkHourAppTest {
     }
 
     @Test
+    fun customRangeDefaultsToObservedThirtyDayMaximum() {
+        var selectedRange by mutableStateOf(HealthDataRange.DEFAULT_PERIOD)
+        composeRule.setContent {
+            DarkHourTheme {
+                DarkHourApp(
+                    records = DemoData.records.take(30),
+                    healthDataRange = selectedRange,
+                    availableHistoryDays = 30,
+                    onHealthDataRangeChange = { selectedRange = it },
+                )
+            }
+        }
+
+        composeRule.onNodeWithTag("destination_settings").performClick()
+        composeRule.onNodeWithTag("health_range_custom").performClick()
+
+        composeRule.runOnIdle { assertTrue(selectedRange == HealthDataRange.custom(30)) }
+        composeRule.onAllNodesWithTag("health_range_custom_days").assertCountEquals(0)
+    }
+
+    @Test
+    fun shorteningCustomRangeDoesNotShrinkSliderMaximum() {
+        var selectedRange by mutableStateOf<HealthDataRange>(HealthDataRange.custom(90))
+        composeRule.setContent {
+            DarkHourTheme {
+                DarkHourApp(
+                    records = DemoData.records,
+                    healthDataRange = selectedRange,
+                    availableHistoryDays = 120,
+                    onHealthDataRangeChange = { selectedRange = it },
+                )
+            }
+        }
+
+        composeRule.onNodeWithTag("destination_settings").performClick()
+        composeRule.onNodeWithTag("health_range_custom_days").performTouchInput {
+            swipe(
+                start = Offset(width * 0.67f, centerY),
+                end = Offset(width * 0.05f, centerY),
+                durationMillis = 500,
+            )
+        }
+        composeRule.waitForIdle()
+
+        var shortenedDays = 0
+        composeRule.runOnIdle {
+            shortenedDays = (selectedRange as HealthDataRange.Custom).days
+            assertTrue(shortenedDays < 90)
+        }
+        composeRule.onNodeWithTag("health_range_custom_days").assertIsDisplayed()
+            .performTouchInput {
+                swipe(
+                    start = Offset(width * 0.05f, centerY),
+                    end = Offset(width * 0.95f, centerY),
+                    durationMillis = 500,
+                )
+            }
+        composeRule.waitForIdle()
+        composeRule.runOnIdle {
+            assertTrue((selectedRange as HealthDataRange.Custom).days > shortenedDays)
+        }
+    }
+
+    @Test
     fun historyPermissionCanBeRequestedFromSettings() {
         var requested = false
         composeRule.setContent {
             DarkHourTheme {
                 DarkHourApp(
                     records = DemoData.records,
-                    hasHistoryPermission = false,
+                    historyPermissionState = HistoryPermissionState.AVAILABLE_NOT_GRANTED,
                     onRequestHistoryPermission = { requested = true },
                 )
             }
@@ -388,6 +453,31 @@ class DarkHourAppTest {
         composeRule.runOnIdle {
             assertTrue(requested)
         }
+    }
+
+    @Test
+    fun unavailableHistoryFeatureExplainsAccessibleHistoryWithoutAction() {
+        composeRule.setContent {
+            DarkHourTheme {
+                DarkHourApp(
+                    records = DemoData.records,
+                    healthDataRange = HealthDataRange.ENTIRE_HISTORY,
+                    historyPermissionState = HistoryPermissionState.UNAVAILABLE,
+                )
+            }
+        }
+
+        composeRule.onNodeWithTag("destination_settings").performClick()
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag("history_permission_unavailable")
+            .assertIsDisplayed()
+            .assertTextEquals(
+                "All available shows every record Health Connect currently makes available " +
+                    "to Dark Hour. Older records, including Dark Hour imports, may be " +
+                    "unavailable on this device.",
+            )
+        composeRule.onAllNodesWithTag("request_history_permission").assertCountEquals(0)
     }
 
     @Test
@@ -563,7 +653,7 @@ class DarkHourAppTest {
 
         composeRule.onAllNodesWithTag("stats_scope_selected").assertCountEquals(0)
         composeRule.onAllNodesWithTag("stats_scope_all").assertCountEquals(0)
-        composeRule.onNodeWithText("Health Connect · All history", substring = true).assertIsDisplayed()
+        composeRule.onNodeWithText("Health Connect · All available", substring = true).assertIsDisplayed()
     }
 
     @Test
@@ -592,8 +682,9 @@ class DarkHourAppTest {
     }
 
     @Test
-    fun statsAllDataRequestsHistoryPermissionWithoutChangingRange() {
-        var requested = false
+    fun statsAllDataLoadsAccessibleHistoryWithoutChangingRange() {
+        var historyRequested = false
+        var allDataRequests = 0
         var selectedRange by mutableStateOf(HealthDataRange.DEFAULT_PERIOD)
         composeRule.setContent {
             DarkHourTheme {
@@ -601,8 +692,9 @@ class DarkHourAppTest {
                     records = DemoData.records,
                     statsAllRecords = null,
                     healthDataRange = selectedRange,
-                    hasHistoryPermission = false,
-                    onRequestHistoryPermission = { requested = true },
+                    historyPermissionState = HistoryPermissionState.AVAILABLE_NOT_GRANTED,
+                    onRequestHistoryPermission = { historyRequested = true },
+                    onRequestStatsAllData = { allDataRequests += 1 },
                     onHealthDataRangeChange = { selectedRange = it },
                 )
             }
@@ -613,7 +705,8 @@ class DarkHourAppTest {
         composeRule.onNodeWithTag("stats_scope_all").performClick()
 
         composeRule.runOnIdle {
-            assertTrue(requested)
+            assertTrue(!historyRequested)
+            assertTrue(allDataRequests > 0)
             assertTrue(selectedRange == HealthDataRange.DEFAULT_PERIOD)
         }
     }
@@ -626,7 +719,7 @@ class DarkHourAppTest {
                     records = DemoData.records.take(8),
                     statsAllRecords = null,
                     healthDataRange = HealthDataRange.custom(90),
-                    hasHistoryPermission = true,
+                    historyPermissionState = HistoryPermissionState.GRANTED,
                 )
             }
         }
@@ -640,26 +733,18 @@ class DarkHourAppTest {
     }
 
     @Test
-    fun historyPermissionCalloutSwitchesToAllHistoryFromActogram() {
-        var selectedRange by mutableStateOf(HealthDataRange.DEFAULT_PERIOD)
+    fun historyPermissionCalloutIsNotShownForLastThirtyDays() {
         composeRule.setContent {
             DarkHourTheme {
                 DarkHourApp(
                     records = DemoData.records,
-                    healthDataRange = selectedRange,
-                    hasHistoryPermission = false,
-                    onHealthDataRangeChange = { selectedRange = it },
+                    healthDataRange = HealthDataRange.DEFAULT_PERIOD,
+                    historyPermissionState = HistoryPermissionState.AVAILABLE_NOT_GRANTED,
                 )
             }
         }
 
-        composeRule.onNodeWithTag("actogram_history_callout").assertIsDisplayed()
-        composeRule.onNodeWithText("Showing last 30 days").assertIsDisplayed()
-        composeRule.onNodeWithTag("actogram_request_history_permission").performClick()
-
-        composeRule.runOnIdle {
-            assertTrue(selectedRange == HealthDataRange.ENTIRE_HISTORY)
-        }
+        composeRule.onAllNodesWithTag("actogram_history_callout").assertCountEquals(0)
     }
 
     @Test
@@ -670,7 +755,7 @@ class DarkHourAppTest {
                 DarkHourApp(
                     records = DemoData.records,
                     healthDataRange = HealthDataRange.ENTIRE_HISTORY,
-                    hasHistoryPermission = false,
+                    historyPermissionState = HistoryPermissionState.AVAILABLE_NOT_GRANTED,
                     onRequestHistoryPermission = { requested = true },
                 )
             }
@@ -692,7 +777,8 @@ class DarkHourAppTest {
                     records = DemoData.records,
                     initialSettings = settings,
                     onAppSettingsChange = { settings = it },
-                    hasHistoryPermission = false,
+                    healthDataRange = HealthDataRange.ENTIRE_HISTORY,
+                    historyPermissionState = HistoryPermissionState.AVAILABLE_NOT_GRANTED,
                 )
             }
         }

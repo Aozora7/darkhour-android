@@ -20,7 +20,8 @@ internal fun HealthConnectUiState.withProviderUnavailable(
     analysisRecords = emptyList(),
     access = access,
     totalHistoryDays = null,
-    hasHistoryPermission = false,
+    availableHistoryDays = HealthDataRange.MINIMUM_CUSTOM_DAYS,
+    historyPermissionState = HistoryPermissionState.UNAVAILABLE,
     isRefreshing = false,
     importedRecordCount = 0,
     fileImportedRecordCount = 0,
@@ -31,14 +32,14 @@ internal fun HealthConnectUiState.withProviderUnavailable(
 )
 
 internal fun HealthConnectUiState.withReadPermissionRequired(
-    hasHistoryPermission: Boolean,
+    historyPermissionState: HistoryPermissionState,
 ): HealthConnectUiState = copy(
     records = emptyList(),
     recordMetadata = emptyMap(),
     analysisRecords = emptyList(),
     access = HealthConnectAccess.PERMISSION_REQUIRED,
-    totalHistoryDays = totalHistoryDays.takeIf { hasHistoryPermission },
-    hasHistoryPermission = hasHistoryPermission,
+    totalHistoryDays = totalHistoryDays.takeIf { historyPermissionState.hasCompleteHistoryAccess },
+    historyPermissionState = historyPermissionState,
     isRefreshing = false,
     importedRecordCount = 0,
     fileImportedRecordCount = 0,
@@ -49,10 +50,11 @@ internal fun HealthConnectUiState.withReadPermissionRequired(
 )
 
 internal fun HealthConnectUiState.withRefreshStarted(
-    hasHistoryPermission: Boolean,
+    historyPermissionState: HistoryPermissionState,
 ): HealthConnectUiState = copy(
     access = HealthConnectAccess.CONNECTED,
-    hasHistoryPermission = hasHistoryPermission,
+    statsAllRecords = statsAllRecords.takeIf { this.historyPermissionState == historyPermissionState },
+    historyPermissionState = historyPermissionState,
     isRefreshing = true,
     importedRecordCount = 0,
     expectedRecordCount = null,
@@ -66,17 +68,24 @@ internal fun HealthConnectUiState.withRefreshCompleted(
     recordMetadata: Map<Long, SleepRecordDisplayMetadata>,
     analysisRecords: List<SleepRecord>,
     importedTotalHistoryDays: Int?,
-    hasHistoryPermission: Boolean,
+    importedAvailableHistoryDays: Int,
+    historyPermissionState: HistoryPermissionState,
     fileImportedRecordCount: Int,
 ): HealthConnectUiState = copy(
     records = records,
     recordMetadata = recordMetadata,
     analysisRecords = analysisRecords,
-    totalHistoryDays = if (hasHistoryPermission) {
+    totalHistoryDays = if (historyPermissionState.hasCompleteHistoryAccess) {
         importedTotalHistoryDays ?: totalHistoryDays
     } else {
         null
     },
+    availableHistoryDays = if (historyPermissionState.hasCompleteHistoryAccess) {
+        importedTotalHistoryDays ?: importedAvailableHistoryDays
+    } else {
+        maxOf(availableHistoryDays, importedAvailableHistoryDays)
+    },
+    historyPermissionState = historyPermissionState,
     access = HealthConnectAccess.CONNECTED,
     isRefreshing = false,
     importedRecordCount = records.size,
@@ -119,16 +128,18 @@ internal fun HealthConnectUiState.withStatsUnavailable(): HealthConnectUiState =
 )
 
 internal fun HealthConnectUiState.withStatsPermissionRequired(
-    hasHistoryPermission: Boolean,
+    historyPermissionState: HistoryPermissionState,
 ): HealthConnectUiState = copy(
     statsAllRecords = null,
-    hasHistoryPermission = hasHistoryPermission,
+    historyPermissionState = historyPermissionState,
     isStatsAllDataRefreshing = false,
     statsAllDataErrorMessage = null,
 )
 
-internal fun HealthConnectUiState.withStatsRefreshStarted(): HealthConnectUiState = copy(
-    hasHistoryPermission = true,
+internal fun HealthConnectUiState.withStatsRefreshStarted(
+    historyPermissionState: HistoryPermissionState,
+): HealthConnectUiState = copy(
+    historyPermissionState = historyPermissionState,
     isStatsAllDataRefreshing = true,
     statsAllDataErrorMessage = null,
 )
@@ -136,10 +147,21 @@ internal fun HealthConnectUiState.withStatsRefreshStarted(): HealthConnectUiStat
 internal fun HealthConnectUiState.withStatsRefreshCompleted(
     records: List<SleepRecord>,
     importedTotalHistoryDays: Int?,
+    importedAvailableHistoryDays: Int,
+    historyPermissionState: HistoryPermissionState,
 ): HealthConnectUiState = copy(
     statsAllRecords = records,
-    totalHistoryDays = importedTotalHistoryDays ?: totalHistoryDays,
-    hasHistoryPermission = true,
+    totalHistoryDays = if (historyPermissionState.hasCompleteHistoryAccess) {
+        importedTotalHistoryDays ?: totalHistoryDays
+    } else {
+        null
+    },
+    availableHistoryDays = if (historyPermissionState.hasCompleteHistoryAccess) {
+        importedTotalHistoryDays ?: importedAvailableHistoryDays
+    } else {
+        maxOf(availableHistoryDays, importedAvailableHistoryDays)
+    },
+    historyPermissionState = historyPermissionState,
     isStatsAllDataRefreshing = false,
     statsAllDataErrorMessage = null,
 )

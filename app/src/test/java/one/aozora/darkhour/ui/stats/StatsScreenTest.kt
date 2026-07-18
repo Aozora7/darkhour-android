@@ -65,7 +65,7 @@ class StatsScreenTest {
             ),
         )
         assertEquals(
-            "Health Connect · All history · 1 record · 1 main sleep · naps excluded",
+            "Health Connect · All available · 1 record · 1 main sleep · naps excluded",
             statsScopeSummary(
                 dataRange = HealthDataRange.ENTIRE_HISTORY,
                 includeNaps = false,

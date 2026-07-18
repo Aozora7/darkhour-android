@@ -21,7 +21,7 @@ internal fun statsScopeSummary(
 ): String {
     val rangeLabel = when (dataRange) {
         HealthDataRange.DefaultPeriod -> "Last 30 days"
-        HealthDataRange.EntireHistory -> "All history"
+        HealthDataRange.EntireHistory -> "All available"
         is HealthDataRange.Custom -> "Last ${dataRange.days} days"
     }
     val scopeLabel = when (dataScope) {

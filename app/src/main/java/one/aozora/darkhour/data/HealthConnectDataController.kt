@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import android.os.Build
 import androidx.health.connect.client.HealthConnectClient
+import androidx.health.connect.client.HealthConnectFeatures
 import androidx.health.connect.client.PermissionController
 import androidx.health.connect.client.permission.HealthPermission
 import androidx.health.connect.client.records.SleepSessionRecord
@@ -66,12 +67,14 @@ class HealthConnectDataController(
     val isProviderAvailable: Boolean
         get() = HealthConnectClient.getSdkStatus(applicationContext) == HealthConnectClient.SDK_AVAILABLE
 
-    fun requiredPermissions(range: HealthDataRange = state.value.dataRange): Set<String> = buildSet {
-        add(SLEEP_READ_PERMISSION)
-        if (range.requiresHistoryPermission) {
-            add(HealthPermission.PERMISSION_READ_HEALTH_DATA_HISTORY)
+    fun requiredPermissions(): Set<String> = setOf(SLEEP_READ_PERMISSION)
+
+    fun historyPermissionRequest(): Set<String> =
+        if (state.value.historyPermissionState.canRequestPermission) {
+            setOf(HealthPermission.PERMISSION_READ_HEALTH_DATA_HISTORY)
+        } else {
+            emptySet()
         }
-    }
 
     suspend fun hasSleepWritePermission(): Boolean {
         if (!fileImportSupported) return false
@@ -94,12 +97,7 @@ class HealthConnectDataController(
             .containsAll(permissions)
     }
 
-    fun exportPermissions(range: SleepExportRange): Set<String> = buildSet {
-        add(SLEEP_READ_PERMISSION)
-        if (range.startInstant < clock.instant().minus(DEFAULT_HISTORY_DURATION)) {
-            add(HealthPermission.PERMISSION_READ_HEALTH_DATA_HISTORY)
-        }
-    }
+    fun exportPermissions(): Set<String> = requiredPermissions()
 
     fun reportSleepWritePermissionDenied() {
         mutableState.update {
@@ -114,7 +112,7 @@ class HealthConnectDataController(
         mutableState.update {
             it.copy(
                 fileOperation = HealthConnectFileOperation.IDLE,
-                fileOperationErrorMessage = "Health Connect history permission was not granted",
+                fileOperationErrorMessage = "Sleep read permission was not granted",
             )
         }
     }
@@ -174,6 +172,9 @@ class HealthConnectDataController(
                 val preparation = withContext(Dispatchers.IO) {
                     HealthConnectClient.getOrCreate(applicationContext).prepareSleepExport(
                         range = range,
+                        ownedPackageName = applicationContext.packageName,
+                        hasCompleteHistoryAccess = state.value.historyPermissionState
+                            .hasCompleteHistoryAccess,
                         packageDisplayName = ::packageDisplayName,
                     )
                 }
@@ -220,6 +221,9 @@ class HealthConnectDataController(
                         uri = uri,
                         range = preparation.range,
                         packageNames = packageNames,
+                        ownedPackageName = applicationContext.packageName,
+                        hasCompleteHistoryAccess = state.value.historyPermissionState
+                            .hasCompleteHistoryAccess,
                         clock = clock,
                     )
                 }
@@ -399,23 +403,23 @@ class HealthConnectDataController(
     private suspend fun refreshAvailableClient(range: HealthDataRange) {
         val client = HealthConnectClient.getOrCreate(applicationContext)
         val granted = client.permissionController.getGrantedPermissions()
-        val hasHistoryPermission =
-            HealthPermission.PERMISSION_READ_HEALTH_DATA_HISTORY in granted
-        if (!granted.containsAll(requiredPermissions(range))) {
-            mutableState.update { it.withReadPermissionRequired(hasHistoryPermission) }
+        val historyPermissionState = client.historyPermissionState(granted)
+        if (!granted.containsAll(requiredPermissions())) {
+            mutableState.update { it.withReadPermissionRequired(historyPermissionState) }
             return
         }
 
-        mutableState.update { it.withRefreshStarted(hasHistoryPermission) }
+        mutableState.update { it.withRefreshStarted(historyPermissionState) }
         try {
+            val now = clock.instant()
             val imported = withContext(Dispatchers.IO) {
                 client.readSleepRecords(
                     range = range,
-                    now = clock.instant(),
+                    now = now,
                     zoneId = zoneId,
                     ownedPackageName = applicationContext.packageName,
                     initialImportDuration = recentImportDuration,
-                    readTotalHistoryDays = hasHistoryPermission,
+                    hasCompleteHistoryAccess = historyPermissionState.hasCompleteHistoryAccess,
                     onProgress = ::publishImportProgress,
                 )
             }
@@ -426,13 +430,19 @@ class HealthConnectDataController(
                 .map(ImportedSleepRecord::record)
                 .sortedBy(SleepRecord::startTime)
             val recordMetadata = imported.records.displayMetadataByLogId(::packageDisplayName)
+            val importedAvailableHistoryDays = totalHistoryDaysFromOldest(
+                imported.records.minOfOrNull { it.record.startTime },
+                now,
+                zoneId,
+            ) ?: HealthDataRange.MINIMUM_CUSTOM_DAYS
             mutableState.update {
                 it.withRefreshCompleted(
                     records = records,
                     recordMetadata = recordMetadata,
                     analysisRecords = analysisRecords,
                     importedTotalHistoryDays = imported.totalHistoryDays,
-                    hasHistoryPermission = hasHistoryPermission,
+                    importedAvailableHistoryDays = importedAvailableHistoryDays,
+                    historyPermissionState = historyPermissionState,
                     fileImportedRecordCount = imported.fileImportedRecordCount,
                 )
             }
@@ -448,32 +458,42 @@ class HealthConnectDataController(
     private suspend fun refreshStatsAllDataAvailableClient() {
         val client = HealthConnectClient.getOrCreate(applicationContext)
         val granted = client.permissionController.getGrantedPermissions()
-        if (!granted.containsAll(requiredPermissions(HealthDataRange.ENTIRE_HISTORY))) {
+        val historyPermissionState = client.historyPermissionState(granted)
+        if (!granted.containsAll(requiredPermissions())) {
             mutableState.update {
-                it.withStatsPermissionRequired(
-                    HealthPermission.PERMISSION_READ_HEALTH_DATA_HISTORY in granted,
-                )
+                it.withStatsPermissionRequired(historyPermissionState)
             }
             return
         }
 
-        mutableState.update(HealthConnectUiState::withStatsRefreshStarted)
+        mutableState.update { it.withStatsRefreshStarted(historyPermissionState) }
         try {
+            val now = clock.instant()
             val imported = withContext(Dispatchers.IO) {
                 client.readSleepRecords(
                     range = HealthDataRange.ENTIRE_HISTORY,
-                    now = clock.instant(),
+                    now = now,
                     zoneId = zoneId,
                     ownedPackageName = applicationContext.packageName,
                     initialImportDuration = recentImportDuration,
-                    readTotalHistoryDays = true,
+                    hasCompleteHistoryAccess = historyPermissionState.hasCompleteHistoryAccess,
                 )
             }
             val records = imported.analysisRecords
                 .map(ImportedSleepRecord::record)
                 .sortedBy(SleepRecord::startTime)
+            val importedAvailableHistoryDays = totalHistoryDaysFromOldest(
+                imported.records.minOfOrNull { it.record.startTime },
+                now,
+                zoneId,
+            ) ?: HealthDataRange.MINIMUM_CUSTOM_DAYS
             mutableState.update {
-                it.withStatsRefreshCompleted(records, imported.totalHistoryDays)
+                it.withStatsRefreshCompleted(
+                    records,
+                    imported.totalHistoryDays,
+                    importedAvailableHistoryDays,
+                    historyPermissionState,
+                )
             }
         } catch (cancelled: CancellationException) {
             throw cancelled
@@ -518,6 +538,25 @@ class HealthConnectDataController(
         private val SLEEP_WRITE_PERMISSION =
             HealthPermission.getWritePermission(SleepSessionRecord::class)
     }
+}
+
+internal fun HealthConnectClient.historyPermissionState(
+    grantedPermissions: Set<String>,
+): HistoryPermissionState = historyPermissionState(
+    grantedPermissions = grantedPermissions,
+    featureAvailable = features.getFeatureStatus(
+        HealthConnectFeatures.FEATURE_READ_HEALTH_DATA_HISTORY,
+    ) == HealthConnectFeatures.FEATURE_STATUS_AVAILABLE,
+)
+
+internal fun historyPermissionState(
+    grantedPermissions: Set<String>,
+    featureAvailable: Boolean,
+): HistoryPermissionState = when {
+    HealthPermission.PERMISSION_READ_HEALTH_DATA_HISTORY in grantedPermissions ->
+        HistoryPermissionState.GRANTED
+    featureAvailable -> HistoryPermissionState.AVAILABLE_NOT_GRANTED
+    else -> HistoryPermissionState.UNAVAILABLE
 }
 
 /**

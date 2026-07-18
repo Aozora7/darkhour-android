@@ -9,7 +9,7 @@ internal enum class HealthDataRangeOption(
 ) {
     DEFAULT("Last 30 days", "health_range_default"),
     CUSTOM("Custom", "health_range_custom"),
-    HISTORY("All history", "health_range_history");
+    HISTORY("All available", "health_range_history");
 
     fun isSelected(range: HealthDataRange): Boolean = when (this) {
         DEFAULT -> range == HealthDataRange.DEFAULT_PERIOD

@@ -20,6 +20,7 @@ import kotlinx.coroutines.launch
 import one.aozora.darkhour.data.HealthConnectAccess
 import one.aozora.darkhour.data.HealthDataRange
 import one.aozora.darkhour.data.HealthImportPhase
+import one.aozora.darkhour.data.HistoryPermissionState
 import one.aozora.darkhour.data.HealthConnectFileOperation
 import one.aozora.darkhour.data.SleepFileImportResult
 import one.aozora.darkhour.data.SleepExportPreparation
@@ -45,7 +46,7 @@ fun DarkHourApp(
     onScheduleEntriesChange: (List<ScheduleEntry>) -> Unit = {},
     healthConnectAccess: HealthConnectAccess = HealthConnectAccess.CONNECTED,
     healthDataRange: HealthDataRange = HealthDataRange.DEFAULT_PERIOD,
-    hasHistoryPermission: Boolean = true,
+    historyPermissionState: HistoryPermissionState = HistoryPermissionState.GRANTED,
     statsAllRecords: List<SleepRecord>? = records,
     isRefreshing: Boolean = false,
     isStatsAllDataRefreshing: Boolean = false,
@@ -56,6 +57,7 @@ fun DarkHourApp(
     importError: String? = null,
     statsAllDataError: String? = null,
     totalHistoryDays: Int? = null,
+    availableHistoryDays: Int = HealthDataRange.MINIMUM_CUSTOM_DAYS,
     fileWriteSupported: Boolean = false,
     fileDeletionSupported: Boolean = fileWriteSupported,
     fileImportedRecordCount: Int = 0,
@@ -91,7 +93,7 @@ fun DarkHourApp(
         onScheduleEntriesChange = onScheduleEntriesChange,
         healthConnectAccess = healthConnectAccess,
         healthDataRange = healthDataRange,
-        hasHistoryPermission = hasHistoryPermission,
+        historyPermissionState = historyPermissionState,
         statsAllRecords = statsAllRecords,
         isRefreshing = isRefreshing,
         isStatsAllDataRefreshing = isStatsAllDataRefreshing,
@@ -102,6 +104,7 @@ fun DarkHourApp(
         importError = importError,
         statsAllDataError = statsAllDataError,
         totalHistoryDays = totalHistoryDays,
+        availableHistoryDays = availableHistoryDays,
         fileWriteSupported = fileWriteSupported,
         fileDeletionSupported = fileDeletionSupported,
         fileImportedRecordCount = fileImportedRecordCount,

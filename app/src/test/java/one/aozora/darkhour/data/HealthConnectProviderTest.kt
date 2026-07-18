@@ -2,10 +2,30 @@ package one.aozora.darkhour.data
 
 import android.os.Build
 import androidx.health.connect.client.HealthConnectClient
+import androidx.health.connect.client.permission.HealthPermission
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class HealthConnectProviderTest {
+    @Test
+    fun historyPermissionStateDistinguishesGrantAvailabilityAndUnavailableFeature() {
+        assertEquals(
+            HistoryPermissionState.GRANTED,
+            historyPermissionState(
+                setOf(HealthPermission.PERMISSION_READ_HEALTH_DATA_HISTORY),
+                featureAvailable = false,
+            ),
+        )
+        assertEquals(
+            HistoryPermissionState.AVAILABLE_NOT_GRANTED,
+            historyPermissionState(emptySet(), featureAvailable = true),
+        )
+        assertEquals(
+            HistoryPermissionState.UNAVAILABLE,
+            historyPermissionState(emptySet(), featureAvailable = false),
+        )
+    }
+
     @Test
     fun missingProviderRequiresInstallation() {
         assertEquals(

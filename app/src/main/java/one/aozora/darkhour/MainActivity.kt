@@ -16,6 +16,7 @@ import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.launch
 import one.aozora.darkhour.data.HealthConnectDataController
 import one.aozora.darkhour.data.HealthDataRange
+import one.aozora.darkhour.data.HistoryPermissionState
 import one.aozora.darkhour.data.SleepExportRange
 import one.aozora.darkhour.data.shouldOfferHealthConnectSetup
 import one.aozora.darkhour.data.settings.AppSettingsStore
@@ -35,7 +36,8 @@ class MainActivity : ComponentActivity() {
     private val requestHealthPermissions = registerForActivityResult(
         HealthConnectDataController.permissionContract,
     ) { granted ->
-        if (shouldOfferHealthConnectSetup(
+        val requestKind = lastHealthPermissionRequest?.kind
+        if (requestKind == HealthPermissionRequestKind.GENERAL && shouldOfferHealthConnectSetup(
                 grantedPermissions = granted,
                 providerAvailable = healthConnect.isProviderAvailable,
                 resumedAfterSetup = lastHealthPermissionRequest?.resumedAfterSetup == true,
@@ -47,7 +49,7 @@ class MainActivity : ComponentActivity() {
             val exportRange = pendingSleepExportRange
             pendingSleepExportRange = null
             if (exportRange != null) {
-                if (granted.containsAll(healthConnect.exportPermissions(exportRange))) {
+                if (granted.containsAll(healthConnect.exportPermissions())) {
                     healthConnect.prepareSleepExport(exportRange)
                 } else {
                     healthConnect.reportSleepExportPermissionDenied()
@@ -151,7 +153,11 @@ class MainActivity : ComponentActivity() {
                     onScheduleEntriesChange = appSettings::writeScheduleEntries,
                     healthConnectAccess = healthConnectAccess,
                     healthDataRange = healthState.dataRange,
-                    hasHistoryPermission = BuildConfig.USE_DEMO_DATA || healthState.hasHistoryPermission,
+                    historyPermissionState = if (BuildConfig.USE_DEMO_DATA) {
+                        HistoryPermissionState.GRANTED
+                    } else {
+                        healthState.historyPermissionState
+                    },
                     statsAllRecords = if (BuildConfig.USE_DEMO_DATA) DemoData.records else healthState.statsAllRecords,
                     isRefreshing = !BuildConfig.USE_DEMO_DATA && healthState.isRefreshing,
                     isStatsAllDataRefreshing = !BuildConfig.USE_DEMO_DATA && healthState.isStatsAllDataRefreshing,
@@ -162,6 +168,7 @@ class MainActivity : ComponentActivity() {
                     importError = if (BuildConfig.USE_DEMO_DATA) null else healthState.errorMessage,
                     statsAllDataError = if (BuildConfig.USE_DEMO_DATA) null else healthState.statsAllDataErrorMessage,
                     totalHistoryDays = healthState.totalHistoryDays,
+                    availableHistoryDays = healthState.availableHistoryDays,
                     fileWriteSupported = !BuildConfig.USE_DEMO_DATA && healthState.fileWriteSupported,
                     fileDeletionSupported = !BuildConfig.USE_DEMO_DATA && healthState.fileDeletionSupported,
                     fileImportedRecordCount = healthState.fileImportedRecordCount,
@@ -173,12 +180,13 @@ class MainActivity : ComponentActivity() {
                     fileOperationError = healthState.fileOperationErrorMessage,
                     onRequestHealthPermissions = {
                         if (!BuildConfig.USE_DEMO_DATA) {
-                            launchHealthConnectPermissions(healthState.dataRange)
+                            launchHealthConnectPermissions()
                         }
                     },
                     onRequestHistoryPermission = {
                         if (!BuildConfig.USE_DEMO_DATA) {
-                            launchHealthConnectPermissions(HealthDataRange.ENTIRE_HISTORY)
+                            val permissions = healthConnect.historyPermissionRequest()
+                            if (permissions.isNotEmpty()) launchHistoryPermissionRequest(permissions)
                         }
                     },
                     onInstallHealthConnect = ::openHealthConnectProviderListing,
@@ -194,12 +202,6 @@ class MainActivity : ComponentActivity() {
                         } else if (healthConnect.isProviderAvailable) {
                             appSettings.writeHealthDataRange(range)
                             healthConnect.setDataRange(range)
-                            if (
-                                range.requiresHistoryPermission &&
-                                range != healthState.dataRange
-                            ) {
-                                launchHealthConnectPermissions(range)
-                            }
                         }
                     },
                     onImportSleepFiles = {
@@ -282,7 +284,7 @@ class MainActivity : ComponentActivity() {
             return
         }
         lifecycleScope.launch {
-            val permissions = healthConnect.exportPermissions(range)
+            val permissions = healthConnect.exportPermissions()
             if (healthConnect.hasPermissions(permissions)) {
                 healthConnect.prepareSleepExport(range)
             } else {
@@ -293,8 +295,8 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun launchHealthConnectPermissions(range: HealthDataRange) {
-        launchHealthConnectPermissions(healthConnect.requiredPermissions(range))
+    private fun launchHealthConnectPermissions() {
+        launchHealthConnectPermissions(healthConnect.requiredPermissions())
     }
 
     private fun launchHealthConnectPermissions(permissions: Set<String>) {
@@ -302,6 +304,15 @@ class MainActivity : ComponentActivity() {
             PendingHealthPermissionRequest(
                 permissions = permissions,
                 kind = HealthPermissionRequestKind.GENERAL,
+            ),
+        )
+    }
+
+    private fun launchHistoryPermissionRequest(permissions: Set<String>) {
+        launchHealthPermissionRequest(
+            PendingHealthPermissionRequest(
+                permissions = permissions,
+                kind = HealthPermissionRequestKind.HISTORY,
             ),
         )
     }
@@ -314,7 +325,9 @@ class MainActivity : ComponentActivity() {
         lastHealthPermissionRequest = request
         runCatching {
             when (request.kind) {
-                HealthPermissionRequestKind.GENERAL ->
+                HealthPermissionRequestKind.GENERAL,
+                HealthPermissionRequestKind.HISTORY,
+                ->
                     requestHealthPermissions.launch(request.permissions)
                 HealthPermissionRequestKind.SLEEP_WRITE ->
                     requestSleepWritePermission.launch(request.permissions)
@@ -323,6 +336,7 @@ class MainActivity : ComponentActivity() {
             lastHealthPermissionRequest = null
             when (request.kind) {
                 HealthPermissionRequestKind.GENERAL -> pendingSleepExportRange = null
+                HealthPermissionRequestKind.HISTORY -> Unit
                 HealthPermissionRequestKind.SLEEP_WRITE -> pendingSleepWriteAction = null
             }
             healthConnect.refresh()
@@ -372,6 +386,7 @@ private data class PendingHealthPermissionRequest(
 
 private enum class HealthPermissionRequestKind {
     GENERAL,
+    HISTORY,
     SLEEP_WRITE,
 }
 

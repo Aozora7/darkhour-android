@@ -24,7 +24,8 @@ class HealthConnectControllerStateTest {
         assertEquals(emptyMap<Long, SleepRecordDisplayMetadata>(), updated.recordMetadata)
         assertEquals(emptyList<SleepRecord>(), updated.analysisRecords)
         assertNull(updated.totalHistoryDays)
-        assertFalse(updated.hasHistoryPermission)
+        assertEquals(HealthDataRange.MINIMUM_CUSTOM_DAYS, updated.availableHistoryDays)
+        assertEquals(HistoryPermissionState.UNAVAILABLE, updated.historyPermissionState)
         assertFalse(updated.isRefreshing)
         assertEquals(HealthConnectFileOperation.EXPORTING, updated.fileOperation)
         assertEquals("Exporting", updated.fileOperationMessage)
@@ -34,8 +35,14 @@ class HealthConnectControllerStateTest {
     fun readPermissionTransitionKeepsKnownHistoryOnlyWhenHistoryPermissionRemainsGranted() {
         val current = populatedState()
 
-        assertEquals(120, current.withReadPermissionRequired(true).totalHistoryDays)
-        assertNull(current.withReadPermissionRequired(false).totalHistoryDays)
+        assertEquals(
+            120,
+            current.withReadPermissionRequired(HistoryPermissionState.GRANTED).totalHistoryDays,
+        )
+        assertNull(
+            current.withReadPermissionRequired(HistoryPermissionState.AVAILABLE_NOT_GRANTED)
+                .totalHistoryDays,
+        )
     }
 
     @Test
@@ -45,7 +52,8 @@ class HealthConnectControllerStateTest {
             recordMetadata = mapOf(2L to SleepRecordDisplayMetadata(sourceName = "Source")),
             analysisRecords = listOf(sleepRecord(3)),
             importedTotalHistoryDays = null,
-            hasHistoryPermission = true,
+            importedAvailableHistoryDays = 30,
+            historyPermissionState = HistoryPermissionState.GRANTED,
             fileImportedRecordCount = 1,
         )
 
@@ -106,14 +114,51 @@ class HealthConnectControllerStateTest {
         val statsRecords = listOf(sleepRecord(4))
 
         val updated = current
-            .withStatsRefreshStarted()
-            .withStatsRefreshCompleted(statsRecords, importedTotalHistoryDays = 180)
+            .withStatsRefreshStarted(HistoryPermissionState.GRANTED)
+            .withStatsRefreshCompleted(
+                statsRecords,
+                importedTotalHistoryDays = 180,
+                importedAvailableHistoryDays = 180,
+                historyPermissionState = HistoryPermissionState.GRANTED,
+            )
 
         assertEquals(current.records, updated.records)
         assertEquals(statsRecords, updated.statsAllRecords)
         assertEquals(180, updated.totalHistoryDays)
-        assertTrue(updated.hasHistoryPermission)
+        assertEquals(HistoryPermissionState.GRANTED, updated.historyPermissionState)
         assertFalse(updated.isStatsAllDataRefreshing)
+    }
+
+    @Test
+    fun limitedHistoryMaximumOnlyGrowsWhenShorterRangesAreLoaded() {
+        val current = populatedState().copy(
+            totalHistoryDays = null,
+            availableHistoryDays = 120,
+            historyPermissionState = HistoryPermissionState.UNAVAILABLE,
+        )
+
+        val shorter = current.withRefreshCompleted(
+            records = listOf(sleepRecord(2)),
+            recordMetadata = emptyMap(),
+            analysisRecords = listOf(sleepRecord(2)),
+            importedTotalHistoryDays = null,
+            importedAvailableHistoryDays = 45,
+            historyPermissionState = HistoryPermissionState.UNAVAILABLE,
+            fileImportedRecordCount = 0,
+        )
+        val longer = shorter.withRefreshCompleted(
+            records = listOf(sleepRecord(3)),
+            recordMetadata = emptyMap(),
+            analysisRecords = listOf(sleepRecord(3)),
+            importedTotalHistoryDays = null,
+            importedAvailableHistoryDays = 200,
+            historyPermissionState = HistoryPermissionState.UNAVAILABLE,
+            fileImportedRecordCount = 0,
+        )
+
+        assertEquals(120, shorter.availableHistoryDays)
+        assertEquals(200, longer.availableHistoryDays)
+        assertNull(longer.totalHistoryDays)
     }
 
     private fun populatedState(): HealthConnectUiState {
@@ -125,7 +170,8 @@ class HealthConnectControllerStateTest {
             statsAllRecords = listOf(record),
             access = HealthConnectAccess.CONNECTED,
             totalHistoryDays = 120,
-            hasHistoryPermission = true,
+            availableHistoryDays = 120,
+            historyPermissionState = HistoryPermissionState.GRANTED,
             isRefreshing = true,
             isStatsAllDataRefreshing = true,
             importedRecordCount = 1,

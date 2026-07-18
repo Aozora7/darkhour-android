@@ -25,6 +25,7 @@ import one.aozora.darkhour.core.circadian.CircadianAnalyzer
 import one.aozora.darkhour.core.periodogram.buildPeriodogramAnchors
 import one.aozora.darkhour.core.periodogram.computePeriodogram
 import one.aozora.darkhour.data.HealthDataRange
+import one.aozora.darkhour.data.HistoryPermissionState
 import one.aozora.darkhour.ui.LocalAppSettings
 import one.aozora.darkhour.ui.LocalHealthConnectState
 import one.aozora.darkhour.ui.LocalSleepAnalysis
@@ -53,7 +54,7 @@ fun StatsScreen(
         dataScope,
         showDataScopeToggle,
         providerAvailable,
-        healthConnect.hasHistoryPermission,
+        healthConnect.historyPermissionState,
         statsAllRecords,
         healthConnect.isStatsAllDataRefreshing,
     ) {
@@ -61,7 +62,6 @@ fun StatsScreen(
             showDataScopeToggle &&
             providerAvailable &&
             dataScope == StatsDataScope.AllAvailable &&
-            healthConnect.hasHistoryPermission &&
             statsAllRecords == null &&
             !healthConnect.isStatsAllDataRefreshing
         ) {
@@ -132,31 +132,25 @@ fun StatsScreen(
         mainSleepsCount = mainSleeps.size,
     )
     val statusMessage = when {
-        dataScope == StatsDataScope.AllAvailable && !healthConnect.hasHistoryPermission ->
-            "Health history permission is needed for all available data."
         dataScope == StatsDataScope.AllAvailable && healthConnect.isStatsAllDataRefreshing ->
             "Loading all available data..."
         dataScope == StatsDataScope.AllAvailable && healthConnect.statsAllDataError != null ->
             healthConnect.statsAllDataError
+        dataScope == StatsDataScope.AllAvailable &&
+            healthConnect.historyPermissionState != HistoryPermissionState.GRANTED ->
+            "Includes all Dark Hour imports and other data Health Connect currently allows."
         else -> null
     }
     val isAllDataLoading =
         dataScope == StatsDataScope.AllAvailable &&
             statsAllRecords == null &&
-            healthConnect.hasHistoryPermission &&
             healthConnect.statsAllDataError == null
     fun selectDataScope(scope: StatsDataScope) {
         if (scope == StatsDataScope.AllAvailable && !providerAvailable) return
         onSettingsChange(settings.copy(statsUseAllData = scope == StatsDataScope.AllAvailable))
         if (scope == StatsDataScope.AllAvailable) {
-            if (
-                healthConnect.hasHistoryPermission &&
-                statsAllRecords == null &&
-                !healthConnect.isStatsAllDataRefreshing
-            ) {
+            if (statsAllRecords == null && !healthConnect.isStatsAllDataRefreshing) {
                 healthConnect.onRequestStatsAllData()
-            } else if (!healthConnect.hasHistoryPermission) {
-                healthConnect.onRequestHistoryPermission()
             }
         }
     }
