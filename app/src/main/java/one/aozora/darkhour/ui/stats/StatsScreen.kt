@@ -30,10 +30,12 @@ import one.aozora.darkhour.ui.LocalAppSettings
 import one.aozora.darkhour.ui.LocalHealthConnectState
 import one.aozora.darkhour.ui.LocalSleepAnalysis
 import one.aozora.darkhour.ui.LocalDeveloperCircadian
+import java.time.YearMonth
 
 @Composable
 fun StatsScreen(
     modifier: Modifier = Modifier,
+    onPagerScrollBlockedChange: (Boolean) -> Unit = {},
 ) {
     val selectedAnalysis = LocalSleepAnalysis.current
     val developerCircadian = LocalDeveloperCircadian.current
@@ -99,9 +101,6 @@ fun StatsScreen(
             overrides = statsOverrides,
         )
     }
-    val allDataPeriodogram = remember(allDataRecords) {
-        computePeriodogram(buildPeriodogramAnchors(allDataRecords.orEmpty()))
-    }
     val records = when (dataScope) {
         StatsDataScope.SelectedPeriod -> selectedAnalysis.records
         StatsDataScope.AllAvailable -> allDataRecords.orEmpty()
@@ -110,11 +109,21 @@ fun StatsScreen(
         StatsDataScope.SelectedPeriod -> selectedPeriodAnalysis
         StatsDataScope.AllAvailable -> allDataAnalysis
     }
-    val periodogram = when (dataScope) {
-        StatsDataScope.SelectedPeriod -> selectedAnalysis.periodogram
-        StatsDataScope.AllAvailable -> allDataPeriodogram
-    }
     val showAllDataStats = dataScope == StatsDataScope.AllAvailable || !showDataScopeToggle
+    val currentMonth = YearMonth.now()
+    val periodogramBounds = remember(records, currentMonth) {
+        periodogramMonthBounds(records, currentMonth)
+    }
+    val resolvedPeriodogramRange = remember(settings.periodogramRange, periodogramBounds) {
+        resolvePeriodogramMonthRange(settings.periodogramRange, periodogramBounds)
+    }
+    val rangedPeriodogramRecords = remember(records, resolvedPeriodogramRange) {
+        filterPeriodogramRecords(records, resolvedPeriodogramRange)
+    }
+    val rangedPeriodogram = remember(rangedPeriodogramRecords) {
+        computePeriodogram(buildPeriodogramAnchors(rangedPeriodogramRecords))
+    }
+    val periodogram = if (showAllDataStats) rangedPeriodogram else selectedAnalysis.periodogram
     val yearlyTauSeries = remember(analysis.days, showAllDataStats) {
         if (showAllDataStats) {
             calculateYearlyTauSeries(analysis.days)
@@ -179,6 +188,18 @@ fun StatsScreen(
                         onDataScopeChange = ::selectDataScope,
                     )
                     Spacer(Modifier.height(16.dp))
+                    if (showAllDataStats && records.isNotEmpty()) {
+                        PeriodogramRangeControl(
+                            selection = settings.periodogramRange,
+                            bounds = periodogramBounds,
+                            useIsoDateTime = settings.useIsoDateTime,
+                            onSelectionChange = {
+                                onSettingsChange(settings.copy(periodogramRange = it))
+                            },
+                            onDraggingChange = onPagerScrollBlockedChange,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
                     if (isAllDataLoading) {
                         StatsLoadingIndicator(
                             modifier = Modifier
@@ -265,20 +286,35 @@ fun StatsScreen(
                     onDataScopeChange = ::selectDataScope,
                 )
 
-                if (isAllDataLoading) {
-                    StatsLoadingIndicator(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(180.dp),
-                    )
-                } else {
-                    PeriodogramChart(
-                        result = periodogram,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(min = 180.dp, max = 260.dp)
-                            .aspectRatio(1.75f),
-                    )
+                Column(verticalArrangement = Arrangement.spacedBy(0.dp)) {
+                    if (showAllDataStats && records.isNotEmpty()) {
+                        PeriodogramRangeControl(
+                            selection = settings.periodogramRange,
+                            bounds = periodogramBounds,
+                            useIsoDateTime = settings.useIsoDateTime,
+                            onSelectionChange = {
+                                onSettingsChange(settings.copy(periodogramRange = it))
+                            },
+                            onDraggingChange = onPagerScrollBlockedChange,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+
+                    if (isAllDataLoading) {
+                        StatsLoadingIndicator(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(180.dp),
+                        )
+                    } else {
+                        PeriodogramChart(
+                            result = periodogram,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = 180.dp, max = 260.dp)
+                                .aspectRatio(1.75f),
+                        )
+                    }
                 }
                 if (showAllDataStats && !isAllDataLoading) {
                     YearlyTauSection(

@@ -80,7 +80,7 @@ fun DarkHourApp(
     onCancelSleepExport: () -> Unit = {},
     analysisRecords: List<SleepRecord> = records,
 ) {
-    var actogramTransforming by remember { mutableStateOf(false) }
+    var pagerScrollBlocked by remember { mutableStateOf(false) }
     val appState = rememberDarkHourAppState(
         records = records,
         recordMetadata = recordMetadata,
@@ -166,8 +166,8 @@ fun DarkHourApp(
                         )
                         AppPager(
                             pagerState = pagerState,
-                            userScrollEnabled = !actogramTransforming,
-                            onTransformingChange = { actogramTransforming = it },
+                            userScrollEnabled = !pagerScrollBlocked,
+                            onTransformingChange = { pagerScrollBlocked = it },
                             modifier = Modifier.weight(1f),
                         )
                     }
@@ -185,8 +185,8 @@ fun DarkHourApp(
                     ) { padding ->
                         AppPager(
                             pagerState = pagerState,
-                            userScrollEnabled = !actogramTransforming,
-                            onTransformingChange = { actogramTransforming = it },
+                            userScrollEnabled = !pagerScrollBlocked,
+                            onTransformingChange = { pagerScrollBlocked = it },
                             modifier = Modifier.padding(padding),
                         )
                     }

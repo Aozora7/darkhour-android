@@ -4,10 +4,90 @@ import one.aozora.darkhour.core.circadian.CircadianAlgorithmRegistry
 import one.aozora.darkhour.core.circadian.CircadianDay
 import one.aozora.darkhour.core.model.SleepRecord
 import one.aozora.darkhour.data.HealthDataRange
+import one.aozora.darkhour.ui.settings.PeriodogramRangeSelection
 import java.time.Duration
+import java.time.YearMonth
+import java.time.temporal.ChronoUnit
 import kotlin.math.roundToInt
 
 internal const val STATS_CSF_SMOOTHING_DAYS = 14.0
+
+internal data class PeriodogramMonthBounds(
+    val newest: YearMonth,
+    val oldest: YearMonth,
+) {
+    val lastMonthOffset: Int
+        get() = ChronoUnit.MONTHS.between(oldest, newest).toInt().coerceAtLeast(0)
+}
+
+internal data class ResolvedPeriodogramMonthRange(
+    val newest: YearMonth,
+    val oldest: YearMonth,
+)
+
+internal fun periodogramMonthBounds(
+    records: List<SleepRecord>,
+    currentMonth: YearMonth,
+): PeriodogramMonthBounds {
+    val oldestRecordMonth = records
+        .minOfOrNull { YearMonth.from(it.dateOfSleep) }
+        ?.coerceAtMost(currentMonth)
+        ?: currentMonth
+    return PeriodogramMonthBounds(newest = currentMonth, oldest = oldestRecordMonth)
+}
+
+internal fun resolvePeriodogramMonthRange(
+    selection: PeriodogramRangeSelection,
+    bounds: PeriodogramMonthBounds,
+): ResolvedPeriodogramMonthRange {
+    val newest = (selection.newestMonth ?: bounds.newest).coerceIn(bounds.oldest, bounds.newest)
+    val oldest = (selection.oldestMonth ?: bounds.oldest).coerceIn(bounds.oldest, bounds.newest)
+    return if (newest >= oldest) {
+        ResolvedPeriodogramMonthRange(newest = newest, oldest = oldest)
+    } else {
+        ResolvedPeriodogramMonthRange(newest = oldest, oldest = newest)
+    }
+}
+
+internal fun periodogramRangeOffsets(
+    selection: PeriodogramRangeSelection,
+    bounds: PeriodogramMonthBounds,
+): ClosedFloatingPointRange<Float> {
+    val resolved = resolvePeriodogramMonthRange(selection, bounds)
+    return monthOffset(bounds.newest, resolved.newest).toFloat()..
+        monthOffset(bounds.newest, resolved.oldest).toFloat()
+}
+
+internal fun periodogramSelectionForOffsets(
+    offsets: ClosedFloatingPointRange<Float>,
+    bounds: PeriodogramMonthBounds,
+): PeriodogramRangeSelection {
+    val newestOffset = offsets.start.roundToInt().coerceIn(0, bounds.lastMonthOffset)
+    val oldestOffset = offsets.endInclusive.roundToInt().coerceIn(newestOffset, bounds.lastMonthOffset)
+    return PeriodogramRangeSelection(
+        newestMonth = if (newestOffset == 0) null else bounds.newest.minusMonths(newestOffset.toLong()),
+        oldestMonth = if (oldestOffset == bounds.lastMonthOffset) {
+            null
+        } else {
+            bounds.newest.minusMonths(oldestOffset.toLong())
+        },
+    )
+}
+
+internal fun periodogramYearBoundaryOffsets(bounds: PeriodogramMonthBounds): List<Int> =
+    (0..bounds.lastMonthOffset).filter { monthOffset ->
+        bounds.newest.minusMonths(monthOffset.toLong()).monthValue == 1
+    }
+
+internal fun filterPeriodogramRecords(
+    records: List<SleepRecord>,
+    range: ResolvedPeriodogramMonthRange,
+): List<SleepRecord> = records.filter { record ->
+    YearMonth.from(record.dateOfSleep) in range.oldest..range.newest
+}
+
+private fun monthOffset(newest: YearMonth, month: YearMonth): Int =
+    ChronoUnit.MONTHS.between(month, newest).toInt().coerceAtLeast(0)
 
 internal fun statsCircadianOverrides(overrides: Map<String, Double>): Map<String, Double> =
     overrides + ("smoothing_days" to STATS_CSF_SMOOTHING_DAYS)

@@ -50,7 +50,9 @@ internal fun AppPager(
             DarkHourDestination.ACTOGRAM -> ActogramScreen(
                 onTransformingChange = onTransformingChange,
             )
-            DarkHourDestination.STATS -> StatsScreen()
+            DarkHourDestination.STATS -> StatsScreen(
+                onPagerScrollBlockedChange = onTransformingChange,
+            )
             DarkHourDestination.SCHEDULE -> ScheduleScreen()
             DarkHourDestination.SETTINGS -> SettingsScreen()
         }

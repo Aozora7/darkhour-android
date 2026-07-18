@@ -7,9 +7,11 @@ import one.aozora.darkhour.data.HealthDataRange
 import one.aozora.darkhour.ui.actogram.ActogramDisplayOptions
 import one.aozora.darkhour.ui.schedule.ScheduleEntry
 import one.aozora.darkhour.ui.settings.AppSettings
+import one.aozora.darkhour.ui.settings.PeriodogramRangeSelection
 import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.LocalTime
+import java.time.YearMonth
 
 class AppSettingsStore(context: Context) {
     private val preferences = context.applicationContext.getSharedPreferences(
@@ -43,6 +45,12 @@ class AppSettingsStore(context: Context) {
                     settings.selectedTauYears.map(Int::toString).toSet(),
                 )
             }
+            settings.periodogramRange.newestMonth?.let {
+                putString(PERIODOGRAM_NEWEST_MONTH_KEY, it.toString())
+            } ?: remove(PERIODOGRAM_NEWEST_MONTH_KEY)
+            settings.periodogramRange.oldestMonth?.let {
+                putString(PERIODOGRAM_OLDEST_MONTH_KEY, it.toString())
+            } ?: remove(PERIODOGRAM_OLDEST_MONTH_KEY)
         }
     }
 
@@ -99,6 +107,8 @@ private const val USE_ISO_DATE_TIME_KEY = "use_iso_date_time"
 private const val HISTORY_ACCESS_CALLOUT_DISMISSED_KEY = "history_access_callout_dismissed"
 private const val STATS_USE_ALL_DATA_KEY = "stats_use_all_data"
 private const val SELECTED_TAU_YEARS_KEY = "stats_selected_tau_years"
+private const val PERIODOGRAM_NEWEST_MONTH_KEY = "stats_periodogram_newest_month"
+private const val PERIODOGRAM_OLDEST_MONTH_KEY = "stats_periodogram_oldest_month"
 private const val ROW_HEIGHT_DP_KEY = "actogram_row_height_dp"
 private const val DOUBLE_PLOT_KEY = "actogram_double_plot"
 private const val SHOW_DATE_LABELS_KEY = "actogram_show_date_labels"
@@ -134,8 +144,14 @@ private fun SharedPreferences.readAppSettings(): AppSettings {
         } else {
             defaults.selectedTauYears
         },
+        periodogramRange = PeriodogramRangeSelection(
+            newestMonth = getString(PERIODOGRAM_NEWEST_MONTH_KEY, null)?.toYearMonthOrNull(),
+            oldestMonth = getString(PERIODOGRAM_OLDEST_MONTH_KEY, null)?.toYearMonthOrNull(),
+        ),
     )
 }
+
+private fun String.toYearMonthOrNull(): YearMonth? = runCatching(YearMonth::parse).getOrNull()
 
 private fun SharedPreferences.readActogramDisplayOptions(): ActogramDisplayOptions {
     val defaults = ActogramDisplayOptions()

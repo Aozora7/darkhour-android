@@ -6,6 +6,7 @@ import one.aozora.darkhour.core.circadian.CircadianDay
 import one.aozora.darkhour.core.model.SleepRecord
 import one.aozora.darkhour.core.periodogram.PeriodogramPoint
 import one.aozora.darkhour.data.HealthDataRange
+import one.aozora.darkhour.ui.settings.PeriodogramRangeSelection
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
@@ -13,6 +14,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.time.Instant
 import java.time.LocalDate
+import java.time.YearMonth
 
 class StatsScreenTest {
     @Test
@@ -172,6 +174,92 @@ class StatsScreenTest {
                 elapsedMillis = 3_000L,
                 density = 1f,
             ) < QUICK_SWIPE_SPEED_DP_PER_SECOND,
+        )
+    }
+
+    @Test
+    fun periodogramRangeRunsNewestToOldestAndAllowsOneMonth() {
+        val bounds = PeriodogramMonthBounds(
+            newest = YearMonth.of(2026, 7),
+            oldest = YearMonth.of(2025, 7),
+        )
+
+        assertEquals(0f..12f, periodogramRangeOffsets(PeriodogramRangeSelection(), bounds))
+        assertEquals(
+            PeriodogramRangeSelection(
+                newestMonth = YearMonth.of(2026, 2),
+                oldestMonth = YearMonth.of(2026, 2),
+            ),
+            periodogramSelectionForOffsets(5f..5f, bounds),
+        )
+    }
+
+    @Test
+    fun periodogramOuterTicksPersistAsMovingBoundarySentinels() {
+        val bounds = PeriodogramMonthBounds(
+            newest = YearMonth.of(2026, 7),
+            oldest = YearMonth.of(2020, 1),
+        )
+        val selection = periodogramSelectionForOffsets(
+            offsets = 0f..bounds.lastMonthOffset.toFloat(),
+            bounds = bounds,
+        )
+
+        assertEquals(PeriodogramRangeSelection(), selection)
+        assertEquals(
+            ResolvedPeriodogramMonthRange(
+                newest = YearMonth.of(2026, 8),
+                oldest = YearMonth.of(2019, 12),
+            ),
+            resolvePeriodogramMonthRange(
+                selection,
+                PeriodogramMonthBounds(
+                    newest = YearMonth.of(2026, 8),
+                    oldest = YearMonth.of(2019, 12),
+                ),
+            ),
+        )
+    }
+
+    @Test
+    fun periodogramYearTicksMarkJanuaryFromNewestToOldest() {
+        assertEquals(
+            listOf(6, 18, 30),
+            periodogramYearBoundaryOffsets(
+                PeriodogramMonthBounds(
+                    newest = YearMonth.of(2026, 7),
+                    oldest = YearMonth.of(2023, 10),
+                ),
+            ),
+        )
+        assertEquals(
+            listOf(0, 12),
+            periodogramYearBoundaryOffsets(
+                PeriodogramMonthBounds(
+                    newest = YearMonth.of(2026, 1),
+                    oldest = YearMonth.of(2025, 1),
+                ),
+            ),
+        )
+    }
+
+    @Test
+    fun periodogramRecordFilterIncludesBothSelectedBoundaryMonths() {
+        val records = listOf(
+            record("2026-01-05T22:00:00Z", "2026-01-06T06:00:00Z", 8.0, 420),
+            record("2026-02-05T22:00:00Z", "2026-02-06T06:00:00Z", 8.0, 420),
+            record("2026-03-05T22:00:00Z", "2026-03-06T06:00:00Z", 8.0, 420),
+        )
+
+        assertEquals(
+            listOf(LocalDate.of(2026, 1, 5), LocalDate.of(2026, 2, 5)),
+            filterPeriodogramRecords(
+                records,
+                ResolvedPeriodogramMonthRange(
+                    newest = YearMonth.of(2026, 2),
+                    oldest = YearMonth.of(2026, 1),
+                ),
+            ).map { it.dateOfSleep },
         )
     }
 

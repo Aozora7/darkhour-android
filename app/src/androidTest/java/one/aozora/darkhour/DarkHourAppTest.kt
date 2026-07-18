@@ -370,6 +370,25 @@ class DarkHourAppTest {
     }
 
     @Test
+    fun horizontalDragOnPeriodogramRangeRemainsOnStats() {
+        setContent()
+        composeRule.onNodeWithTag("destination_stats").performClick()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("stats_scope_all").performClick()
+
+        composeRule.onNodeWithTag("periodogram_month_range").performTouchInput {
+            swipe(
+                start = Offset(width * 0.05f, centerY),
+                end = Offset(width * 0.35f, centerY),
+                durationMillis = 600,
+            )
+        }
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag("destination_stats").assertIsSelected()
+    }
+
+    @Test
     fun customRangeDefaultsToObservedThirtyDayMaximum() {
         var selectedRange by mutableStateOf(HealthDataRange.DEFAULT_PERIOD)
         composeRule.setContent {
@@ -628,11 +647,13 @@ class DarkHourAppTest {
         composeRule.waitForIdle()
         composeRule.onNodeWithTag("stats_scope_selected").assertIsSelected()
         composeRule.onNodeWithText("Health Connect · Last 90 days", substring = true).assertIsDisplayed()
+        composeRule.onAllNodesWithTag("periodogram_range_control").assertCountEquals(0)
 
         composeRule.onNodeWithTag("stats_scope_all").performClick()
 
         composeRule.onNodeWithTag("stats_scope_all").assertIsSelected()
         composeRule.onNodeWithText("Health Connect · All available data", substring = true).assertIsDisplayed()
+        composeRule.onNodeWithTag("periodogram_range_control").assertIsDisplayed()
         composeRule.onNodeWithTag("tau_year_chart").assertIsDisplayed()
     }
 
@@ -654,6 +675,7 @@ class DarkHourAppTest {
         composeRule.onAllNodesWithTag("stats_scope_selected").assertCountEquals(0)
         composeRule.onAllNodesWithTag("stats_scope_all").assertCountEquals(0)
         composeRule.onNodeWithText("Health Connect · All available", substring = true).assertIsDisplayed()
+        composeRule.onNodeWithTag("periodogram_range_control").assertIsDisplayed()
     }
 
     @Test
