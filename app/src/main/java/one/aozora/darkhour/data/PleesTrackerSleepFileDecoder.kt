@@ -1,7 +1,9 @@
 package one.aozora.darkhour.data
 
 import androidx.health.connect.client.records.metadata.Device
+import org.apache.commons.csv.CSVFormat
 import java.io.InputStream
+import java.io.InputStreamReader
 import java.nio.charset.StandardCharsets
 import java.time.Instant
 import java.time.ZoneId
@@ -53,7 +55,7 @@ internal object PleesTrackerSleepFileDecoder : SleepFileDecoder {
 }
 
 private fun List<String>.isPleesTrackerHeader(): Boolean =
-    size >= PLEES_TRACKER_COLUMNS.size && take(PLEES_TRACKER_COLUMNS.size) == PLEES_TRACKER_COLUMNS
+    toSet().containsAll(PLEES_TRACKER_REQUIRED_COLUMNS)
 
 private fun List<String>.toPleesTrackerSession(
     columns: Map<String, Int>,
@@ -70,9 +72,10 @@ private fun List<String>.toPleesTrackerSession(
         issues.addBounded(SleepFileIssue(recordIndex, "Missing or invalid start or stop time"))
         return null
     }
-    val rating = value("rating")?.toLongOrNull()
-    if (rating == null) {
-        issues.addBounded(SleepFileIssue(recordIndex, "Missing or invalid rating"))
+    val ratingValue = value("rating")
+    val rating = ratingValue?.takeIf(String::isNotBlank)?.toLongOrNull() ?: 0
+    if (!ratingValue.isNullOrBlank() && ratingValue.toLongOrNull() == null) {
+        issues.addBounded(SleepFileIssue(recordIndex, "Invalid rating"))
         return null
     }
     val wakes = value("wakes")?.takeIf(String::isNotBlank)?.toIntOrNull() ?: 0
@@ -113,79 +116,16 @@ private fun pleesTrackerNotes(comment: String, rating: Long, wakes: Int): String
     return if (comment.isEmpty()) metadata else "$comment\n\n$metadata"
 }
 
-/** Parses RFC 4180-style records, including escaped quotes and quoted line breaks. */
-private fun InputStream.readPleesTrackerCsv(): List<List<String>> {
-    val text = bufferedReader(StandardCharsets.UTF_8).use { it.readText() }
-    val rows = mutableListOf<List<String>>()
-    var row = mutableListOf<String>()
-    val field = StringBuilder()
-    var index = 0
-    var fieldStarted = false
-    var inQuotes = false
-    var closedQuote = false
-
-    fun finishField() {
-        row += field.toString()
-        field.clear()
-        fieldStarted = false
-        closedQuote = false
-    }
-
-    fun finishRow() {
-        finishField()
-        rows += row
-        row = mutableListOf()
-    }
-
-    while (index < text.length) {
-        val character = text[index]
-        if (inQuotes) {
-            if (character == '"') {
-                if (index + 1 < text.length && text[index + 1] == '"') {
-                    field.append('"')
-                    index += 2
-                    continue
-                }
-                inQuotes = false
-                closedQuote = true
-            } else {
-                field.append(character)
-            }
-            index += 1
-            continue
-        }
-        if (closedQuote && character != ',' && character != '\r' && character != '\n') {
-            error("Unexpected character after a closing quote")
-        }
-        when (character) {
-            '"' -> {
-                if (fieldStarted) error("Unexpected quote in an unquoted field")
-                fieldStarted = true
-                inQuotes = true
-            }
-            ',' -> finishField()
-            '\r', '\n' -> {
-                if (character == '\r' && index + 1 < text.length && text[index + 1] == '\n') {
-                    index += 1
-                }
-                if (fieldStarted || field.isNotEmpty() || row.isNotEmpty()) finishRow()
-            }
-            else -> {
-                fieldStarted = true
-                field.append(character)
+private fun InputStream.readPleesTrackerCsv(): List<List<String>> =
+    CSVFormat.DEFAULT.parse(InputStreamReader(this, StandardCharsets.UTF_8)).use { parser ->
+        val rows = parser.map { record -> record.toList() }.toMutableList()
+        rows.firstOrNull()?.firstOrNull()?.let { firstCell ->
+            if (firstCell.startsWith('\uFEFF')) {
+                rows[0] = rows[0].toMutableList().also { it[0] = firstCell.removePrefix("\uFEFF") }
             }
         }
-        index += 1
+        rows
     }
-    if (inQuotes) error("Unterminated quoted field")
-    if (fieldStarted || field.isNotEmpty() || row.isNotEmpty()) finishRow()
-    rows.firstOrNull()?.firstOrNull()?.let { firstCell ->
-        if (firstCell.startsWith('\uFEFF')) {
-            rows[0] = rows[0].toMutableList().also { it[0] = firstCell.removePrefix("\uFEFF") }
-        }
-    }
-    return rows
-}
 
 private const val PLEES_TRACKER_MILLISECONDS_CUTOFF = 1_000_000_000_000L
-private val PLEES_TRACKER_COLUMNS = listOf("sid", "start", "stop", "rating", "comment", "wakes")
+private val PLEES_TRACKER_REQUIRED_COLUMNS = setOf("sid", "start", "stop")

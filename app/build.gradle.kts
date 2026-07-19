@@ -122,6 +122,7 @@ dependencies {
     implementation(libs.androidx.health.connect.client)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.gson)
+    implementation(libs.commons.csv)
     testImplementation(libs.junit)
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)

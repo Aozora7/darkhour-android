@@ -110,6 +110,29 @@ class SleepFileDecoderTest {
     }
 
     @Test
+    fun pleesTrackerImportsEveryCombinationOfOptionalLegacyColumns() {
+        val optionalColumns = listOf("rating" to "4", "comment" to "old", "wakes" to "2")
+
+        repeat(1 shl optionalColumns.size) { mask ->
+            val selected = optionalColumns.filterIndexed { index, _ -> mask and (1 shl index) != 0 }
+            val header = listOf("sid", "start", "stop") + selected.map { it.first } + "future"
+            val values = listOf("1", "1784319701170", "1784347783429") +
+                selected.map { it.second } + "ignored"
+            val csv = header.joinToString(",") + "\n" + values.joinToString(",") + "\n"
+
+            val decoder = SleepFileDecoderRegistry().decoderFor(source("old-plees.csv", csv))
+            val session = PleesTrackerSleepFileDecoder.decode(
+                csv.byteInputStream(),
+                ZoneId.of("UTC"),
+            ).sessions.single()
+
+            assertEquals("Plees Tracker", decoder?.format?.name)
+            assertEquals("1", session.sourceId)
+            if (mask == 0) assertEquals("", session.notes)
+        }
+    }
+
+    @Test
     fun fitbitUsesDeviceZonePreservesIdAndOverlaysShortWakeData() {
         val decoded = FitbitSleepFileDecoder.decode(
             resourceStream("fitbit-synthetic.json"),
