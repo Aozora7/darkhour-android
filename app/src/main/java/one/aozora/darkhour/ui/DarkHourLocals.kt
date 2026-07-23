@@ -99,6 +99,7 @@ data class HealthConnectState(
     val availableHistoryDays: Int,
     val fileWriteSupported: Boolean,
     val fileDeletionSupported: Boolean,
+    val fileImportPermissionsGranted: Boolean?,
     val fileImportedRecordCount: Int,
     val fileOperation: HealthConnectFileOperation,
     val fileImportResult: SleepFileImportResult?,

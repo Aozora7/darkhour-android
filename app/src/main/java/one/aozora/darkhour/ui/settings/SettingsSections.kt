@@ -1,5 +1,6 @@
 package one.aozora.darkhour.ui.settings
 
+import android.os.Build
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
@@ -232,12 +233,21 @@ internal fun ImportExportSettingsSection(
             }
             if (!healthConnect.fileWriteSupported) {
                 SettingsSupportingText(
-                    text = "File import requires Android 14 or later.",
+                    text = fileImportUnsupportedMessage(Build.VERSION.SDK_INT),
                     modifier = Modifier.testTag("sleep_file_import_unsupported"),
                 )
             } else {
-                healthConnect.fileImportResult?.issues?.firstOrNull()?.let { issue ->
-                    SettingsSupportingText(issue)
+                fileImportPermissionNotice(
+                    permissionsGranted = healthConnect.fileImportPermissionsGranted,
+                    sdkInt = Build.VERSION.SDK_INT,
+                    usesLegacyDirectImport = !healthConnect.fileDeletionSupported,
+                )?.let { notice ->
+                    SettingsSupportingText(
+                        text = notice,
+                        modifier = Modifier.testTag("sleep_file_import_permissions_required"),
+                    )
+                } ?: healthConnect.fileImportResult?.issues?.firstOrNull()?.let { issue ->
+                    SettingsSupportingText(text = issue)
                 }
             }
         }
@@ -569,6 +579,32 @@ internal fun fileOperationProgressLabel(
     HealthConnectFileOperation.DELETING -> if (fileWriteSupported) "Deleting imported records…" else null
     HealthConnectFileOperation.IDLE -> null
 }
+
+internal fun fileImportPermissionNotice(
+    permissionsGranted: Boolean?,
+    sdkInt: Int,
+    usesLegacyDirectImport: Boolean,
+): String? {
+    if (permissionsGranted != false) return null
+    if (usesLegacyDirectImport) {
+        return "Import requires sleep write access. Permission will be requested before import."
+    }
+    val access = if (sdkInt < Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+        "sleep read, past-data, and sleep write access"
+    } else {
+        "sleep read and sleep write access"
+    }
+    return "Import requires $access. Permissions will be requested before import."
+}
+
+internal fun fileImportUnsupportedMessage(sdkInt: Int): String =
+    if (sdkInt < Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+        "Import requires past data access missing in the current Health Connect provider. " +
+                "Updating the Health Connect app may enable it."
+    } else {
+        "Import requires past data access missing in the current Health Connect provider. " +
+                "A Google Play system update may enable it."
+    }
 
 @Composable
 internal fun PrivacySettingsSection(

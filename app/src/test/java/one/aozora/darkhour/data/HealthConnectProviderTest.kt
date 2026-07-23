@@ -3,6 +3,7 @@ package one.aozora.darkhour.data
 import android.os.Build
 import androidx.health.connect.client.HealthConnectClient
 import androidx.health.connect.client.permission.HealthPermission
+import androidx.health.connect.client.records.SleepSessionRecord
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -87,6 +88,88 @@ class HealthConnectProviderTest {
         assertEquals(
             false,
             isLegacyDirectFileImportSupported(true, Build.VERSION_CODES.UPSIDE_DOWN_CAKE),
+        )
+    }
+
+    @Test
+    fun historyCapabilityEnablesNormalFileManagementOnAndroidNineThroughThirteen() {
+        val available = sleepFileCapabilities(
+            sdkInt = Build.VERSION_CODES.TIRAMISU,
+            historyPermissionState = HistoryPermissionState.AVAILABLE_NOT_GRANTED,
+            allowLegacyFileImport = false,
+        )
+        assertEquals(true, available.importSupported)
+        assertEquals(true, available.deletionSupported)
+        assertEquals(false, available.usesLegacyDirectImport)
+        assertEquals(true, available.importRequiresHistoryPermission)
+        assertEquals(
+            setOf(
+                HealthPermission.getReadPermission(SleepSessionRecord::class),
+                HealthPermission.getWritePermission(SleepSessionRecord::class),
+                HealthPermission.PERMISSION_READ_HEALTH_DATA_HISTORY,
+            ),
+            sleepFileImportPermissions(available),
+        )
+
+        val granted = sleepFileCapabilities(
+            sdkInt = Build.VERSION_CODES.P,
+            historyPermissionState = HistoryPermissionState.GRANTED,
+            allowLegacyFileImport = true,
+        )
+        assertEquals(true, granted.importSupported)
+        assertEquals(true, granted.deletionSupported)
+        assertEquals(false, granted.usesLegacyDirectImport)
+        assertEquals(true, granted.importRequiresHistoryPermission)
+    }
+
+    @Test
+    fun unavailableHistoryRetainsOnlyDebugDirectImportOnLegacyAndroid() {
+        val production = sleepFileCapabilities(
+            sdkInt = Build.VERSION_CODES.TIRAMISU,
+            historyPermissionState = HistoryPermissionState.UNAVAILABLE,
+            allowLegacyFileImport = false,
+        )
+        assertEquals(false, production.importSupported)
+        assertEquals(false, production.deletionSupported)
+
+        val debug = sleepFileCapabilities(
+            sdkInt = Build.VERSION_CODES.TIRAMISU,
+            historyPermissionState = HistoryPermissionState.UNAVAILABLE,
+            allowLegacyFileImport = true,
+        )
+        assertEquals(true, debug.importSupported)
+        assertEquals(false, debug.deletionSupported)
+        assertEquals(true, debug.usesLegacyDirectImport)
+        assertEquals(
+            setOf(HealthPermission.getWritePermission(SleepSessionRecord::class)),
+            sleepFileImportPermissions(debug),
+        )
+    }
+
+    @Test
+    fun androidFourteenRequiresHistoryCapabilityButNotHistoryGrantForImport() {
+        val unavailable = sleepFileCapabilities(
+            sdkInt = Build.VERSION_CODES.UPSIDE_DOWN_CAKE,
+            historyPermissionState = HistoryPermissionState.UNAVAILABLE,
+            allowLegacyFileImport = false,
+        )
+        assertEquals(false, unavailable.importSupported)
+        assertEquals(false, unavailable.deletionSupported)
+
+        val capabilities = sleepFileCapabilities(
+            sdkInt = Build.VERSION_CODES.UPSIDE_DOWN_CAKE,
+            historyPermissionState = HistoryPermissionState.AVAILABLE_NOT_GRANTED,
+            allowLegacyFileImport = false,
+        )
+        assertEquals(true, capabilities.importSupported)
+        assertEquals(true, capabilities.deletionSupported)
+        assertEquals(false, capabilities.importRequiresHistoryPermission)
+        assertEquals(
+            setOf(
+                HealthPermission.getReadPermission(SleepSessionRecord::class),
+                HealthPermission.getWritePermission(SleepSessionRecord::class),
+            ),
+            sleepFileImportPermissions(capabilities),
         )
     }
 }

@@ -38,11 +38,12 @@ class HealthConnectDataController(
         healthConnectAppDisplayNames(applicationContext)
     }
     private val zoneId = ZoneId.systemDefault()
-    private val legacyDirectFileImport = isLegacyDirectFileImportSupported(
-        allowLegacyFileImport = allowLegacyFileImport,
+    private val allowLegacyDirectFileImport = allowLegacyFileImport
+    private val initialFileCapabilities = sleepFileCapabilities(
         sdkInt = Build.VERSION.SDK_INT,
+        historyPermissionState = HistoryPermissionState.UNAVAILABLE,
+        allowLegacyFileImport = allowLegacyDirectFileImport,
     )
-    private val fileImportSupported = isSleepFileWriteSupported || legacyDirectFileImport
     private var recentImportDuration = initialImportDuration.coerceAtLeast(Duration.ofDays(1))
     private var refreshJob: Job? = null
     private var statsAllDataRefreshJob: Job? = null
@@ -51,18 +52,18 @@ class HealthConnectDataController(
     private val mutableState = MutableStateFlow(
         HealthConnectUiState(
             dataRange = initialDataRange,
-            fileWriteSupported = fileImportSupported,
-            fileDeletionSupported = isSleepFileWriteSupported,
+            fileWriteSupported = initialFileCapabilities.importSupported,
+            fileDeletionSupported = initialFileCapabilities.deletionSupported,
         ),
     )
 
     val state: StateFlow<HealthConnectUiState> = mutableState.asStateFlow()
 
     val isFileWriteSupported: Boolean
-        get() = fileImportSupported
+        get() = state.value.fileWriteSupported
 
     val isFileDeletionSupported: Boolean
-        get() = isSleepFileWriteSupported
+        get() = state.value.fileDeletionSupported
 
     val isProviderAvailable: Boolean
         get() = HealthConnectClient.getSdkStatus(applicationContext) == HealthConnectClient.SDK_AVAILABLE
@@ -76,25 +77,36 @@ class HealthConnectDataController(
             emptySet()
         }
 
-    suspend fun hasSleepWritePermission(): Boolean {
-        if (!fileImportSupported) return false
-        if (HealthConnectClient.getSdkStatus(applicationContext) != HealthConnectClient.SDK_AVAILABLE) {
-            return false
+    fun fileImportPermissions(): Set<String> =
+        sleepFileImportPermissions(currentFileCapabilities())
+
+    fun fileImportReadPermissions(): Set<String> =
+        if (currentFileCapabilities().usesLegacyDirectImport) {
+            emptySet()
+        } else {
+            requiredPermissions()
         }
-        return SLEEP_WRITE_PERMISSION in HealthConnectClient
-            .getOrCreate(applicationContext)
+
+    fun fileImportHistoryPermissions(): Set<String> =
+        if (currentFileCapabilities().importRequiresHistoryPermission) {
+            setOf(HealthPermission.PERMISSION_READ_HEALTH_DATA_HISTORY)
+        } else {
+            emptySet()
+        }
+
+    fun fileDeletionPermissions(): Set<String> = setOf(SLEEP_WRITE_PERMISSION)
+
+    suspend fun grantedPermissions(): Set<String> {
+        if (HealthConnectClient.getSdkStatus(applicationContext) != HealthConnectClient.SDK_AVAILABLE) {
+            return emptySet()
+        }
+        return HealthConnectClient.getOrCreate(applicationContext)
             .permissionController
             .getGrantedPermissions()
     }
 
     suspend fun hasPermissions(permissions: Set<String>): Boolean {
-        if (HealthConnectClient.getSdkStatus(applicationContext) != HealthConnectClient.SDK_AVAILABLE) {
-            return false
-        }
-        return HealthConnectClient.getOrCreate(applicationContext)
-            .permissionController
-            .getGrantedPermissions()
-            .containsAll(permissions)
+        return grantedPermissions().containsAll(permissions)
     }
 
     fun exportPermissions(): Set<String> = requiredPermissions()
@@ -104,6 +116,26 @@ class HealthConnectDataController(
             it.copy(
                 fileOperation = HealthConnectFileOperation.IDLE,
                 fileOperationErrorMessage = "Sleep write permission was not granted",
+            )
+        }
+    }
+
+    fun reportSleepFileImportHistoryPermissionDenied() {
+        mutableState.update {
+            it.copy(
+                fileOperation = HealthConnectFileOperation.IDLE,
+                fileOperationErrorMessage =
+                    "History access was not granted; sleep files were not imported",
+            )
+        }
+    }
+
+    fun reportSleepFileImportReadPermissionDenied() {
+        mutableState.update {
+            it.copy(
+                fileOperation = HealthConnectFileOperation.IDLE,
+                fileOperationErrorMessage =
+                    "Sleep read permission was not granted; sleep files were not imported",
             )
         }
     }
@@ -143,7 +175,8 @@ class HealthConnectDataController(
                         uris = uris,
                         fallbackZoneId = ZoneId.systemDefault(),
                         callingPackageName = applicationContext.packageName,
-                        verifyExistingHealthConnectRecords = !legacyDirectFileImport,
+                        verifyExistingHealthConnectRecords = !currentFileCapabilities()
+                            .usesLegacyDirectImport,
                     )
                 }
                 mutableState.update {
@@ -280,8 +313,8 @@ class HealthConnectDataController(
         requiresWriteSupport: Boolean = true,
     ): Boolean {
         val operationWriteSupported = when (operation) {
-            HealthConnectFileOperation.IMPORTING -> fileImportSupported
-            HealthConnectFileOperation.DELETING -> isSleepFileWriteSupported
+            HealthConnectFileOperation.IMPORTING -> state.value.fileWriteSupported
+            HealthConnectFileOperation.DELETING -> state.value.fileDeletionSupported
             else -> true
         }
         if (!isProviderAvailable || (requiresWriteSupport && !operationWriteSupported)) {
@@ -404,6 +437,7 @@ class HealthConnectDataController(
         val client = HealthConnectClient.getOrCreate(applicationContext)
         val granted = client.permissionController.getGrantedPermissions()
         val historyPermissionState = client.historyPermissionState(granted)
+        updateFileCapabilities(historyPermissionState, granted)
         if (!granted.containsAll(requiredPermissions())) {
             mutableState.update { it.withReadPermissionRequired(historyPermissionState) }
             return
@@ -526,12 +560,36 @@ class HealthConnectDataController(
         }
     }
 
+    private fun currentFileCapabilities(): SleepFileCapabilities =
+        sleepFileCapabilities(
+            sdkInt = Build.VERSION.SDK_INT,
+            historyPermissionState = state.value.historyPermissionState,
+            allowLegacyFileImport = allowLegacyDirectFileImport,
+        )
+
+    private fun updateFileCapabilities(
+        historyPermissionState: HistoryPermissionState,
+        grantedPermissions: Set<String>,
+    ) {
+        val capabilities = sleepFileCapabilities(
+            sdkInt = Build.VERSION.SDK_INT,
+            historyPermissionState = historyPermissionState,
+            allowLegacyFileImport = allowLegacyDirectFileImport,
+        )
+        mutableState.update {
+            it.copy(
+                fileWriteSupported = capabilities.importSupported,
+                fileDeletionSupported = capabilities.deletionSupported,
+                fileImportPermissionsGranted = grantedPermissions.containsAll(
+                    sleepFileImportPermissions(capabilities),
+                ),
+            )
+        }
+    }
+
     companion object {
         val permissionContract
             get() = PermissionController.createRequestPermissionResultContract()
-
-        val sleepWritePermission: String
-            get() = SLEEP_WRITE_PERMISSION
 
         private val SLEEP_READ_PERMISSION =
             HealthPermission.getReadPermission(SleepSessionRecord::class)
@@ -572,5 +630,47 @@ internal fun isLegacyDirectFileImportSupported(
 ): Boolean = allowLegacyFileImport &&
     sdkInt in Build.VERSION_CODES.P until Build.VERSION_CODES.UPSIDE_DOWN_CAKE
 
-internal val isSleepFileWriteSupported: Boolean
-    get() = Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE
+internal data class SleepFileCapabilities(
+    val importSupported: Boolean,
+    val deletionSupported: Boolean,
+    val usesLegacyDirectImport: Boolean,
+    val importRequiresHistoryPermission: Boolean,
+)
+
+internal fun sleepFileCapabilities(
+    sdkInt: Int,
+    historyPermissionState: HistoryPermissionState,
+    allowLegacyFileImport: Boolean,
+): SleepFileCapabilities {
+    if (historyPermissionState != HistoryPermissionState.UNAVAILABLE) {
+        return SleepFileCapabilities(
+            importSupported = true,
+            deletionSupported = true,
+            usesLegacyDirectImport = false,
+            importRequiresHistoryPermission =
+                sdkInt < Build.VERSION_CODES.UPSIDE_DOWN_CAKE,
+        )
+    }
+    val legacyDirectImport = isLegacyDirectFileImportSupported(
+        allowLegacyFileImport = allowLegacyFileImport,
+        sdkInt = sdkInt,
+    )
+    return SleepFileCapabilities(
+        importSupported = legacyDirectImport,
+        deletionSupported = false,
+        usesLegacyDirectImport = legacyDirectImport,
+        importRequiresHistoryPermission = false,
+    )
+}
+
+internal fun sleepFileImportPermissions(
+    capabilities: SleepFileCapabilities,
+): Set<String> = buildSet {
+    if (!capabilities.usesLegacyDirectImport) {
+        add(HealthPermission.getReadPermission(SleepSessionRecord::class))
+    }
+    add(HealthPermission.getWritePermission(SleepSessionRecord::class))
+    if (capabilities.importRequiresHistoryPermission) {
+        add(HealthPermission.PERMISSION_READ_HEALTH_DATA_HISTORY)
+    }
+}

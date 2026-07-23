@@ -38,14 +38,35 @@ class MainActivity : ComponentActivity() {
     private val requestHealthPermissions = registerForActivityResult(
         HealthConnectDataController.permissionContract,
     ) { granted ->
-        val requestKind = lastHealthPermissionRequest?.kind
-        if (requestKind == HealthPermissionRequestKind.GENERAL && shouldOfferHealthConnectSetup(
+        val request = lastHealthPermissionRequest
+        val requestKind = request?.kind
+        if ((requestKind == HealthPermissionRequestKind.GENERAL ||
+                requestKind == HealthPermissionRequestKind.FILE_IMPORT_READ) &&
+            shouldOfferHealthConnectSetup(
                 grantedPermissions = granted,
                 providerAvailable = healthConnect.isProviderAvailable,
-                resumedAfterSetup = lastHealthPermissionRequest?.resumedAfterSetup == true,
+                resumedAfterSetup = request.resumedAfterSetup,
             )
         ) {
             healthConnect.reportSetupRequired()
+        } else if (requestKind == HealthPermissionRequestKind.FILE_IMPORT_READ ||
+            requestKind == HealthPermissionRequestKind.FILE_IMPORT_HISTORY
+        ) {
+            lastHealthPermissionRequest = null
+            val action = pendingSleepWriteAction
+            if (action == SleepWriteAction.IMPORT &&
+                granted.containsAll(request.permissions)
+            ) {
+                beginSleepWriteAction(action)
+            } else {
+                pendingSleepWriteAction = null
+                if (requestKind == HealthPermissionRequestKind.FILE_IMPORT_READ) {
+                    healthConnect.reportSleepFileImportReadPermissionDenied()
+                } else {
+                    healthConnect.reportSleepFileImportHistoryPermissionDenied()
+                }
+                healthConnect.refresh()
+            }
         } else {
             lastHealthPermissionRequest = null
             val exportRange = pendingSleepExportRange
@@ -68,11 +89,12 @@ class MainActivity : ComponentActivity() {
             healthConnect.importSleepFiles(uris)
         }
     }
-    private val requestSleepWritePermission = registerForActivityResult(
+    private val requestSleepFilePermissions = registerForActivityResult(
         HealthConnectDataController.permissionContract,
     ) { granted ->
         val action = pendingSleepWriteAction
-        if (HealthConnectDataController.sleepWritePermission in granted && action != null) {
+        val requestedPermissions = lastHealthPermissionRequest?.permissions.orEmpty()
+        if (action != null && granted.containsAll(requestedPermissions)) {
             pendingSleepWriteAction = null
             lastHealthPermissionRequest = null
             runSleepWriteAction(action)
@@ -87,6 +109,7 @@ class MainActivity : ComponentActivity() {
             pendingSleepWriteAction = null
             lastHealthPermissionRequest = null
             healthConnect.reportSleepWritePermissionDenied()
+            healthConnect.refresh()
         }
     }
     private val createSleepExport = registerForActivityResult(
@@ -173,6 +196,11 @@ class MainActivity : ComponentActivity() {
                     availableHistoryDays = healthState.availableHistoryDays,
                     fileWriteSupported = !BuildConfig.USE_DEMO_DATA && healthState.fileWriteSupported,
                     fileDeletionSupported = !BuildConfig.USE_DEMO_DATA && healthState.fileDeletionSupported,
+                    fileImportPermissionsGranted = if (BuildConfig.USE_DEMO_DATA) {
+                        null
+                    } else {
+                        healthState.fileImportPermissionsGranted
+                    },
                     fileImportedRecordCount = healthState.fileImportedRecordCount,
                     fileOperation = healthState.fileOperation,
                     fileImportResult = healthState.fileImportResult,
@@ -256,14 +284,40 @@ class MainActivity : ComponentActivity() {
             return
         }
         lifecycleScope.launch {
-            if (healthConnect.hasSleepWritePermission()) {
+            val permissions = when (action) {
+                SleepWriteAction.IMPORT -> healthConnect.fileImportPermissions()
+                SleepWriteAction.DELETE -> healthConnect.fileDeletionPermissions()
+            }
+            val grantedPermissions = healthConnect.grantedPermissions()
+            val missingPermissions = permissions - grantedPermissions
+            if (missingPermissions.isEmpty()) {
                 runSleepWriteAction(action)
             } else if (healthConnect.isProviderAvailable) {
                 pendingSleepWriteAction = action
+                val missingReadPermissions = if (action == SleepWriteAction.IMPORT) {
+                    healthConnect.fileImportReadPermissions() - grantedPermissions
+                } else {
+                    emptySet()
+                }
+                val missingHistoryPermissions = if (action == SleepWriteAction.IMPORT) {
+                    healthConnect.fileImportHistoryPermissions() - grantedPermissions
+                } else {
+                    emptySet()
+                }
                 launchHealthPermissionRequest(
                     PendingHealthPermissionRequest(
-                        permissions = setOf(HealthConnectDataController.sleepWritePermission),
-                        kind = HealthPermissionRequestKind.SLEEP_WRITE,
+                        permissions = when {
+                            missingReadPermissions.isNotEmpty() -> missingReadPermissions
+                            missingHistoryPermissions.isNotEmpty() -> missingHistoryPermissions
+                            else -> missingPermissions
+                        },
+                        kind = when {
+                            missingReadPermissions.isNotEmpty() ->
+                                HealthPermissionRequestKind.FILE_IMPORT_READ
+                            missingHistoryPermissions.isNotEmpty() ->
+                                HealthPermissionRequestKind.FILE_IMPORT_HISTORY
+                            else -> HealthPermissionRequestKind.FILE_WRITE
+                        },
                     ),
                 )
             }
@@ -331,17 +385,23 @@ class MainActivity : ComponentActivity() {
             when (request.kind) {
                 HealthPermissionRequestKind.GENERAL,
                 HealthPermissionRequestKind.HISTORY,
+                HealthPermissionRequestKind.FILE_IMPORT_READ,
+                HealthPermissionRequestKind.FILE_IMPORT_HISTORY,
                 ->
                     requestHealthPermissions.launch(request.permissions)
-                HealthPermissionRequestKind.SLEEP_WRITE ->
-                    requestSleepWritePermission.launch(request.permissions)
+                HealthPermissionRequestKind.FILE_WRITE ->
+                    requestSleepFilePermissions.launch(request.permissions)
             }
         }.onFailure {
             lastHealthPermissionRequest = null
             when (request.kind) {
                 HealthPermissionRequestKind.GENERAL -> pendingSleepExportRange = null
                 HealthPermissionRequestKind.HISTORY -> Unit
-                HealthPermissionRequestKind.SLEEP_WRITE -> pendingSleepWriteAction = null
+                HealthPermissionRequestKind.FILE_IMPORT_READ,
+                HealthPermissionRequestKind.FILE_IMPORT_HISTORY -> {
+                    pendingSleepWriteAction = null
+                }
+                HealthPermissionRequestKind.FILE_WRITE -> pendingSleepWriteAction = null
             }
             healthConnect.refresh()
         }
@@ -391,7 +451,9 @@ private data class PendingHealthPermissionRequest(
 private enum class HealthPermissionRequestKind {
     GENERAL,
     HISTORY,
-    SLEEP_WRITE,
+    FILE_IMPORT_READ,
+    FILE_IMPORT_HISTORY,
+    FILE_WRITE,
 }
 
 private const val ADAPTIVE_KALMAN_LOG_TAG = "DarkHourAdaptiveKalman"
