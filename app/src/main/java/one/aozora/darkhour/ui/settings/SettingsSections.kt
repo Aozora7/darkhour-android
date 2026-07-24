@@ -33,6 +33,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.UriHandler
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.unit.dp
 import one.aozora.darkhour.R
 import one.aozora.darkhour.data.HealthConnectAccess
@@ -119,8 +121,15 @@ internal fun DataSettingsSection(
                         enabled = providerAvailable,
                         shape = SegmentedButtonDefaults.itemShape(index, HealthDataRangeOptions.size),
                         modifier = Modifier.testTag(option.testTag),
+                        icon = {},
                     ) {
-                        Text(option.label)
+                        Text(
+                            text = option.compactLabel,
+                            modifier = Modifier.clearAndSetSemantics {
+                                contentDescription = option.label
+                            },
+                            maxLines = 1,
+                        )
                     }
                 }
             }

@@ -8,6 +8,18 @@ import org.junit.Test
 
 class SettingsSectionsTest {
     @Test
+    fun healthDataRangeOptionsUseCompactControlLabels() {
+        assertEquals(
+            listOf("30 days", "Custom", "All"),
+            HealthDataRangeOptions.map { it.compactLabel },
+        )
+        assertEquals(
+            listOf("Last 30 days", "Custom", "All available"),
+            HealthDataRangeOptions.map { it.label },
+        )
+    }
+
+    @Test
     fun exportProgressIsAvailableWithoutFileImportSupport() {
         assertEquals(
             "Preparing sleep export…",

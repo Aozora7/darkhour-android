@@ -5,11 +5,12 @@ import one.aozora.darkhour.data.HealthImportPhase
 
 internal enum class HealthDataRangeOption(
     val label: String,
+    val compactLabel: String,
     val testTag: String,
 ) {
-    DEFAULT("Last 30 days", "health_range_default"),
-    CUSTOM("Custom", "health_range_custom"),
-    HISTORY("All available", "health_range_history");
+    DEFAULT("Last 30 days", "30 days", "health_range_default"),
+    CUSTOM("Custom", "Custom", "health_range_custom"),
+    HISTORY("All available", "All", "health_range_history");
 
     fun isSelected(range: HealthDataRange): Boolean = when (this) {
         DEFAULT -> range == HealthDataRange.DEFAULT_PERIOD
