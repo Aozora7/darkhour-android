@@ -58,8 +58,8 @@ android {
         applicationId = "one.aozora.darkhour"
         minSdk = 28
         targetSdk = 37
-        versionCode = 20
-        versionName = "1.2.5"
+        versionCode = 21
+        versionName = "1.2.6"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         if (connectedGestureTestRequested) {

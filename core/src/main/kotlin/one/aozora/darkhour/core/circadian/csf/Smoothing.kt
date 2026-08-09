@@ -15,36 +15,29 @@ private data class RegressionResult(
     val unwrappedHours: List<UnwrappedHour>,
 )
 
-private fun buildUnwrappedHours(anchors: List<CsfAnchor>, dayStart: Int, dayEnd: Int): RegressionResult? {
+private fun buildUnwrappedHours(
+    anchors: List<CsfAnchor>,
+    dayStart: Int,
+    dayEnd: Int,
+    referencePhase: (Int) -> Double?,
+): RegressionResult? {
     val selected = anchors.filter { it.dayNumber in dayStart..dayEnd }
     if (selected.size < 3) return null
 
-    val pivotIndex = selected.indices.maxBy { selected[it].weight }
-    val pivot = selected[pivotIndex]
-    val unwrappedHours = mutableListOf<UnwrappedHour>()
-
-    val pivotClockHour = normalizeAngle(pivot.midpointHour)
-    unwrappedHours += UnwrappedHour(pivot.dayNumber, pivotClockHour, pivot.weight)
-
-    var prevHour = pivotClockHour
-    for (i in pivotIndex - 1 downTo 0) {
-        val anchor = selected[i]
-        var h = normalizeAngle(anchor.midpointHour)
-        while (h - prevHour > 12.0) h -= 24.0
-        while (prevHour - h > 12.0) h += 24.0
-        unwrappedHours.add(0, UnwrappedHour(anchor.dayNumber, h, anchor.weight))
-        prevHour = h
+    // Resolve each circular observation against the continuous filtered state.
+    // Chaining each anchor to the preceding raw anchor can select the wrong
+    // 24-hour branch after an irregular or biphasic observation, then make the
+    // edge regression overwrite a continuous state with a discontinuity.
+    val unwrappedHours = selected.mapNotNull { anchor ->
+        referencePhase(anchor.dayNumber)?.let { phase ->
+            UnwrappedHour(
+                dayNumber = anchor.dayNumber,
+                clockHour = resolveAmbiguity(anchor.midpointHour, phase),
+                weight = anchor.weight,
+            )
+        }
     }
-
-    prevHour = pivotClockHour
-    for (i in pivotIndex + 1 until selected.size) {
-        val anchor = selected[i]
-        var h = normalizeAngle(anchor.midpointHour)
-        while (h - prevHour > 12.0) h -= 24.0
-        while (prevHour - h > 12.0) h += 24.0
-        unwrappedHours += UnwrappedHour(anchor.dayNumber, h, anchor.weight)
-        prevHour = h
-    }
+    if (unwrappedHours.size < 3) return null
 
     var sumW = 0.0
     var sumWx = 0.0
@@ -86,6 +79,9 @@ private fun correctEndEdge(
         anchors = anchors,
         dayStart = min(preferredStartDay, minimumAnchorStartDay),
         dayEnd = lastDataDay,
+        referencePhase = { dayNumber ->
+            states.getOrNull(dayNumber - segFirstDay)?.smoothedPhase
+        },
     ) ?: return
     val edgeStart = max(0, lastDataLocalDay - smoothing.edgeBlendDays)
     val edgeEnd = min(lastDataLocalDay, totalDays)
