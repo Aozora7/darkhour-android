@@ -180,6 +180,24 @@ class SleepFileDecoderTest {
     }
 
     @Test
+    fun fitbitStageDataExportWithOffsetTimestampsIsDetectedAndDecoded() {
+        val source = resourceSource("darkhour-export.json", "fitbit-stage-data-synthetic.json")
+
+        val decoder = SleepFileDecoderRegistry().decoderFor(source)
+        val decoded = FitbitSleepFileDecoder.decode(
+            resourceStream("fitbit-stage-data-synthetic.json"),
+            ZoneId.of("Europe/Riga"),
+        )
+
+        assertEquals("Fitbit", decoder?.formatName)
+        assertEquals(1, decoded.sessions.size)
+        assertEquals("3900764246522927600", decoded.sessions.single().sourceId)
+        assertEquals(Instant.parse("2026-06-23T17:08:00Z"), decoded.sessions.single().startTime)
+        assertEquals(1, decoded.sessions.single().stages.size)
+        assertFalse(decoded.sessions.single().usedFallbackZone)
+    }
+
+    @Test
     fun googleHealthPreservesInstantsOffsetsVersionAndManualMetadata() {
         val decoded = GoogleHealthSleepFileDecoder.decode(
             resourceStream("google-health-synthetic.json"),

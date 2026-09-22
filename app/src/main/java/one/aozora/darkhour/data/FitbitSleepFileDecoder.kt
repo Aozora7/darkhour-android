@@ -5,7 +5,9 @@ import com.google.gson.stream.JsonToken
 import java.io.InputStream
 import java.time.Instant
 import java.time.LocalDateTime
+import java.time.OffsetDateTime
 import java.time.ZoneId
+import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 
 internal object FitbitSleepFileDecoder : SleepFileDecoder {
@@ -19,7 +21,8 @@ internal object FitbitSleepFileDecoder : SleepFileDecoder {
 
     override fun detects(input: InputStream): Boolean {
         val shape = detectJsonSleepRecordShape(input) ?: return false
-        return shape.recordKeys.containsAll(setOf("logId", "dateOfSleep", "levels"))
+        return shape.recordKeys.containsAll(setOf("logId", "dateOfSleep", "startTime", "endTime")) &&
+            ("levels" in shape.recordKeys || "stageData" in shape.recordKeys)
     }
 
     override fun decode(input: InputStream, fallbackZoneId: ZoneId): DecodedSleepFile {
@@ -105,10 +108,11 @@ private fun JsonReader.readFitbitSleep(): RawFitbitSleep {
         when (nextName()) {
             "startTime" -> startTime = nextStringOrNull()
             "endTime" -> endTime = nextStringOrNull()
-            "duration" -> durationMillis = nextLongOrNull()
+            "duration", "durationMs" -> durationMillis = nextLongOrNull()
             "logId" -> logId = nextStringOrNull()
             "logType" -> logType = nextStringOrNull()
             "levels" -> stages = readFitbitLevels()
+            "stageData" -> stages = readFitbitStageArray(priority = 0)
             else -> skipValue()
         }
     }
@@ -133,6 +137,9 @@ private fun JsonReader.readFitbitLevels(): List<RawFitbitStage> {
     endObject()
     return stages
 }
+
+private fun JsonReader.readFitbitStageArray(priority: Int): List<RawFitbitStage> =
+    buildList { readFitbitStageArray(priority, this) }
 
 private fun JsonReader.readFitbitStageArray(
     priority: Int,
@@ -167,24 +174,23 @@ private fun RawFitbitSleep.toDecodedSession(
     recordIndex: Int,
     issues: MutableList<SleepFileIssue>,
 ): DecodedSleepSession? {
-    val startLocal = startTime.parseFitbitLocalDateTime()
-    if (startLocal == null) {
+    val startZoned = startTime.parseFitbitDateTime(zoneId)
+    if (startZoned == null) {
         issues.addBounded(SleepFileIssue(recordIndex, "Missing or invalid startTime"))
         return null
     }
-    val startZoned = startLocal.atZone(zoneId)
     val start = startZoned.toInstant()
-    val endLocal = endTime.parseFitbitLocalDateTime()
-    val end = endLocal?.atZone(zoneId)?.toInstant()
+    val endZoned = endTime.parseFitbitDateTime(zoneId)
+    val end = endZoned?.toInstant()
         ?: durationMillis?.takeIf { it > 0 }?.let(start::plusMillis)
     if (end == null || start >= end) {
         issues.addBounded(SleepFileIssue(recordIndex, "Missing or invalid endTime"))
         return null
     }
-    val endOffset = endLocal?.atZone(zoneId)?.offset ?: zoneId.rules.getOffset(end)
+    val endOffset = endZoned?.offset ?: zoneId.rules.getOffset(end)
     var unsupportedStage = false
     val rawStages = stages.mapIndexedNotNull { index, stage ->
-        val stageStart = stage.dateTime.parseFitbitLocalDateTime()?.atZone(zoneId)?.toInstant()
+        val stageStart = stage.dateTime.parseFitbitDateTime(zoneId)?.toInstant()
         val seconds = stage.seconds
         val type = stage.level.toSleepFileStageType()
         if (type == null && stage.level != null) unsupportedStage = true
@@ -222,12 +228,18 @@ private fun RawFitbitSleep.toDecodedSession(
             type = androidx.health.connect.client.records.metadata.Device.TYPE_FITNESS_BAND,
             manufacturer = "Fitbit",
         ),
-        usedFallbackZone = true,
+        usedFallbackZone = !startTime.hasFitbitOffset() || !endTime.hasFitbitOffset(),
     )
 }
 
-private fun String?.parseFitbitLocalDateTime(): LocalDateTime? =
-    this?.let { value -> runCatching { LocalDateTime.parse(value, DateTimeFormatter.ISO_LOCAL_DATE_TIME) }.getOrNull() }
+private fun String?.parseFitbitDateTime(zoneId: ZoneId): ZonedDateTime? = this?.let { value ->
+    runCatching { OffsetDateTime.parse(value, DateTimeFormatter.ISO_DATE_TIME).toZonedDateTime() }.getOrNull()
+        ?: runCatching { LocalDateTime.parse(value, DateTimeFormatter.ISO_LOCAL_DATE_TIME).atZone(zoneId) }.getOrNull()
+}
+
+private fun String?.hasFitbitOffset(): Boolean = this?.let { value ->
+    runCatching { OffsetDateTime.parse(value, DateTimeFormatter.ISO_DATE_TIME) }.isSuccess
+} == true
 
 private fun String?.toSleepFileStageType(): SleepFileStageType? = when (this?.uppercase()) {
     "DEEP" -> SleepFileStageType.DEEP

@@ -1,0 +1,18 @@
+{
+  "sleep": [
+    {
+      "logId": 3900764246522927600,
+      "dateOfSleep": "2026-06-23",
+      "startTime": "2026-06-23T17:08:00.000Z",
+      "endTime": "2026-06-23T17:18:00.000Z",
+      "durationMs": 600000,
+      "stageData": [
+        {
+          "dateTime": "2026-06-23T17:08:00Z",
+          "level": "light",
+          "seconds": 600
+        }
+      ]
+    }
+  ]
+}
