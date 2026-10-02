@@ -226,6 +226,138 @@ class SleepFileDecoderTest {
     }
 
     @Test
+    fun fitbitExportOffsetMinutesOverrideUtcTimestampsAndLegacyFilesKeepThem() {
+        val source = resourceSource("darkhour-export.json", "fitbit-export-offset-minutes-synthetic.json")
+
+        val decoder = SleepFileDecoderRegistry().decoderFor(source)
+        val decoded = FitbitSleepFileDecoder.decode(
+            resourceStream("fitbit-export-offset-minutes-synthetic.json"),
+            ZoneId.of("Europe/Riga"),
+        )
+        val legacy = FitbitSleepFileDecoder.decode(
+            resourceStream("fitbit-stage-data-synthetic.json"),
+            ZoneId.of("Europe/Riga"),
+        )
+
+        assertEquals("Fitbit", decoder?.formatName)
+        val session = decoded.sessions.single()
+        assertEquals("5555338293219541968", session.sourceId)
+        assertEquals(Instant.parse("2026-06-23T17:08:00Z"), session.startTime)
+        assertEquals(ZoneOffset.ofHours(3), session.startZoneOffset)
+        assertEquals(ZoneOffset.ofHours(3), session.endZoneOffset)
+        assertEquals(1, session.stages.size)
+        assertFalse(session.usedFallbackZone)
+        assertEquals(Instant.parse("2026-06-23T17:18:00Z"), session.endTime)
+
+        // Exports written before Dark Hour tracked offsets keep deriving the
+        // zone from the timestamps alone.
+        assertEquals(ZoneOffset.UTC, legacy.sessions.single().startZoneOffset)
+        assertEquals(ZoneOffset.UTC, legacy.sessions.single().endZoneOffset)
+    }
+
+    @Test
+    fun googleHealthExportWithoutDataSourceIsDetectedAndDecoded() {
+        val source = resourceSource("darkhour-export-2026-10-02.json", "google-health-export-offsets-synthetic.json")
+
+        val decoder = SleepFileDecoderRegistry().decoderFor(source)
+        val decoded = GoogleHealthSleepFileDecoder.decode(
+            resourceStream("google-health-export-offsets-synthetic.json"),
+            ZoneId.of("Europe/Riga"),
+        )
+
+        assertEquals("Google Health", decoder?.formatName)
+        assertEquals(0, decoded.skippedRecordCount)
+        assertTrue(decoded.issues.isEmpty())
+        assertEquals(2, decoded.sessions.size)
+        assertEquals(0, decoded.fallbackZoneRecordCount)
+
+        val session = decoded.sessions[0]
+        assertEquals(
+            "users/0000000000000000000/dataTypes/sleep/dataPoints/synthetic-export-001",
+            session.sourceId,
+        )
+        assertEquals(Instant.parse("2026-01-01T17:00:00Z"), session.startTime)
+        assertEquals(Instant.parse("2026-01-01T23:00:00Z"), session.endTime)
+        assertEquals(ZoneOffset.ofHours(3), session.startZoneOffset)
+        assertEquals(ZoneOffset.ofHours(3), session.endZoneOffset)
+        assertFalse(session.usedFallbackZone)
+        assertEquals(Instant.parse("2026-01-02T09:20:27Z").toEpochMilli(), session.clientRecordVersion)
+        assertEquals(SleepFileRecordingMethod.UNKNOWN, session.recordingMethod)
+
+        // Zone-less stage wall clocks resolve through their own paired offsets,
+        // and out-of-bed stages are awake time.
+        assertEquals(2, session.stages.size)
+        assertEquals(Instant.parse("2026-01-01T17:00:00Z"), session.stages[0].startTime)
+        assertEquals(SleepFileStageType.LIGHT, session.stages[0].type)
+        assertEquals(SleepFileStageType.AWAKE, session.stages[1].type)
+        session.stages.zipWithNext().forEach { (first, second) ->
+            assertFalse(first.endTime > second.startTime)
+        }
+    }
+
+    @Test
+    fun googleHealthExportKeepsDistinctOffsetsAcrossDaylightSaving() {
+        val decoded = GoogleHealthSleepFileDecoder.decode(
+            resourceStream("google-health-export-offsets-synthetic.json"),
+            ZoneId.of("UTC"),
+        )
+
+        val crossing = decoded.sessions[1]
+
+        assertEquals(Instant.parse("2026-03-28T22:16:00Z"), crossing.startTime)
+        assertEquals(Instant.parse("2026-03-29T06:03:00Z"), crossing.endTime)
+        assertEquals(ZoneOffset.ofHours(2), crossing.startZoneOffset)
+        // `endUtcOffset` is absent here, so the recorded start offset is reused
+        // instead of guessing from the device zone.
+        assertEquals(ZoneOffset.ofHours(2), crossing.endZoneOffset)
+        assertFalse(crossing.usedFallbackZone)
+    }
+
+    @Test
+    fun googleHealthZoneLessTimestampsResolveThroughRecordedOffsets() {
+        val source = resourceSource("google-health-zoneless.json", "google-health-zoneless-utc-offsets-synthetic.json")
+
+        val decoder = SleepFileDecoderRegistry().decoderFor(source)
+        val decoded = GoogleHealthSleepFileDecoder.decode(
+            resourceStream("google-health-zoneless-utc-offsets-synthetic.json"),
+            ZoneId.of("Europe/Riga"),
+        )
+
+        assertEquals("Google Health", decoder?.formatName)
+        val session = decoded.sessions.single()
+        assertEquals(
+            "users/0000000000000000000/dataTypes/sleep/dataPoints/synthetic-zoneless-001",
+            session.sourceId,
+        )
+        assertEquals(Instant.parse("2022-05-13T19:23:30Z"), session.startTime)
+        assertEquals(Instant.parse("2022-05-14T03:13:30Z"), session.endTime)
+        assertEquals(ZoneOffset.ofHours(3), session.startZoneOffset)
+        assertEquals(ZoneOffset.ofHours(3), session.endZoneOffset)
+        assertFalse(session.usedFallbackZone)
+
+        // Stage offsets are absent, so the session interval supplies the zone.
+        assertEquals(2, session.stages.size)
+        assertEquals(Instant.parse("2022-05-13T19:23:30Z"), session.stages.first().startTime)
+        assertEquals(SleepFileStageType.REM, session.stages[0].type)
+        assertEquals(SleepFileStageType.DEEP, session.stages[1].type)
+    }
+
+    @Test
+    fun googleHealthMissingOffsetsFallBackToTheDeviceZone() {
+        val zoneless = resourceText("google-health-zoneless-utc-offsets-synthetic.json")
+            .replace("\"startUtcOffset\": \"10800s\"", "\"startUtcOffset\": null")
+            .replace("\"endUtcOffset\": \"10800s\"", "\"endUtcOffset\": null")
+
+        val decoded = GoogleHealthSleepFileDecoder.decode(zoneless.byteInputStream(), ZoneId.of("Europe/Riga"))
+
+        val session = decoded.sessions.single()
+        assertEquals(Instant.parse("2022-05-13T19:23:30Z"), session.startTime)
+        assertEquals(ZoneOffset.ofHours(3), session.startZoneOffset)
+        assertTrue(session.usedFallbackZone)
+        assertEquals(1, decoded.fallbackZoneRecordCount)
+    }
+
+    @Test
     fun healthConnectExportPreservesSchemaAndPortableIdentity() {
         val source = resourceSource("misleading.txt", "health-connect-synthetic.json")
 

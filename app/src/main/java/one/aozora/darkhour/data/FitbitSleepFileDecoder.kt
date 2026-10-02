@@ -7,6 +7,7 @@ import java.time.Instant
 import java.time.LocalDateTime
 import java.time.OffsetDateTime
 import java.time.ZoneId
+import java.time.ZoneOffset
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 
@@ -93,6 +94,8 @@ private data class RawFitbitSleep(
     val durationMillis: Long?,
     val logId: String?,
     val logType: String?,
+    val startOffsetMinutes: Long?,
+    val endOffsetMinutes: Long?,
     val stages: List<RawFitbitStage>,
 )
 
@@ -102,6 +105,8 @@ private fun JsonReader.readFitbitSleep(): RawFitbitSleep {
     var durationMillis: Long? = null
     var logId: String? = null
     var logType: String? = null
+    var startOffsetMinutes: Long? = null
+    var endOffsetMinutes: Long? = null
     var stages = emptyList<RawFitbitStage>()
     beginObject()
     while (hasNext()) {
@@ -111,13 +116,24 @@ private fun JsonReader.readFitbitSleep(): RawFitbitSleep {
             "duration", "durationMs" -> durationMillis = nextLongOrNull()
             "logId" -> logId = nextStringOrNull()
             "logType" -> logType = nextStringOrNull()
+            "startTimeOffsetMinutes" -> startOffsetMinutes = nextLongOrNull()
+            "endTimeOffsetMinutes" -> endOffsetMinutes = nextLongOrNull()
             "levels" -> stages = readFitbitLevels()
             "stageData" -> stages = readFitbitStageArray(priority = 0)
             else -> skipValue()
         }
     }
     endObject()
-    return RawFitbitSleep(startTime, endTime, durationMillis, logId, logType, stages)
+    return RawFitbitSleep(
+        startTime = startTime,
+        endTime = endTime,
+        durationMillis = durationMillis,
+        logId = logId,
+        logType = logType,
+        startOffsetMinutes = startOffsetMinutes,
+        endOffsetMinutes = endOffsetMinutes,
+        stages = stages,
+    )
 }
 
 private fun JsonReader.readFitbitLevels(): List<RawFitbitStage> {
@@ -187,7 +203,13 @@ private fun RawFitbitSleep.toDecodedSession(
         issues.addBounded(SleepFileIssue(recordIndex, "Missing or invalid endTime"))
         return null
     }
-    val endOffset = endZoned?.offset ?: zoneId.rules.getOffset(end)
+    // Timestamps are serialized as UTC instants, so a recorded offset can only
+    // come from the explicit minute fields. Exports written before Dark Hour
+    // tracked offsets omit them and keep the timestamp-derived offsets.
+    val recordedStartOffset = startOffsetMinutes.toRecordedZoneOffset()
+    val recordedEndOffset = endOffsetMinutes.toRecordedZoneOffset() ?: recordedStartOffset
+    val startOffset = recordedStartOffset ?: startZoned.offset
+    val endOffset = recordedEndOffset ?: endZoned?.offset ?: zoneId.rules.getOffset(end)
     var unsupportedStage = false
     val rawStages = stages.mapIndexedNotNull { index, stage ->
         val stageStart = stage.dateTime.parseFitbitDateTime(zoneId)?.toInstant()
@@ -215,7 +237,7 @@ private fun RawFitbitSleep.toDecodedSession(
         sourceId = logId?.takeIf(String::isNotBlank),
         clientRecordVersion = 0,
         startTime = start,
-        startZoneOffset = startZoned.offset,
+        startZoneOffset = startOffset,
         endTime = end,
         endZoneOffset = endOffset,
         stages = normalizeSleepFileStages(start, end, rawStages),
@@ -228,9 +250,19 @@ private fun RawFitbitSleep.toDecodedSession(
             type = androidx.health.connect.client.records.metadata.Device.TYPE_FITNESS_BAND,
             manufacturer = "Fitbit",
         ),
-        usedFallbackZone = !startTime.hasFitbitOffset() || !endTime.hasFitbitOffset(),
+        usedFallbackZone = recordedStartOffset == null &&
+            (!startTime.hasFitbitOffset() || !endTime.hasFitbitOffset()),
     )
 }
+
+/** Interpret an offset in minutes east of UTC as a fixed offset. */
+private fun Long?.toRecordedZoneOffset(): ZoneOffset? {
+    val minutes = this?.takeIf { it in -MAX_RECORDED_OFFSET_MINUTES..MAX_RECORDED_OFFSET_MINUTES }
+        ?: return null
+    return runCatching { ZoneOffset.ofTotalSeconds((minutes * 60).toInt()) }.getOrNull()
+}
+
+private const val MAX_RECORDED_OFFSET_MINUTES = 18L * 60
 
 private fun String?.parseFitbitDateTime(zoneId: ZoneId): ZonedDateTime? = this?.let { value ->
     runCatching { OffsetDateTime.parse(value, DateTimeFormatter.ISO_DATE_TIME).toZonedDateTime() }.getOrNull()

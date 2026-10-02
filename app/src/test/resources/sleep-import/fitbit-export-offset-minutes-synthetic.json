@@ -1,0 +1,25 @@
+{
+  "sleep": [
+    {
+      "logId": 5555338293219541968,
+      "dateOfSleep": "2026-06-23",
+      "startTime": "2026-06-23T17:08:00.000Z",
+      "startTimeOffsetMinutes": 180,
+      "endTime": "2026-06-23T17:18:00.000Z",
+      "endTimeOffsetMinutes": 180,
+      "durationMs": 600000,
+      "durationHours": 0.16666666666666666,
+      "efficiency": 100,
+      "minutesAsleep": 10,
+      "minutesAwake": 0,
+      "isMainSleep": false,
+      "stageData": [
+        {
+          "dateTime": "2026-06-23T17:08:00Z",
+          "level": "light",
+          "seconds": 600
+        }
+      ]
+    }
+  ]
+}

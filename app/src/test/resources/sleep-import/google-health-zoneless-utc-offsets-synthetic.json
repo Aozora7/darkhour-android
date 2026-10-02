@@ -1,0 +1,37 @@
+{
+  "sleep": [
+    {
+      "dataPointName": "users/0000000000000000000/dataTypes/sleep/dataPoints/synthetic-zoneless-001",
+      "sleep": {
+        "interval": {
+          "startTime": "2022-05-13 22:23:30",
+          "startUtcOffset": "10800s",
+          "endTime": "2022-05-14 06:13:30",
+          "endUtcOffset": "10800s"
+        },
+        "type": "STAGES",
+        "stages": [
+          {
+            "startTime": "2022-05-13 22:23:30",
+            "endTime": "2022-05-14 04:13:30",
+            "type": "REM"
+          },
+          {
+            "startTime": "2022-05-14 04:13:30",
+            "endTime": "2022-05-14 06:13:30",
+            "type": "DEEP"
+          }
+        ],
+        "summary": {
+          "minutesAsleep": "466",
+          "minutesAwake": "4"
+        },
+        "metadata": {
+          "processed": true
+        },
+        "createTime": "2022-05-14T06:13:30Z",
+        "updateTime": "2022-05-14T07:00:00Z"
+      }
+    }
+  ]
+}

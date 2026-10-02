@@ -4,8 +4,11 @@ import com.google.gson.stream.JsonReader
 import com.google.gson.stream.JsonToken
 import java.io.InputStream
 import java.time.Instant
+import java.time.LocalDateTime
+import java.time.OffsetDateTime
 import java.time.ZoneId
 import java.time.ZoneOffset
+import java.time.format.DateTimeFormatter
 
 internal object GoogleHealthSleepFileDecoder : SleepFileDecoder {
     override val format = SleepFileFormatInfo(
@@ -18,8 +21,11 @@ internal object GoogleHealthSleepFileDecoder : SleepFileDecoder {
 
     override fun detects(input: InputStream): Boolean {
         val shape = detectJsonSleepRecordShape(input) ?: return false
-        return shape.recordKeys.containsAll(setOf("name", "dataSource", "sleep")) &&
-            "interval" in shape.nestedSleepKeys
+        // Only `dataPoints:list` responses carry `dataSource`. Dark Hour's export
+        // writes the `dataPoints:reconcile` shape, which has the resource name and
+        // the nested interval but no data source at all.
+        val hasResourceName = "name" in shape.recordKeys || "dataPointName" in shape.recordKeys
+        return hasResourceName && "sleep" in shape.recordKeys && "interval" in shape.nestedSleepKeys
     }
 
     override fun decode(input: InputStream, fallbackZoneId: ZoneId): DecodedSleepFile {
@@ -83,12 +89,15 @@ private fun JsonReader.readGoogleHealthSleepArray(
 
 private data class RawGoogleHealthStage(
     val startTime: String?,
+    val startOffset: String?,
     val endTime: String?,
+    val endOffset: String?,
     val type: String?,
 )
 
 private data class RawGoogleHealthRecord(
     val name: String?,
+    val dataPointName: String?,
     val recordingMethod: String?,
     val platform: String?,
     val deviceDisplayName: String?,
@@ -117,12 +126,14 @@ private data class RawGoogleHealthSleep(
 
 private fun JsonReader.readGoogleHealthRecord(): RawGoogleHealthRecord {
     var name: String? = null
+    var dataPointName: String? = null
     var dataSource = RawGoogleHealthDataSource(null, null, null)
     var sleep = RawGoogleHealthSleep(null, null, null, null, null, emptyList())
     beginObject()
     while (hasNext()) {
         when (nextName()) {
             "name" -> name = nextStringOrNull()
+            "dataPointName" -> dataPointName = nextStringOrNull()
             "dataSource" -> dataSource = readGoogleHealthDataSource()
             "sleep" -> sleep = readGoogleHealthSleep()
             else -> skipValue()
@@ -131,6 +142,7 @@ private fun JsonReader.readGoogleHealthRecord(): RawGoogleHealthRecord {
     endObject()
     return RawGoogleHealthRecord(
         name = name,
+        dataPointName = dataPointName,
         recordingMethod = dataSource.recordingMethod,
         platform = dataSource.platform,
         deviceDisplayName = dataSource.deviceDisplayName,
@@ -206,19 +218,23 @@ private fun JsonReader.readGoogleHealthStages(): List<RawGoogleHealthStage> {
         beginArray()
         while (hasNext()) {
             var startTime: String? = null
+            var startOffset: String? = null
             var endTime: String? = null
+            var endOffset: String? = null
             var type: String? = null
             beginObject()
             while (hasNext()) {
                 when (nextName()) {
                     "startTime" -> startTime = nextStringOrNull()
+                    "startUtcOffset" -> startOffset = nextStringOrNull()
                     "endTime" -> endTime = nextStringOrNull()
+                    "endUtcOffset" -> endOffset = nextStringOrNull()
                     "type" -> type = nextStringOrNull()
                     else -> skipValue()
                 }
             }
             endObject()
-            add(RawGoogleHealthStage(startTime, endTime, type))
+            add(RawGoogleHealthStage(startTime, startOffset, endTime, endOffset, type))
         }
         endArray()
     }
@@ -229,21 +245,27 @@ private fun RawGoogleHealthRecord.toDecodedSession(
     recordIndex: Int,
     issues: MutableList<SleepFileIssue>,
 ): DecodedSleepSession? {
-    val start = startTime.parseInstant()
-    val end = endTime.parseInstant()
+    val parsedStartOffset = startOffset.parseSecondsOffset()
+    // `endUtcOffset` is missing on some responses. The recorded start offset is
+    // the zone the data was captured in, so it beats the device fallback zone.
+    val parsedEndOffset = endOffset.parseSecondsOffset() ?: parsedStartOffset
+    val start = startTime.resolveInstant(parsedStartOffset, fallbackZoneId)
+    val end = endTime.resolveInstant(parsedEndOffset, fallbackZoneId)
     if (start == null || end == null || start >= end) {
         issues.addBounded(SleepFileIssue(recordIndex, "Missing or invalid sleep interval"))
         return null
     }
-    val parsedStartOffset = startOffset.parseSecondsOffset()
-    val parsedEndOffset = endOffset.parseSecondsOffset()
-    val usedFallbackZone = parsedStartOffset == null || parsedEndOffset == null
     val resolvedStartOffset = parsedStartOffset ?: fallbackZoneId.rules.getOffset(start)
     val resolvedEndOffset = parsedEndOffset ?: fallbackZoneId.rules.getOffset(end)
+    val usedFallbackZone = parsedStartOffset == null
     var unsupportedStage = false
     val rawStages = stages.mapIndexedNotNull { index, stage ->
-        val stageStart = stage.startTime.parseInstant()
-        val stageEnd = stage.endTime.parseInstant()
+        // Stage offsets are the authoritative zone for a zone-less stage
+        // timestamp; the session interval supplies them when absent.
+        val stageStartOffset = stage.startOffset.parseSecondsOffset() ?: parsedStartOffset
+        val stageEndOffset = stage.endOffset.parseSecondsOffset() ?: stageStartOffset
+        val stageStart = stage.startTime.resolveInstant(stageStartOffset, fallbackZoneId)
+        val stageEnd = stage.endTime.resolveInstant(stageEndOffset, fallbackZoneId)
         val type = stage.type.toGoogleSleepFileStageType()
         if (type == null && stage.type != null) unsupportedStage = true
         if (stageStart == null || stageEnd == null || stageStart >= stageEnd || type == null) {
@@ -263,7 +285,7 @@ private fun RawGoogleHealthRecord.toDecodedSession(
     return DecodedSleepSession(
         formatKey = "google-health",
         formatName = "Google Health",
-        sourceId = name?.takeIf(String::isNotBlank),
+        sourceId = (name ?: dataPointName)?.takeIf(String::isNotBlank),
         clientRecordVersion = updateTime.parseInstant()?.toEpochMilli() ?: 0,
         startTime = start,
         startZoneOffset = resolvedStartOffset,
@@ -297,6 +319,29 @@ private fun googleHealthDevice(platform: String?, displayName: String?): SleepFi
 private fun String?.parseInstant(): Instant? =
     this?.let { value -> runCatching { Instant.parse(value) }.getOrNull() }
 
+/**
+ * Resolve a Google Health timestamp to an absolute instant.
+ *
+ * Dark Hour's export and most API responses carry absolute UTC instants, but the
+ * Google Health API can also emit zone-less wall-clock strings such as
+ * `"2022-05-13 22:23:30"`. Those are only meaningful next to the paired protobuf
+ * `*UtcOffset` duration, which is the sole record of the zone the data was
+ * captured in, so they are resolved against it rather than being handed to a
+ * lenient parser that would guess the device zone.
+ */
+private fun String?.resolveInstant(offset: ZoneOffset?, fallbackZoneId: ZoneId): Instant? {
+    val value = this?.trim()?.takeIf(String::isNotEmpty)?.replace(' ', 'T') ?: return null
+    runCatching { Instant.parse(value) }.getOrNull()?.let { return it }
+    runCatching {
+        OffsetDateTime.parse(value, DateTimeFormatter.ISO_DATE_TIME).toInstant()
+    }.getOrNull()?.let { return it }
+    val local = runCatching {
+        LocalDateTime.parse(value, DateTimeFormatter.ISO_LOCAL_DATE_TIME)
+    }.getOrNull() ?: return null
+    return if (offset != null) local.toInstant(offset) else local.atZone(fallbackZoneId).toInstant()
+}
+
+/** Parse a protobuf `Duration` offset such as `"10800s"` for UTC+3. */
 private fun String?.parseSecondsOffset(): ZoneOffset? {
     val seconds = this?.removeSuffix("s")?.toIntOrNull() ?: return null
     return runCatching { ZoneOffset.ofTotalSeconds(seconds) }.getOrNull()
@@ -306,7 +351,7 @@ private fun String?.toGoogleSleepFileStageType(): SleepFileStageType? = when (th
     "DEEP" -> SleepFileStageType.DEEP
     "LIGHT" -> SleepFileStageType.LIGHT
     "REM" -> SleepFileStageType.REM
-    "AWAKE", "WAKE", "RESTLESS" -> SleepFileStageType.AWAKE
+    "AWAKE", "WAKE", "RESTLESS", "OUT_OF_BED" -> SleepFileStageType.AWAKE
     "ASLEEP", "SLEEPING", "UNKNOWN" -> SleepFileStageType.SLEEPING
     else -> null
 }
